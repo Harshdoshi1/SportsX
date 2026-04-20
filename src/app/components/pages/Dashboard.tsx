@@ -1,3 +1,4 @@
+import { useEffect, useMemo, useState } from "react";
 import { motion } from "motion/react";
 import { Navbar } from "../ui/Navbar";
 import { GlassCard } from "../ui/GlassCard";
@@ -5,6 +6,8 @@ import { useNavigate } from "react-router";
 import { TrendingUp, Users, Activity, Trophy, ChevronRight, Star, Flame } from "lucide-react";
 import { ImageWithFallback } from "../figma/ImageWithFallback";
 import { TeamLogo } from "../ui/TeamLogo";
+import { cricketApi } from "../../services/cricketApi";
+import { formatApiDate, getTeamLogoProps, isLiveStatus, safeArray } from "../../services/cricketUi";
 
 const sports = [
   { id: "cricket", name: "Cricket", icon: "🏏", color: "#00E676", shadow: "rgba(0,230,118,0.3)", desc: "IPL · World Cup · Big Bash" },
@@ -13,27 +16,94 @@ const sports = [
   { id: "basketball", name: "Basketball", icon: "🏀", color: "#FF4D8D", shadow: "rgba(255,77,141,0.3)", desc: "NBA · EuroLeague" },
 ];
 
-const liveMatches = [
-  { id: 1, league: "IPL 2026", leagueId: "ipl", teamA: "PBKS", teamB: "RCB", flagA: "🔴", flagB: "🔴", scoreA: "9 pts", scoreB: "8 pts", overs: "Table leaders", status: "LIVE", prob: 53 },
-  { id: 2, league: "Premier League", leagueId: "epl", teamA: "Arsenal", teamB: "Man City", flagA: "🔴", flagB: "🔵", scoreA: "70", scoreB: "64", overs: "Points", status: "LIVE", prob: 61 },
-  { id: 3, league: "F1 2026", leagueId: "f1-2026", teamA: "Antonelli", teamB: "Field", flagA: "🟠", flagB: "🏁", scoreA: "97", scoreB: "<97", overs: "WDC", status: "LIVE", prob: 64 },
-];
+type UiMatch = {
+  id: string;
+  league: string;
+  teamA: string;
+  teamB: string;
+  score: string;
+  status: string;
+  date: string;
+};
 
-const upcomingMatches = [
-  { id: 4, league: "IPL 2026", teamA: "GT", teamB: "KKR", time: "Today, 7:30 PM IST", highlight: true },
-  { id: 5, league: "F1 2026", teamA: "Miami", teamB: "Grand Prix", time: "Apr 30 - May 3" },
-  { id: 6, league: "Premier League", teamA: "Arsenal", teamB: "Run-in", time: "6 points clear" },
-];
-
-const stats = [
-  { label: "IPL Matches Completed", value: "24", icon: Activity, color: "#FF4D8D", bg: "rgba(255,77,141,0.1)" },
-  { label: "IPL Leader", value: "PBKS 9", icon: Trophy, color: "#3BD4E7", bg: "rgba(59,212,231,0.1)" },
-  { label: "F1 WDC Leader", value: "Antonelli 97", icon: TrendingUp, color: "#7C4DFF", bg: "rgba(124,77,255,0.1)" },
-  { label: "EPL Top", value: "Arsenal 70", icon: Users, color: "#FF9100", bg: "rgba(255,145,0,0.1)" },
-];
+const toUiMatch = (match: any): UiMatch => ({
+  id: String(match?.id || `${match?.team1 || "team1"}-${match?.team2 || "team2"}-${match?.date || "date"}`),
+  league: match?.series || "Cricket",
+  teamA: match?.team1 || "Team A",
+  teamB: match?.team2 || "Team B",
+  score: match?.score || "Score unavailable",
+  status: match?.status || "Status unavailable",
+  date: formatApiDate(match?.date),
+});
 
 export function Dashboard() {
   const navigate = useNavigate();
+  const [liveMatches, setLiveMatches] = useState<UiMatch[]>([]);
+  const [upcomingMatches, setUpcomingMatches] = useState<UiMatch[]>([]);
+  const [iplMatches, setIplMatches] = useState<UiMatch[]>([]);
+  const [teamsCount, setTeamsCount] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+
+    const loadDashboard = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+
+        const [liveRes, upcomingRes, iplRes, teamsRes] = await Promise.all([
+          cricketApi.getLiveMatches(1, 8),
+          cricketApi.getUpcomingMatches(1, 8),
+          cricketApi.getIplMatches(1, 30),
+          cricketApi.getTeams({ page: 1, limit: 500 }),
+        ]);
+
+        if (!active) {
+          return;
+        }
+
+        const live = safeArray<any>((liveRes as any).matches).map(toUiMatch);
+        const upcoming = safeArray<any>((upcomingRes as any).matches).map(toUiMatch);
+        const ipl = safeArray<any>((iplRes as any).matches).map(toUiMatch);
+        const teams = safeArray<any>((teamsRes as any).teams);
+
+        setLiveMatches(live);
+        setUpcomingMatches(upcoming);
+        setIplMatches(ipl);
+        setTeamsCount(teams.length);
+      } catch (fetchError: any) {
+        if (!active) {
+          return;
+        }
+        setError(fetchError?.message || "Failed to load live dashboard data");
+      } finally {
+        if (active) {
+          setLoading(false);
+        }
+      }
+    };
+
+    loadDashboard();
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const stats = useMemo(
+    () => [
+      { label: "IPL Matches", value: String(iplMatches.length), icon: Activity, color: "#FF4D8D", bg: "rgba(255,77,141,0.1)" },
+      { label: "Live Matches", value: String(liveMatches.length), icon: Trophy, color: "#3BD4E7", bg: "rgba(59,212,231,0.1)" },
+      { label: "Upcoming", value: String(upcomingMatches.length), icon: TrendingUp, color: "#7C4DFF", bg: "rgba(124,77,255,0.1)" },
+      { label: "Teams (API)", value: String(teamsCount), icon: Users, color: "#FF9100", bg: "rgba(255,145,0,0.1)" },
+    ],
+    [iplMatches.length, liveMatches.length, upcomingMatches.length, teamsCount]
+  );
+
+  const liveMatchCards = liveMatches.filter((match) => isLiveStatus(match.status)).slice(0, 3);
+  const upcomingMatchCards = upcomingMatches.slice(0, 3);
 
   return (
     <motion.div
@@ -77,7 +147,7 @@ export function Dashboard() {
               </div>
               <div className="flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold" style={{ background: "rgba(255,145,0,0.15)", border: "1px solid rgba(255,145,0,0.3)", color: "#FF9100" }}>
                 <Flame size={12} />
-                UPDATED: APR 17, 2026
+                {loading ? "SYNCING LIVE DATA" : "LIVE DATA CONNECTED"}
               </div>
             </motion.div>
             <h1 className="text-4xl md:text-5xl font-black text-white mb-3 leading-tight">
@@ -86,7 +156,8 @@ export function Dashboard() {
                 Intelligence Hub
               </span>
             </h1>
-            <p className="text-white/50 text-lg max-w-lg">Live scores, deep analytics, player insights and real-time match rooms — all in one place.</p>
+            <p className="text-white/50 text-lg max-w-lg">Live scores and match feeds are now powered by your backend RapidAPI integration.</p>
+            {error && <p className="text-[#ff8ca8] text-sm mt-3">{error}</p>}
           </div>
         </motion.div>
 
@@ -117,7 +188,7 @@ export function Dashboard() {
         <div>
           <div className="flex items-center justify-between mb-5">
             <h2 className="text-xl font-bold text-white">Select Sport</h2>
-            <span className="text-white/30 text-sm">4 sports available</span>
+            <span className="text-white/30 text-sm">{loading ? "Loading..." : "4 sports available"}</span>
           </div>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             {sports.map((sport, i) => (
@@ -163,7 +234,17 @@ export function Dashboard() {
               <h2 className="text-xl font-bold text-white">Live Matches</h2>
             </div>
             <div className="space-y-4">
-              {liveMatches.map((match, i) => (
+              {liveMatchCards.length === 0 && (
+                <GlassCard className="p-5">
+                  <p className="text-white/50 text-sm">No live matches available right now from the API.</p>
+                </GlassCard>
+              )}
+
+              {liveMatchCards.map((match, i) => {
+                const teamA = getTeamLogoProps(match.teamA);
+                const teamB = getTeamLogoProps(match.teamB);
+
+                return (
                 <motion.div
                   key={match.id}
                   initial={{ opacity: 0, x: -20 }}
@@ -174,7 +255,7 @@ export function Dashboard() {
                     <div className="flex items-center justify-between mb-4">
                       <span className="text-xs font-semibold text-white/40">{match.league}</span>
                       <div className="flex items-center gap-3">
-                        <span className="text-white/40 text-xs">{match.overs}</span>
+                        <span className="text-white/40 text-xs">{match.date}</span>
                         <button
                           onClick={(e) => { e.stopPropagation(); navigate(`/live-room/${match.id}`); }}
                           className="px-3 py-1 rounded-lg text-xs font-semibold"
@@ -188,40 +269,24 @@ export function Dashboard() {
                       <div className="flex-1">
                         <div className="flex items-center justify-between mb-2">
                           <div className="flex items-center gap-2">
-                            <TeamLogo short={match.teamA} size={28} />
+                            <TeamLogo teamId={teamA.teamId} short={teamA.short} size={28} />
                             <span className="text-white font-bold">{match.teamA}</span>
                           </div>
-                          <span className="text-white font-black text-xl">{match.scoreA}</span>
+                          <span className="text-white font-black text-sm md:text-base">{match.score}</span>
                         </div>
                         <div className="h-px my-2" style={{ background: "rgba(255,255,255,0.06)" }} />
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-2">
-                            <TeamLogo short={match.teamB} size={28} />
+                            <TeamLogo teamId={teamB.teamId} short={teamB.short} size={28} />
                             <span className="text-white font-bold">{match.teamB}</span>
                           </div>
-                          <span className="text-white font-black text-xl">{match.scoreB}</span>
+                          <span className="text-white/60 text-xs uppercase">{match.status}</span>
                         </div>
-                      </div>
-                    </div>
-                    {/* Win probability */}
-                    <div className="mt-4">
-                      <div className="flex justify-between text-xs text-white/30 mb-1.5">
-                        <span>{match.teamA} {match.prob}%</span>
-                        <span>{match.teamB} {100 - match.prob}%</span>
-                      </div>
-                      <div className="h-1.5 rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.08)" }}>
-                        <motion.div
-                          initial={{ width: "50%" }}
-                          animate={{ width: `${match.prob}%` }}
-                          transition={{ duration: 1, delay: 0.5 }}
-                          className="h-full rounded-full"
-                          style={{ background: "linear-gradient(90deg, #3BD4E7, #7C4DFF)" }}
-                        />
                       </div>
                     </div>
                   </GlassCard>
                 </motion.div>
-              ))}
+              );})}
             </div>
           </div>
 
@@ -230,7 +295,13 @@ export function Dashboard() {
             <div>
               <h2 className="text-xl font-bold text-white mb-4">Upcoming</h2>
               <div className="space-y-3">
-                {upcomingMatches.map((match, i) => (
+                {upcomingMatchCards.length === 0 && (
+                  <GlassCard className="p-4">
+                    <p className="text-white/50 text-sm">No upcoming fixtures returned by the API.</p>
+                  </GlassCard>
+                )}
+
+                {upcomingMatchCards.map((match, i) => (
                   <motion.div
                     key={match.id}
                     initial={{ opacity: 0, x: 20 }}
@@ -243,12 +314,7 @@ export function Dashboard() {
                         <div className="text-white font-semibold text-sm">{match.teamA} vs {match.teamB}</div>
                         <ChevronRight size={14} className="text-white/30" />
                       </div>
-                      <div className="text-[#3BD4E7] text-xs mt-1.5 font-medium">{match.time}</div>
-                      {(match as { highlight?: boolean }).highlight && (
-                        <div className="mt-2 inline-flex px-2 py-0.5 rounded-md text-[10px] font-semibold" style={{ background: "rgba(59,212,231,0.15)", border: "1px solid rgba(59,212,231,0.3)", color: "#3BD4E7" }}>
-                          Highlighted Fixture
-                        </div>
-                      )}
+                      <div className="text-[#3BD4E7] text-xs mt-1.5 font-medium">{match.date}</div>
                     </GlassCard>
                   </motion.div>
                 ))}
@@ -260,11 +326,11 @@ export function Dashboard() {
               <h2 className="text-xl font-bold text-white mb-4">🔥 Trending</h2>
               <GlassCard className="p-5">
                 <div className="space-y-4">
-                  {[
-                    { name: "Virat Kohli", detail: "Orange Cap leader: 228 runs", badge: "#1" },
-                    { name: "Prasidh Krishna & A. Kamboj", detail: "Purple Cap tied: 10 wickets each", badge: "HOT" },
-                    { name: "Vaibhav Suryavanshi", detail: "Strike rate 266+", badge: "#2" },
-                  ].map((item, i) => (
+                  {(iplMatches.slice(0, 3).map((m, index) => ({
+                    name: `${m.teamA} vs ${m.teamB}`,
+                    detail: `${m.status} · ${m.score}`,
+                    badge: index === 0 ? "#1" : index === 1 ? "HOT" : "#3",
+                  })) ).map((item, i) => (
                     <div key={i} className="flex items-center gap-3">
                       <div
                         className="w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold flex-shrink-0"

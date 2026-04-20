@@ -1,4 +1,5 @@
 import { Router } from "express";
+import iplRoutes from "./iplRoutes.js";
 import matchRoutes from "./matchRoutes.js";
 import matchesRoutes from "./matchesRoutes.js";
 import searchRoutes from "./searchRoutes.js";
@@ -18,5 +19,6 @@ router.use("/teams", teamsRoutes);
 router.get("/team/:id/players", teamsController.getPlayersByTeam);
 router.use("/series", seriesRoutes);
 router.use("/search", searchRoutes);
+router.use("/ipl", iplRoutes);
 
 export default router;

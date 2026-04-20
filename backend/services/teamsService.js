@@ -22,11 +22,34 @@ export const teamsService = {
   },
 
   async getPlayersByTeam(teamId, teamName = null) {
-    const response = await rapidApiService.getPlayersByTeam(teamId);
+    try {
+      const response = await rapidApiService.getPlayersByTeam(teamId);
 
-    return {
-      data: normalizePlayerList(response.data, teamName),
-      meta: response.meta,
-    };
+      return {
+        data: normalizePlayerList(response.data, teamName),
+        meta: {
+          provider: "rapidapi",
+          ...response.meta,
+        },
+      };
+    } catch (error) {
+      const statusCode = error?.statusCode || error?.response?.status || 502;
+
+      // RapidAPI can intermittently fail for some team IDs (notably franchise IDs).
+      // Return a safe empty list instead of surfacing a hard 5xx to the frontend.
+      if (statusCode >= 500 || statusCode === 404) {
+        return {
+          data: [],
+          meta: {
+            provider: "rapidapi",
+            cacheHit: false,
+            fallback: true,
+            fallbackReason: `players-upstream-${statusCode}`,
+          },
+        };
+      }
+
+      throw error;
+    }
   },
 };

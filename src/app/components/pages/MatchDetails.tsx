@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { useNavigate, useParams } from "react-router";
 import { Navbar } from "../ui/Navbar";
@@ -6,67 +6,126 @@ import { GlassCard } from "../ui/GlassCard";
 import { BackButton } from "../ui/BackButton";
 import { Breadcrumbs } from "../ui/Breadcrumbs";
 import { TeamLogo } from "../ui/TeamLogo";
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line } from "recharts";
-import { Radio, Users, MessageCircle, TrendingUp, Zap, MapPin } from "lucide-react";
+import { MessageCircle, Radio, Users, MapPin } from "lucide-react";
+import { cricketApi } from "../../services/cricketApi";
+import { formatApiDate, getTeamLogoProps, safeArray } from "../../services/cricketUi";
 
-const matchInfo = {
-  1: { teamA: "RCB", teamB: "MI", flagA: "🔴", flagB: "🔵", league: "IPL 2026", venue: "M. Chinnaswamy Stadium, Bangalore", date: "Apr 17, 2026", scoreA: "167/4", scoreB: "142/7", oversA: "20.0", oversB: "16.3", probA: 78, batting: "MI" },
-  2: { teamA: "Arsenal", teamB: "Chelsea", flagA: "🔴", flagB: "🔵", league: "Premier League", venue: "Emirates Stadium, London", date: "Apr 17, 2026", scoreA: "2", scoreB: "2", oversA: "67'", oversB: "", probA: 50, batting: "" },
-  3: { teamA: "Lakers", teamB: "Celtics", flagA: "🟣", flagB: "🟢", league: "NBA Finals", venue: "Crypto.com Arena, LA", date: "Apr 17, 2026", scoreA: "98", scoreB: "92", oversA: "Q3 5:42", oversB: "", probA: 58, batting: "" },
+type TabKey = "Scorecard" | "Commentary" | "Analysis";
+
+type CommentaryEntry = {
+  over: string;
+  text: string;
 };
 
-const overProgressData = [
-  { over: "PP(1-6)", rcb: 62, mi: 58 }, { over: "7-10", rcb: 45, mi: 38 },
-  { over: "11-15", rcb: 48, mi: 52 }, { over: "16-20", rcb: 67, mi: 43 },
-];
+type InningEntry = {
+  title: string;
+  score: string;
+  overs: string;
+};
 
-const winProb = [
-  { over: "Start", rcb: 50, mi: 50 }, { over: "PP", rcb: 55, mi: 45 },
-  { over: "10", rcb: 48, mi: 52 }, { over: "15", rcb: 58, mi: 42 },
-  { over: "18", rcb: 72, mi: 28 }, { over: "20", rcb: 78, mi: 22 },
-];
+const tabs: TabKey[] = ["Scorecard", "Commentary", "Analysis"];
 
-const batsmen = [
-  { name: "V. Kohli", runs: 68, balls: 42, fours: 6, sixes: 3, sr: "161.9", status: "batting" },
-  { name: "D. Karthik", runs: 34, balls: 18, fours: 2, sixes: 4, sr: "188.9", status: "batting" },
-];
+const extractInnings = (scoreboard: any): InningEntry[] => {
+  const innings = safeArray<any>(scoreboard?.innings);
+  if (innings.length > 0) {
+    return innings.map((inning, index) => ({
+      title: inning?.team || inning?.title || `Innings ${index + 1}`,
+      score: inning?.score || `${inning?.runs ?? "-"}/${inning?.wickets ?? "-"}`,
+      overs: String(inning?.overs ?? "-"),
+    }));
+  }
 
-const recentBalls = ["4", "1", "0", "W", "6", "2", "4", "1", "0", "1", "6", "4"];
+  const fallbackScore = safeArray<string>(scoreboard?.score || scoreboard?.scores);
+  if (fallbackScore.length > 0) {
+    return fallbackScore.map((item, index) => ({
+      title: `Innings ${index + 1}`,
+      score: String(item),
+      overs: "-",
+    }));
+  }
 
-const commentary = [
-  { over: "16.3", text: "SIX! Dinesh Karthik clears the ropes at long-on! What a finish!", type: "six" },
-  { over: "16.2", text: "Bumrah bowls a yorker. Karthik digs it out for a single.", type: "normal" },
-  { over: "16.1", text: "Lovely cover drive by Kohli for FOUR runs!", type: "four" },
-  { over: "15.6", text: "WICKET! Rajat Patidar caught at mid-wicket by Rohit. RCB 145/4", type: "wicket" },
-  { over: "15.5", text: "Full toss dispatched over extra cover for SIX! Maxwell in beast mode!", type: "six" },
-  { over: "15.4", text: "Dot ball. Very tight bowling from Bumrah.", type: "normal" },
-];
+  return [];
+};
 
-const tabs = ["Scorecard", "Commentary", "Analysis"];
+const extractCommentary = (scoreboard: any): CommentaryEntry[] => {
+  const direct = safeArray<any>(scoreboard?.commentary || scoreboard?.liveCommentary);
+  if (direct.length > 0) {
+    return direct
+      .map((entry) => ({
+        over: String(entry?.over || entry?.ball || "-"),
+        text: String(entry?.text || entry?.commentary || ""),
+      }))
+      .filter((entry) => entry.text)
+      .slice(0, 40);
+  }
+
+  return [];
+};
 
 export function MatchDetails() {
   const { matchId } = useParams<{ matchId: string }>();
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState("Scorecard");
-  const match = matchInfo[parseInt(matchId || "1")] || matchInfo[1];
+  const [activeTab, setActiveTab] = useState<TabKey>("Scorecard");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [matchPayload, setMatchPayload] = useState<any>(null);
+
+  useEffect(() => {
+    if (!matchId) {
+      setLoading(false);
+      setError("Missing match id");
+      return;
+    }
+
+    let active = true;
+
+    const loadMatch = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+
+        const response = await cricketApi.getMatchDetails(matchId);
+        if (!active) {
+          return;
+        }
+
+        setMatchPayload(response);
+      } catch (fetchError: any) {
+        if (!active) {
+          return;
+        }
+        setError(fetchError?.message || "Unable to load match details");
+      } finally {
+        if (active) {
+          setLoading(false);
+        }
+      }
+    };
+
+    loadMatch();
+
+    return () => {
+      active = false;
+    };
+  }, [matchId]);
+
+  const match = matchPayload?.match || {};
+  const scoreboard = matchPayload?.scoreboard || {};
+  const teamA = getTeamLogoProps(match?.team1);
+  const teamB = getTeamLogoProps(match?.team2);
+
+  const innings = useMemo(() => extractInnings(scoreboard), [scoreboard]);
+  const commentary = useMemo(() => extractCommentary(scoreboard), [scoreboard]);
 
   return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      transition={{ duration: 0.5 }}
-      className="min-h-screen"
-    >
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.5 }} className="min-h-screen">
       <Navbar />
       <div className="max-w-7xl mx-auto px-4 md:px-6 py-8">
-
-        {/* Navigation */}
         <div className="flex items-center justify-between mb-8">
           <BackButton to="/dashboard" />
-          <Breadcrumbs items={[{ label: match.league, path: "/dashboard" }, { label: `${match.teamA} vs ${match.teamB}` }]} />
+          <Breadcrumbs items={[{ label: match?.series || "Cricket", path: "/dashboard" }, { label: `${match?.team1 || "Team A"} vs ${match?.team2 || "Team B"}` }]} />
         </div>
 
-        {/* Main Scoreboard */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -77,25 +136,24 @@ export function MatchDetails() {
             border: "1px solid rgba(255,255,255,0.07)",
           }}
         >
-          {/* Header */}
-          <div className="flex flex-wrap items-center justify-between gap-4 mb-8">
+          <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
             <div>
               <div className="flex items-center gap-3 mb-2">
-                <motion.div
-                  animate={{ scale: [1, 1.2, 1] }}
-                  transition={{ duration: 1.2, repeat: Infinity }}
+                <div
                   className="flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold"
                   style={{ background: "rgba(255,77,141,0.15)", border: "1px solid rgba(255,77,141,0.4)", color: "#FF4D8D" }}
                 >
                   <Radio size={10} />
-                  LIVE
-                </motion.div>
-                <span className="text-white/40 text-sm">{match.league}</span>
+                  {loading ? "LOADING" : (match?.status || "LIVE")}
+                </div>
+                <span className="text-white/40 text-sm">{match?.series || "Cricket"}</span>
               </div>
               <div className="flex items-center gap-1.5 text-white/30 text-xs">
                 <MapPin size={12} />
-                {match.venue}
+                {match?.venue || "Venue unavailable"}
               </div>
+              <p className="text-white/35 text-xs mt-1">{formatApiDate(match?.date)}</p>
+              {error && <p className="text-[#ff8ca8] text-xs mt-2">{error}</p>}
             </div>
             <div className="flex gap-3">
               <motion.button
@@ -119,85 +177,32 @@ export function MatchDetails() {
             </div>
           </div>
 
-          {/* Scores */}
-          <div className="grid grid-cols-3 gap-6 items-center">
-            {/* Team A */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-center">
             <div className="text-center md:text-left">
               <div className="flex items-center gap-3 mb-3 justify-center md:justify-start">
-                <TeamLogo short={match.teamA} size={54} />
+                <TeamLogo teamId={teamA.teamId} short={teamA.short} size={54} />
                 <div>
-                  <p className="text-white font-black text-2xl">{match.teamA}</p>
-                  <p className="text-white/40 text-xs">{match.batting === match.teamA ? "Batting" : "Bowled"}</p>
+                  <p className="text-white font-black text-2xl">{match?.team1 || "Team A"}</p>
                 </div>
               </div>
-              <div className="text-5xl md:text-6xl font-black text-white">{match.scoreA}</div>
-              <div className="text-white/40 text-sm mt-1">{match.oversA} overs</div>
             </div>
 
-            {/* VS */}
             <div className="text-center">
-              <div className="text-white/20 text-3xl font-black mb-3">VS</div>
-              {/* Win Probability Bar */}
-              <div className="space-y-2">
-                <div className="h-2 rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.08)" }}>
-                  <motion.div
-                    initial={{ width: "50%" }}
-                    animate={{ width: `${match.probA}%` }}
-                    transition={{ duration: 1.2, ease: "easeOut" }}
-                    className="h-full rounded-full"
-                    style={{ background: "linear-gradient(90deg, #FF4D8D, #7C4DFF)" }}
-                  />
-                </div>
-                <div className="flex justify-between text-xs font-semibold">
-                  <span style={{ color: "#FF4D8D" }}>{match.probA}%</span>
-                  <span className="text-white/30">Win %</span>
-                  <span style={{ color: "#3BD4E7" }}>{100 - match.probA}%</span>
-                </div>
-              </div>
-              {/* Recent balls */}
-              <div className="flex gap-1 justify-center mt-3 flex-wrap">
-                {recentBalls.slice(-6).map((ball, i) => (
-                  <div
-                    key={i}
-                    className="w-7 h-7 rounded-lg flex items-center justify-center text-xs font-bold"
-                    style={{
-                      background: ball === "W" ? "rgba(255,77,141,0.3)" : ball === "6" ? "rgba(0,230,118,0.25)" : ball === "4" ? "rgba(59,212,231,0.2)" : "rgba(255,255,255,0.06)",
-                      border: ball === "W" ? "1px solid rgba(255,77,141,0.5)" : ball === "6" ? "1px solid rgba(0,230,118,0.4)" : "1px solid rgba(255,255,255,0.08)",
-                      color: ball === "W" ? "#FF4D8D" : ball === "6" ? "#00E676" : ball === "4" ? "#3BD4E7" : "rgba(255,255,255,0.7)",
-                    }}
-                  >
-                    {ball}
-                  </div>
-                ))}
-              </div>
+              <div className="text-white font-black text-2xl md:text-3xl mb-2">VS</div>
+              <p className="text-white/70 text-sm">{match?.score || "Score unavailable"}</p>
             </div>
 
-            {/* Team B */}
             <div className="text-center md:text-right">
               <div className="flex items-center gap-3 mb-3 justify-center md:justify-end">
                 <div className="md:order-last">
-                  <p className="text-white font-black text-2xl">{match.teamB}</p>
-                  <p className="text-white/40 text-xs">{match.batting === match.teamB ? "Batting" : "Bowling"}</p>
+                  <p className="text-white font-black text-2xl">{match?.team2 || "Team B"}</p>
                 </div>
-                <TeamLogo short={match.teamB} size={54} />
+                <TeamLogo teamId={teamB.teamId} short={teamB.short} size={54} />
               </div>
-              <div className="text-5xl md:text-6xl font-black text-white">{match.scoreB}</div>
-              <div className="text-white/40 text-sm mt-1">{match.oversB || "—"}</div>
             </div>
           </div>
-
-          {/* Context */}
-          <motion.div
-            animate={{ opacity: [0.5, 1, 0.5] }}
-            transition={{ duration: 2, repeat: Infinity }}
-            className="mt-6 p-3 rounded-xl text-center text-sm font-semibold"
-            style={{ background: "rgba(255,145,0,0.1)", border: "1px solid rgba(255,145,0,0.2)", color: "#FF9100" }}
-          >
-            MI needs 26 runs off 22 balls (RRR: 7.09)
-          </motion.div>
         </motion.div>
 
-        {/* Tabs */}
         <div className="flex gap-1 p-1 rounded-xl mb-8 w-fit" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.06)" }}>
           {tabs.map((tab) => (
             <motion.button
@@ -216,130 +221,58 @@ export function MatchDetails() {
         </div>
 
         <AnimatePresence mode="wait">
-          {/* SCORECARD */}
           {activeTab === "Scorecard" && (
-            <motion.div key="scorecard" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="space-y-6">
-              {/* Current Batsmen */}
+            <motion.div key="scorecard" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
               <GlassCard className="overflow-hidden">
                 <div className="px-6 py-4" style={{ borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
-                  <h3 className="text-white font-bold flex items-center gap-2"><span className="text-[#FF4D8D]">🔴</span> RCB Batting</h3>
+                  <h3 className="text-white font-bold">Live Scorecard</h3>
                 </div>
-                <div className="px-6 py-3 grid grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr] text-xs text-white/30 uppercase tracking-wider" style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
-                  <span>Batsman</span><span className="text-center">R</span><span className="text-center">B</span>
-                  <span className="text-center hidden md:block">4s</span><span className="text-center hidden md:block">6s</span><span className="text-center">SR</span>
-                </div>
-                {batsmen.map((b, i) => (
-                  <motion.div
-                    key={b.name}
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    transition={{ delay: i * 0.1 }}
-                    className="grid grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr] px-6 py-3.5 items-center"
-                    style={{ borderBottom: "1px solid rgba(255,255,255,0.04)", background: b.status === "batting" ? "rgba(59,212,231,0.04)" : "transparent" }}
-                  >
-                    <div className="flex items-center gap-2">
-                      <div className="w-1.5 h-1.5 rounded-full" style={{ background: b.status === "batting" ? "#00E676" : "rgba(255,255,255,0.2)" }} />
-                      <span className="text-white font-semibold text-sm">{b.name}</span>
-                      {b.status === "batting" && <span className="text-xs px-1.5 py-0.5 rounded text-[#3BD4E7]" style={{ background: "rgba(59,212,231,0.1)" }}>*</span>}
+                {innings.length === 0 && <div className="px-6 py-5 text-sm text-white/45">No structured innings data available for this match.</div>}
+                {innings.map((inning, index) => (
+                  <div key={`${inning.title}-${index}`} className="px-6 py-4 flex items-center justify-between" style={{ borderBottom: index < innings.length - 1 ? "1px solid rgba(255,255,255,0.04)" : "none" }}>
+                    <div>
+                      <p className="text-white font-semibold text-sm">{inning.title}</p>
+                      <p className="text-white/40 text-xs">Overs: {inning.overs}</p>
                     </div>
-                    <span className="text-center text-white font-bold">{b.runs}</span>
-                    <span className="text-center text-white/60">{b.balls}</span>
-                    <span className="text-center text-white/60 hidden md:block">{b.fours}</span>
-                    <span className="text-center text-white/60 hidden md:block">{b.sixes}</span>
-                    <span className="text-center text-sm font-mono" style={{ color: parseFloat(b.sr) > 150 ? "#00E676" : parseFloat(b.sr) > 120 ? "#FF9100" : "#FF4D8D" }}>{b.sr}</span>
-                  </motion.div>
+                    <p className="text-white font-black text-lg">{inning.score}</p>
+                  </div>
                 ))}
               </GlassCard>
             </motion.div>
           )}
 
-          {/* COMMENTARY */}
           {activeTab === "Commentary" && (
             <motion.div key="commentary" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
               <GlassCard className="overflow-hidden">
                 <div className="px-6 py-4" style={{ borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
-                  <h3 className="text-white font-bold flex items-center gap-2"><Radio size={16} style={{ color: "#FF4D8D" }} />Live Commentary</h3>
+                  <h3 className="text-white font-bold">Commentary Feed</h3>
                 </div>
-                <div className="divide-y" style={{ "--tw-divide-opacity": 1 } as any}>
-                  {commentary.map((c, i) => (
-                    <motion.div
-                      key={i}
-                      initial={{ opacity: 0, x: -10 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: i * 0.07 }}
-                      className="px-6 py-4 flex gap-4"
-                      style={{ borderColor: "rgba(255,255,255,0.04)" }}
-                    >
-                      <div
-                        className="flex-shrink-0 w-12 h-8 rounded-lg flex items-center justify-center text-xs font-mono font-bold"
-                        style={{
-                          background: c.type === "wicket" ? "rgba(255,77,141,0.15)" : c.type === "six" ? "rgba(0,230,118,0.15)" : c.type === "four" ? "rgba(59,212,231,0.15)" : "rgba(255,255,255,0.04)",
-                          color: c.type === "wicket" ? "#FF4D8D" : c.type === "six" ? "#00E676" : c.type === "four" ? "#3BD4E7" : "rgba(255,255,255,0.4)",
-                        }}
-                      >
-                        {c.over}
-                      </div>
-                      <p className="text-white/70 text-sm leading-relaxed">{c.text}</p>
-                    </motion.div>
-                  ))}
-                </div>
+                {commentary.length === 0 && <div className="px-6 py-5 text-sm text-white/45">Commentary is not available for this match in the current API payload.</div>}
+                {commentary.map((entry, index) => (
+                  <div key={`${entry.over}-${index}`} className="px-6 py-4 flex gap-4" style={{ borderBottom: index < commentary.length - 1 ? "1px solid rgba(255,255,255,0.04)" : "none" }}>
+                    <div className="flex-shrink-0 w-14 h-8 rounded-lg flex items-center justify-center text-xs font-mono font-bold" style={{ background: "rgba(255,255,255,0.08)", color: "#7ad6ff" }}>
+                      {entry.over}
+                    </div>
+                    <p className="text-white/70 text-sm leading-relaxed">{entry.text}</p>
+                  </div>
+                ))}
               </GlassCard>
             </motion.div>
           )}
 
-          {/* ANALYSIS */}
           {activeTab === "Analysis" && (
-            <motion.div key="analysis" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="space-y-6">
-              {/* Win Probability Chart */}
-              <GlassCard className="p-6">
-                <h3 className="text-white font-bold mb-1 flex items-center gap-2">
-                  <TrendingUp size={18} style={{ color: "#3BD4E7" }} />
-                  Win Probability Timeline
-                </h3>
-                <p className="text-white/30 text-xs mb-5">How the match unfolded over overs</p>
-                <ResponsiveContainer width="100%" height={250}>
-                  <AreaChart data={winProb}>
-                    <defs>
-                      <linearGradient id="rcbWin" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="#FF4D8D" stopOpacity={0.3} />
-                        <stop offset="100%" stopColor="#FF4D8D" stopOpacity={0} />
-                      </linearGradient>
-                      <linearGradient id="miWin" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="#3BD4E7" stopOpacity={0.3} />
-                        <stop offset="100%" stopColor="#3BD4E7" stopOpacity={0} />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
-                    <XAxis dataKey="over" stroke="#ffffff25" tick={{ fill: "#ffffff50", fontSize: 11 }} />
-                    <YAxis stroke="#ffffff25" tick={{ fill: "#ffffff50", fontSize: 11 }} domain={[0, 100]} />
-                    <Tooltip contentStyle={{ background: "rgba(8,5,24,0.95)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "12px", color: "white" }} formatter={(val) => [`${val}%`]} />
-                    <Area type="monotone" dataKey="rcb" stroke="#FF4D8D" fill="url(#rcbWin)" strokeWidth={2.5} name="RCB" dot={{ fill: "#FF4D8D", r: 4 }} />
-                    <Area type="monotone" dataKey="mi" stroke="#3BD4E7" fill="url(#miWin)" strokeWidth={2.5} name="MI" dot={{ fill: "#3BD4E7", r: 4 }} />
-                  </AreaChart>
-                </ResponsiveContainer>
+            <motion.div key="analysis" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="grid grid-cols-1 md:grid-cols-3 gap-5">
+              <GlassCard className="p-5" glow="none">
+                <p className="text-white/45 text-xs uppercase tracking-wider mb-2">Match Id</p>
+                <div className="text-2xl font-black text-[#3BD4E7]">{matchId || "-"}</div>
               </GlassCard>
-
-              {/* Phase Analysis */}
-              <GlassCard className="p-6">
-                <h3 className="text-white font-bold mb-5 flex items-center gap-2"><Zap size={18} style={{ color: "#FF9100" }} />Phase-wise Runs</h3>
-                <ResponsiveContainer width="100%" height={220}>
-                  <AreaChart data={overProgressData}>
-                    <defs>
-                      <linearGradient id="phaseRCB" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="#FF4D8D" stopOpacity={0.3} /><stop offset="100%" stopColor="#FF4D8D" stopOpacity={0} />
-                      </linearGradient>
-                      <linearGradient id="phaseMI" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="#3BD4E7" stopOpacity={0.3} /><stop offset="100%" stopColor="#3BD4E7" stopOpacity={0} />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
-                    <XAxis dataKey="over" stroke="#ffffff25" tick={{ fill: "#ffffff50", fontSize: 11 }} />
-                    <YAxis stroke="#ffffff25" tick={{ fill: "#ffffff50", fontSize: 11 }} />
-                    <Tooltip contentStyle={{ background: "rgba(8,5,24,0.95)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "12px", color: "white" }} />
-                    <Area type="monotone" dataKey="rcb" stroke="#FF4D8D" fill="url(#phaseRCB)" strokeWidth={2} name="RCB" />
-                    <Area type="monotone" dataKey="mi" stroke="#3BD4E7" fill="url(#phaseMI)" strokeWidth={2} name="MI" />
-                  </AreaChart>
-                </ResponsiveContainer>
+              <GlassCard className="p-5" glow="none">
+                <p className="text-white/45 text-xs uppercase tracking-wider mb-2">Innings Found</p>
+                <div className="text-2xl font-black text-[#00E676]">{innings.length}</div>
+              </GlassCard>
+              <GlassCard className="p-5" glow="none">
+                <p className="text-white/45 text-xs uppercase tracking-wider mb-2">Commentary Lines</p>
+                <div className="text-2xl font-black text-[#FF9100]">{commentary.length}</div>
               </GlassCard>
             </motion.div>
           )}
