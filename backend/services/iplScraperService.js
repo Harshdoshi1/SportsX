@@ -4,6 +4,12 @@ const POINTS_URL =
   "https://www.cricbuzz.com/cricket-series/9241/indian-premier-league-2026/points-table";
 const MATCHES_URL =
   "https://www.cricbuzz.com/cricket-series/9241/indian-premier-league-2026/matches";
+const STATS_URL =
+  "https://www.cricbuzz.com/cricket-series/9241/indian-premier-league-2026/stats";
+const SQUADS_URL =
+  "https://www.cricbuzz.com/cricket-series/9241/indian-premier-league-2026/squads";
+const NEWS_URL =
+  "https://www.cricbuzz.com/cricket-series/9241/indian-premier-league-2026/news";
 
 const IPL_TEAM_ALIASES = {
   CSK: ["CSK", "Chennai Super Kings"],
@@ -19,6 +25,7 @@ const IPL_TEAM_ALIASES = {
 };
 
 const IPL_TEAM_CODES = Object.keys(IPL_TEAM_ALIASES);
+const IPL_TEAM_NAMES = IPL_TEAM_CODES.flatMap((code) => IPL_TEAM_ALIASES[code] || []);
 
 const extractIplTeamCode = (line) => {
   const normalized = String(line || "").replace(/\s+/g, " ").trim().toLowerCase();
@@ -283,6 +290,7 @@ const parseMatchesFromText = (lines) => {
   const dateRegex = /^(SUN|MON|TUE|WED|THU|FRI|SAT),\s+[A-Z]{3}\s+\d{1,2}\s+\d{4}$/i;
   const infoRegex = /•/;
   const matchInfoRegex = /\b(match|qualifier|eliminator|final|playoff)\b/i;
+  const scoreRegex = /^\d{1,3}(?:-\d{1,2})?\s*\(\d+(?:\.\d+)?\)$/;
 
   const seriesNavIndex = lines.findIndex((line) => line.toLowerCase() === "venues");
   const firstDateIndex = lines.findIndex((line) => dateRegex.test(line));
@@ -328,6 +336,7 @@ const parseMatchesFromText = (lines) => {
     const blockLines = lines.slice(i + 1, nextBoundary);
 
     const teamsInOrder = [];
+    const scoresInOrder = [];
     const seenTeams = new Set();
     let statusLine = null;
 
@@ -341,6 +350,12 @@ const parseMatchesFromText = (lines) => {
       teamsInOrder.push(teamCode);
       if (teamsInOrder.length >= 2) {
         break;
+      }
+    }
+
+    for (const candidate of blockLines) {
+      if (scoreRegex.test(candidate)) {
+        scoresInOrder.push(candidate);
       }
     }
 
@@ -360,9 +375,12 @@ const parseMatchesFromText = (lines) => {
     matches.push({
       team1,
       team2,
+      team1Score: scoresInOrder[0] || null,
+      team2Score: scoresInOrder[1] || null,
       date: currentDate,
       venue,
       status: parseMatchStatus(statusLine || "Upcoming"),
+      result: statusLine || null,
     });
 
     i = nextBoundary - 1;
@@ -380,6 +398,182 @@ const parseMatchesFromText = (lines) => {
   }
 
   return unique;
+};
+
+const parseStatsFromText = (lines) => {
+  const start = lines.findIndex((line) => line.toLowerCase() === "batting");
+  const tableHeaderIndex = lines.findIndex((line) => /player\s+matches\s+inns\s+runs\s+avg\s+sr/i.test(line));
+
+  if (start < 0 || tableHeaderIndex < 0) {
+    return {
+      categories: {
+        batting: [],
+        bowling: [],
+      },
+      leaders: [],
+    };
+  }
+
+  const battingCategories = [];
+  const bowlingCategories = [];
+  let mode = "batting";
+
+  for (let i = start + 1; i < tableHeaderIndex; i += 1) {
+    const line = lines[i];
+    if (!line) {
+      continue;
+    }
+    if (line.toLowerCase() === "bowling") {
+      mode = "bowling";
+      continue;
+    }
+    if (/^home|matches|series|videos|news$/i.test(line)) {
+      break;
+    }
+    if (/most|best|highest/i.test(line)) {
+      if (mode === "batting") {
+        battingCategories.push(line);
+      } else {
+        bowlingCategories.push(line);
+      }
+    }
+  }
+
+  const leaders = [];
+  for (let i = tableHeaderIndex + 1; i < lines.length; i += 1) {
+    const line = lines[i];
+    if (!line || line === ";" || /^home$/i.test(line)) {
+      break;
+    }
+
+    const cols = line.split(/\t+/).map((c) => c.trim()).filter(Boolean);
+    if (cols.length < 8) {
+      continue;
+    }
+
+    leaders.push({
+      player: cols[0],
+      matches: parseIntSafe(cols[1]),
+      innings: parseIntSafe(cols[2]),
+      runs: parseIntSafe(cols[3]),
+      average: cols[4],
+      strikeRate: cols[5],
+      fours: parseIntSafe(cols[6]),
+      sixes: parseIntSafe(cols[7]),
+    });
+  }
+
+  return {
+    categories: {
+      batting: battingCategories,
+      bowling: bowlingCategories,
+    },
+    leaders,
+  };
+};
+
+const parseSquadsFromText = (lines) => {
+  const squadsHeaderIndex = lines.findIndex((line) => /squads for indian premier league/i.test(line));
+  if (squadsHeaderIndex < 0) {
+    return {
+      teams: [],
+      featuredTeam: null,
+      players: [],
+    };
+  }
+
+  const roleHeaders = new Set(["BATTERS", "ALL ROUNDERS", "WICKET KEEPERS", "BOWLERS"]);
+  const teams = [];
+
+  let idx = squadsHeaderIndex + 1;
+  while (idx < lines.length) {
+    const line = lines[idx];
+    if (roleHeaders.has(line)) {
+      break;
+    }
+
+    if (line !== "T20" && IPL_TEAM_NAMES.includes(line)) {
+      teams.push(line);
+    }
+
+    idx += 1;
+  }
+
+  const players = [];
+  let currentRoleGroup = null;
+  for (; idx < lines.length; idx += 1) {
+    const line = lines[idx];
+
+    if (/^home$/i.test(line)) {
+      break;
+    }
+
+    if (roleHeaders.has(line)) {
+      currentRoleGroup = line;
+      continue;
+    }
+
+    if (!currentRoleGroup || !line) {
+      continue;
+    }
+
+    const role = lines[idx + 1];
+    if (!role || roleHeaders.has(role) || /^home$/i.test(role)) {
+      continue;
+    }
+
+    players.push({
+      name: line,
+      roleGroup: currentRoleGroup,
+      role,
+    });
+
+    idx += 1;
+  }
+
+  return {
+    teams,
+    featuredTeam: teams[0] || null,
+    players,
+  };
+};
+
+const parseNewsFromText = (lines) => {
+  const dateRegex = /^(Sun|Mon|Tue|Wed|Thu|Fri|Sat),\s+[A-Za-z]{3}\s+\d{1,2}\s+\d{4}$/;
+  const start = lines.findIndex((line) => line.toUpperCase() === "DAILY BRIEFING");
+  const scanStart = start >= 0 ? start : 0;
+
+  const items = [];
+  const seenTitles = new Set();
+
+  for (let i = scanStart; i < lines.length; i += 1) {
+    const line = lines[i];
+    if (!dateRegex.test(line)) {
+      continue;
+    }
+
+    const title = lines[i - 2] || null;
+    const summary = lines[i - 1] || null;
+    const tag = lines[i + 1] || null;
+
+    if (!title || /^home|matches|series|videos|news$/i.test(title) || title === "DAILY BRIEFING") {
+      continue;
+    }
+
+    if (seenTitles.has(title)) {
+      continue;
+    }
+    seenTitles.add(title);
+
+    items.push({
+      title,
+      summary: summary && summary !== title ? summary : null,
+      publishedAt: line,
+      tag: tag && /ipl/i.test(tag) ? tag : "IPL 2026",
+    });
+  }
+
+  return items;
 };
 
 export const iplScraperService = {
@@ -439,6 +633,76 @@ export const iplScraperService = {
 
       const textLines = await extractPageTextLines(page);
       return parseMatchesFromText(textLines);
+    } catch {
+      return [];
+    } finally {
+      if (browser) {
+        await browser.close();
+      }
+    }
+  },
+
+  async scrapeStats() {
+    let browser;
+
+    try {
+      browser = await launchBrowser();
+      const page = await browser.newPage();
+      await configurePage(page);
+      await page.goto(STATS_URL, { waitUntil: "networkidle2", timeout: 60000 });
+
+      const textLines = await extractPageTextLines(page);
+      return parseStatsFromText(textLines);
+    } catch {
+      return {
+        categories: {
+          batting: [],
+          bowling: [],
+        },
+        leaders: [],
+      };
+    } finally {
+      if (browser) {
+        await browser.close();
+      }
+    }
+  },
+
+  async scrapeSquads() {
+    let browser;
+
+    try {
+      browser = await launchBrowser();
+      const page = await browser.newPage();
+      await configurePage(page);
+      await page.goto(SQUADS_URL, { waitUntil: "networkidle2", timeout: 60000 });
+
+      const textLines = await extractPageTextLines(page);
+      return parseSquadsFromText(textLines);
+    } catch {
+      return {
+        teams: [],
+        featuredTeam: null,
+        players: [],
+      };
+    } finally {
+      if (browser) {
+        await browser.close();
+      }
+    }
+  },
+
+  async scrapeNews() {
+    let browser;
+
+    try {
+      browser = await launchBrowser();
+      const page = await browser.newPage();
+      await configurePage(page);
+      await page.goto(NEWS_URL, { waitUntil: "networkidle2", timeout: 60000 });
+
+      const textLines = await extractPageTextLines(page);
+      return parseNewsFromText(textLines);
     } catch {
       return [];
     } finally {
