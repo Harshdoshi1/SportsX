@@ -483,6 +483,7 @@ const parseSquadsFromText = (lines) => {
   }
 
   const roleHeaders = new Set(["BATTERS", "ALL ROUNDERS", "WICKET KEEPERS", "BOWLERS"]);
+  const validRoleRegex = /^(Batsman|Bowler|WK-Batsman|Batting Allrounder|Bowling Allrounder|Allrounder)$/i;
   const teams = [];
 
   let idx = squadsHeaderIndex + 1;
@@ -519,6 +520,14 @@ const parseSquadsFromText = (lines) => {
 
     const role = lines[idx + 1];
     if (!role || roleHeaders.has(role) || /^home$/i.test(role)) {
+      continue;
+    }
+
+    if (!validRoleRegex.test(role)) {
+      continue;
+    }
+
+    if (line === line.toUpperCase() && line.length > 20) {
       continue;
     }
 

@@ -165,6 +165,12 @@ export const cricketApi = {
 
   getIplScrapedMatches: () => request(`/ipl/matches`),
 
+  getIplStats: () => request(`/ipl/stats`),
+
+  getIplSquads: () => request(`/ipl/squads`),
+
+  getIplNews: () => request(`/ipl/news`),
+
   getLiveMatches: (page = 1, limit = 20) =>
     request(`/matches/live?page=${page}&limit=${limit}`),
 

@@ -8,7 +8,7 @@ import { Breadcrumbs } from "../ui/Breadcrumbs";
 import { TeamLogo } from "../ui/TeamLogo";
 import { Calendar } from "lucide-react";
 import { cricketApi } from "../../services/cricketApi";
-import { deriveTeamShort, formatApiDate, getTeamLogoProps, isCompletedStatus, isIplTeamName, isUpcomingStatus, safeArray } from "../../services/cricketUi";
+import { deriveTeamShort, formatApiDate, getTeamLogoProps, isIplTeamName, isUpcomingStatus, safeArray } from "../../services/cricketUi";
 
 type LeagueKey = "ipl" | "f1-2026" | "epl";
 
@@ -27,12 +27,37 @@ type IplMatchRow = {
   id: string;
   date: string;
   matchup: string;
+  score: string;
   result: string;
   venue: string;
   status: string;
 };
 
-const tabs = ["Points Table", "Matches", "Stats"];
+type IplStatsRow = {
+  player: string;
+  matches: number | null;
+  innings: number | null;
+  runs: number | null;
+  average: string;
+  strikeRate: string;
+  fours: number | null;
+  sixes: number | null;
+};
+
+type IplSquadPlayer = {
+  name: string;
+  roleGroup: string;
+  role: string;
+};
+
+type IplNewsItem = {
+  title: string;
+  summary: string | null;
+  publishedAt: string;
+  tag: string;
+};
+
+const tabs = ["Points Table", "Matches", "Stats", "Squads", "News"];
 
 const genericSnapshots = {
   "f1-2026": {
@@ -57,6 +82,12 @@ export function League() {
   const [error, setError] = useState<string | null>(null);
   const [iplTeams, setIplTeams] = useState<IplTeamRow[]>([]);
   const [iplMatches, setIplMatches] = useState<IplMatchRow[]>([]);
+  const [iplStats, setIplStats] = useState<IplStatsRow[]>([]);
+  const [statsCategories, setStatsCategories] = useState<{ batting: string[]; bowling: string[] }>({ batting: [], bowling: [] });
+  const [squadTeams, setSquadTeams] = useState<string[]>([]);
+  const [featuredSquadTeam, setFeaturedSquadTeam] = useState<string | null>(null);
+  const [featuredSquadPlayers, setFeaturedSquadPlayers] = useState<IplSquadPlayer[]>([]);
+  const [iplNews, setIplNews] = useState<IplNewsItem[]>([]);
   const leagueKey: LeagueKey = leagueId === "f1-2026" ? "f1-2026" : leagueId === "epl" ? "epl" : "ipl";
 
   useEffect(() => {
@@ -71,9 +102,12 @@ export function League() {
         setLoading(true);
         setError(null);
 
-        const [teamsRes, matchesRes] = await Promise.all([
+        const [teamsRes, matchesRes, statsRes, squadsRes, newsRes] = await Promise.all([
           cricketApi.getIplPoints(),
           cricketApi.getIplScrapedMatches(),
+          cricketApi.getIplStats(),
+          cricketApi.getIplSquads(),
+          cricketApi.getIplNews(),
         ]);
 
         if (!active) {
@@ -98,13 +132,52 @@ export function League() {
           id: String(match?.id || `${match?.team1 || "team1"}-${match?.team2 || "team2"}`),
           date: formatApiDate(match?.date),
           matchup: `${match?.team1 || "Team A"} vs ${match?.team2 || "Team B"}`,
-          result: match?.status || "Status unavailable",
+          score: [match?.team1Score, match?.team2Score].filter(Boolean).join(" | ") || "Score unavailable",
+          result: match?.result || match?.status || "Status unavailable",
           venue: match?.venue || "Venue unavailable",
           status: String(match?.status || ""),
         }));
 
+        const statsRows = safeArray<any>((statsRes as any)?.stats?.leaders).map((row) => ({
+          player: String(row?.player || "Unknown Player"),
+          matches: row?.matches ?? null,
+          innings: row?.innings ?? null,
+          runs: row?.runs ?? null,
+          average: String(row?.average ?? "-"),
+          strikeRate: String(row?.strikeRate ?? "-"),
+          fours: row?.fours ?? null,
+          sixes: row?.sixes ?? null,
+        }));
+
+        const categories = {
+          batting: safeArray<string>((statsRes as any)?.stats?.categories?.batting),
+          bowling: safeArray<string>((statsRes as any)?.stats?.categories?.bowling),
+        };
+
+        const squadsPayload = (squadsRes as any)?.squads || {};
+        const teamsInSquad = safeArray<string>(squadsPayload?.teams);
+        const featuredTeam = squadsPayload?.featuredTeam || null;
+        const players = safeArray<any>(squadsPayload?.players).map((player) => ({
+          name: String(player?.name || "Unknown"),
+          roleGroup: String(player?.roleGroup || "Squad"),
+          role: String(player?.role || "-"),
+        }));
+
+        const newsItems = safeArray<any>((newsRes as any)?.news).map((item) => ({
+          title: String(item?.title || "Untitled"),
+          summary: item?.summary ? String(item.summary) : null,
+          publishedAt: String(item?.publishedAt || ""),
+          tag: String(item?.tag || "IPL 2026"),
+        }));
+
         setIplTeams(teams);
         setIplMatches(matches);
+        setIplStats(statsRows);
+        setStatsCategories(categories);
+        setSquadTeams(teamsInSquad);
+        setFeaturedSquadTeam(featuredTeam);
+        setFeaturedSquadPlayers(players);
+        setIplNews(newsItems);
       } catch (fetchError: any) {
         if (!active) {
           return;
@@ -124,7 +197,7 @@ export function League() {
     };
   }, [leagueKey]);
 
-  const completedResults = useMemo(() => iplMatches.filter((match) => isCompletedStatus(match.status)).slice(0, 40), [iplMatches]);
+  const completedResults = useMemo(() => iplMatches.filter((match) => match.status === "Completed").slice(0, 40), [iplMatches]);
   const upcomingFixtures = useMemo(() => iplMatches.filter((match) => isUpcomingStatus(match.status)).slice(0, 40), [iplMatches]);
 
   if (leagueKey !== "ipl") {
@@ -274,10 +347,11 @@ export function League() {
                 </div>
                 {completedResults.length === 0 && <div className="px-6 py-5 text-sm text-white/45">No completed IPL matches available in the current response.</div>}
                 {completedResults.map((m, i) => (
-                  <div key={m.id} className="grid grid-cols-[0.5fr_0.7fr_1.2fr_2fr] gap-3 px-6 py-3 text-sm" style={{ borderBottom: i < completedResults.length - 1 ? "1px solid rgba(255,255,255,0.04)" : "none" }}>
+                  <div key={m.id} className="grid grid-cols-[0.4fr_0.8fr_1.3fr_1fr_1.8fr] gap-3 px-6 py-3 text-sm" style={{ borderBottom: i < completedResults.length - 1 ? "1px solid rgba(255,255,255,0.04)" : "none" }}>
                     <span className="text-white/30">{i + 1}</span>
                     <span className="text-white/55">{m.date}</span>
                     <span className="text-white/75">{m.matchup}</span>
+                    <span className="text-[#7ad6ff] text-xs font-mono">{m.score}</span>
                     <span className="text-white">{m.result}</span>
                   </div>
                 ))}
@@ -308,23 +382,101 @@ export function League() {
 
           {activeTab === "Stats" && (
             <motion.div key="stats" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-5">
                 <GlassCard className="p-5" glow="none">
-                  <p className="text-white/45 text-xs uppercase tracking-wider mb-2">Teams In Feed</p>
-                  <div className="text-3xl font-black text-[#3BD4E7]">{iplTeams.length}</div>
-                  <p className="text-white/35 text-xs mt-1">IPL teams identified by normalized names.</p>
+                  <p className="text-white/45 text-xs uppercase tracking-wider mb-2">Batting Categories</p>
+                  <div className="flex flex-wrap gap-2">
+                    {statsCategories.batting.map((category) => (
+                      <span key={category} className="px-2 py-1 rounded text-xs" style={{ background: "rgba(59,212,231,0.12)", color: "#7ad6ff" }}>
+                        {category}
+                      </span>
+                    ))}
+                  </div>
                 </GlassCard>
                 <GlassCard className="p-5" glow="none">
-                  <p className="text-white/45 text-xs uppercase tracking-wider mb-2">Completed Matches</p>
-                  <div className="text-3xl font-black text-[#00E676]">{completedResults.length}</div>
-                  <p className="text-white/35 text-xs mt-1">Count derived from match status text.</p>
-                </GlassCard>
-                <GlassCard className="p-5" glow="none">
-                  <p className="text-white/45 text-xs uppercase tracking-wider mb-2">Upcoming Fixtures</p>
-                  <div className="text-3xl font-black text-[#FF9100]">{upcomingFixtures.length}</div>
-                  <p className="text-white/35 text-xs mt-1">Scheduled fixtures from current API payload.</p>
+                  <p className="text-white/45 text-xs uppercase tracking-wider mb-2">Bowling Categories</p>
+                  <div className="flex flex-wrap gap-2">
+                    {statsCategories.bowling.map((category) => (
+                      <span key={category} className="px-2 py-1 rounded text-xs" style={{ background: "rgba(255,145,0,0.15)", color: "#ffb85c" }}>
+                        {category}
+                      </span>
+                    ))}
+                  </div>
                 </GlassCard>
               </div>
+
+              <GlassCard className="overflow-hidden">
+                <div className="grid grid-cols-[2fr_0.7fr_0.7fr_0.7fr_0.7fr_0.7fr_0.7fr] gap-2 px-6 py-4 text-xs uppercase tracking-wider text-white/30 font-semibold" style={{ borderBottom: "1px solid rgba(255,255,255,0.07)" }}>
+                  <span>Player</span>
+                  <span className="text-center">Mat</span>
+                  <span className="text-center">Inns</span>
+                  <span className="text-center">Runs</span>
+                  <span className="text-center">Avg</span>
+                  <span className="text-center">SR</span>
+                  <span className="text-center">4s/6s</span>
+                </div>
+
+                {iplStats.length === 0 && <div className="px-6 py-5 text-sm text-white/45">No IPL stats were returned by the scraper.</div>}
+                {iplStats.slice(0, 20).map((row, idx) => (
+                  <div key={`${row.player}-${idx}`} className="grid grid-cols-[2fr_0.7fr_0.7fr_0.7fr_0.7fr_0.7fr_0.7fr] gap-2 px-6 py-3 text-sm items-center" style={{ borderBottom: idx < Math.min(iplStats.length, 20) - 1 ? "1px solid rgba(255,255,255,0.04)" : "none" }}>
+                    <span className="text-white/85">{row.player}</span>
+                    <span className="text-center text-white/60">{row.matches ?? "-"}</span>
+                    <span className="text-center text-white/60">{row.innings ?? "-"}</span>
+                    <span className="text-center text-white font-semibold">{row.runs ?? "-"}</span>
+                    <span className="text-center text-white/60">{row.average}</span>
+                    <span className="text-center text-white/60">{row.strikeRate}</span>
+                    <span className="text-center text-white/60">{`${row.fours ?? "-"}/${row.sixes ?? "-"}`}</span>
+                  </div>
+                ))}
+              </GlassCard>
+            </motion.div>
+          )}
+
+          {activeTab === "Squads" && (
+            <motion.div key="squads" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} className="space-y-5">
+              <GlassCard className="p-5">
+                <p className="text-white/40 text-xs uppercase tracking-wider mb-2">Squad Teams</p>
+                <div className="flex flex-wrap gap-2">
+                  {squadTeams.map((team) => (
+                    <span key={team} className="px-2 py-1 rounded text-xs" style={{ background: "rgba(124,77,255,0.15)", color: "#cfbcff" }}>
+                      {team}
+                    </span>
+                  ))}
+                </div>
+                {!loading && squadTeams.length === 0 && <p className="text-white/45 text-sm mt-2">No squads team list returned by scraper.</p>}
+              </GlassCard>
+
+              <GlassCard className="overflow-hidden">
+                <div className="px-6 py-4" style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+                  <h3 className="text-white font-bold">Featured Squad{featuredSquadTeam ? `: ${featuredSquadTeam}` : ""}</h3>
+                </div>
+                {featuredSquadPlayers.length === 0 && <div className="px-6 py-5 text-sm text-white/45">No squad players were parsed from the current page response.</div>}
+                {featuredSquadPlayers.map((player, idx) => (
+                  <div key={`${player.name}-${idx}`} className="grid grid-cols-[1.6fr_1fr_1fr] gap-3 px-6 py-3 text-sm" style={{ borderBottom: idx < featuredSquadPlayers.length - 1 ? "1px solid rgba(255,255,255,0.04)" : "none" }}>
+                    <span className="text-white/85">{player.name}</span>
+                    <span className="text-white/55">{player.roleGroup}</span>
+                    <span className="text-[#7ad6ff]">{player.role}</span>
+                  </div>
+                ))}
+              </GlassCard>
+            </motion.div>
+          )}
+
+          {activeTab === "News" && (
+            <motion.div key="news" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} className="space-y-4">
+              {iplNews.length === 0 && <GlassCard className="p-5 text-sm text-white/45">No IPL news was returned by the scraper.</GlassCard>}
+              {iplNews.map((item, idx) => (
+                <GlassCard key={`${item.title}-${idx}`} className="p-5" glow="none">
+                  <div className="flex items-center justify-between gap-3 mb-2">
+                    <span className="px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider" style={{ background: "rgba(255,77,141,0.16)", color: "#ff9dc0" }}>
+                      {item.tag}
+                    </span>
+                    <span className="text-white/35 text-xs">{item.publishedAt}</span>
+                  </div>
+                  <h4 className="text-white font-semibold text-lg leading-snug">{item.title}</h4>
+                  {item.summary && <p className="text-white/60 text-sm mt-2">{item.summary}</p>}
+                </GlassCard>
+              ))}
             </motion.div>
           )}
         </AnimatePresence>
