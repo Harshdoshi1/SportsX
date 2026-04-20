@@ -1,30 +1,49 @@
-import { rapidApiService } from "./rapidApiService.js";
-import { isIplText, normalizeSeriesList } from "../utils/normalizers.js";
+import { iplScraperService } from "./iplScraperService.js";
+
+const buildIplSeries = (pointsRows) => {
+  const season = String(new Date().getFullYear());
+  const hasPoints = Array.isArray(pointsRows) && pointsRows.length > 0;
+
+  return {
+    id: `ipl-${season}`,
+    name: `Indian Premier League ${season}`,
+    startDate: null,
+    endDate: null,
+    category: "league",
+    source: "cricbuzz-scraper",
+    teamsCount: hasPoints ? pointsRows.length : 10,
+  };
+};
 
 export const seriesService = {
   async getAllSeries() {
-    const response = await rapidApiService.getSeries();
+    const points = await iplScraperService.scrapePointsTable();
     return {
-      data: normalizeSeriesList(response.data),
-      meta: response.meta,
+      data: [buildIplSeries(points)],
+      meta: {
+        provider: "cricbuzz-scraper",
+      },
     };
   },
 
   async getLeagueSeries() {
-    const response = await rapidApiService.getLeagueSeries();
+    const points = await iplScraperService.scrapePointsTable();
     return {
-      data: normalizeSeriesList(response.data),
-      meta: response.meta,
+      data: [buildIplSeries(points)],
+      meta: {
+        provider: "cricbuzz-scraper",
+      },
     };
   },
 
   async getIplSeries() {
-    const response = await rapidApiService.getLeagueSeries();
-    const normalized = normalizeSeriesList(response.data);
+    const points = await iplScraperService.scrapePointsTable();
 
     return {
-      data: normalized.filter((series) => isIplText(series.name)),
-      meta: response.meta,
+      data: [buildIplSeries(points)],
+      meta: {
+        provider: "cricbuzz-scraper",
+      },
     };
   },
 };

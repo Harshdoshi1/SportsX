@@ -57,11 +57,11 @@ type ApiError = Error & {
 
 const friendlyMessageForStatus = (statusCode: number, backendMessage?: string) => {
   if (statusCode === 429) {
-    return "RapidAPI rate limit reached. Please retry in a minute.";
+    return "Too many requests right now. Please retry in a minute.";
   }
 
   if (statusCode === 401 || statusCode === 403) {
-    return "RapidAPI authentication failed. Check RAPID_API_KEY and your plan access.";
+    return "Authentication failed for upstream provider.";
   }
 
   if (statusCode >= 500) {
@@ -96,7 +96,7 @@ async function request<T>(path: string): Promise<T> {
 
   if (Date.now() < globalRateLimitUntil) {
     const rateLimitedError: ApiError = new Error(
-      "RapidAPI rate limit reached. Using cooldown to prevent more failed calls. Please retry shortly.",
+      "Rate limit cooldown active. Please retry shortly.",
     );
     rateLimitedError.statusCode = 429;
     throw rateLimitedError;

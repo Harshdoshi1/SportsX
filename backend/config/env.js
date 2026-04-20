@@ -8,7 +8,7 @@ const rootDir = process.cwd();
 export const env = {
   port: Number(process.env.PORT || 4000),
   nodeEnv: process.env.NODE_ENV || "development",
-  providerMode: process.env.PROVIDER_MODE || "hybrid",
+  providerMode: process.env.PROVIDER_MODE || "scraper",
   cricApiBaseUrl: process.env.CRIC_API_BASE_URL || "https://api.cricapi.com/v1",
   cricApiKey: process.env.CRIC_API_KEY || "",
   cricApiTimeoutMs: Number(process.env.CRIC_API_TIMEOUT_MS || 15000),
@@ -30,17 +30,6 @@ export const env = {
 };
 
 export const assertRequiredEnv = () => {
-  const mode = String(env.providerMode || "hybrid").toLowerCase();
-
-  if (mode === "cricapi" && !env.cricApiKey) {
-    throw new Error("Missing CRIC_API_KEY in environment");
-  }
-
-  if (mode === "rapidapi" && !env.rapidApiKey) {
-    throw new Error("Missing RAPID_API_KEY in environment");
-  }
-
-  if (mode === "hybrid" && !env.cricApiKey && !env.rapidApiKey) {
-    throw new Error("Missing API credentials. Configure CRIC_API_KEY and/or RAPID_API_KEY.");
-  }
+  // Scraper-first backend does not require third-party API keys at startup.
+  return true;
 };

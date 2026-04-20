@@ -8,7 +8,8 @@ import { Breadcrumbs } from "../ui/Breadcrumbs";
 import { TeamLogo } from "../ui/TeamLogo";
 import { Calendar } from "lucide-react";
 import { cricketApi } from "../../services/cricketApi";
-import { deriveTeamShort, formatApiDate, getTeamLogoProps, isIplTeamName, isUpcomingStatus, safeArray } from "../../services/cricketUi";
+import { deriveTeamShort, getTeamLogoProps, isIplTeamName, isUpcomingStatus, normalizeText, safeArray } from "../../services/cricketUi";
+import { getIplTeamByShort } from "../../data/iplTeams";
 
 type LeagueKey = "ipl" | "f1-2026" | "epl";
 
@@ -26,8 +27,14 @@ type IplTeamRow = {
 type IplMatchRow = {
   id: string;
   date: string;
-  matchup: string;
-  score: string;
+  startTime: string;
+  team1: string;
+  team2: string;
+  team1Display: string;
+  team2Display: string;
+  team1Score: string;
+  team2Score: string;
+  matchNo: string;
   result: string;
   venue: string;
   status: string;
@@ -35,6 +42,9 @@ type IplMatchRow = {
 
 type IplStatsRow = {
   player: string;
+  image: string | null;
+  teamShort: string | null;
+  teamName: string | null;
   matches: number | null;
   innings: number | null;
   runs: number | null;
@@ -44,12 +54,6 @@ type IplStatsRow = {
   sixes: number | null;
 };
 
-type IplSquadPlayer = {
-  name: string;
-  roleGroup: string;
-  role: string;
-};
-
 type IplNewsItem = {
   title: string;
   summary: string | null;
@@ -57,7 +61,28 @@ type IplNewsItem = {
   tag: string;
 };
 
-const tabs = ["Points Table", "Matches", "Stats", "Squads", "News"];
+const tabs = ["Points Table", "Matches", "Stats", "News"];
+
+const requiredBattingCategories = [
+  "Most Runs",
+  "Highest Scores",
+  "Best Batting Average",
+  "Best Batting Strike Rate",
+  "Most Hundreds",
+  "Most Fifties",
+  "Most Fours",
+  "Most Sixes",
+  "Most Nineties",
+];
+
+const requiredBowlingCategories = [
+  "Most Wickets",
+  "Best Bowling Average",
+  "Best Bowling",
+  "Most 5 Wickets Haul",
+  "Best Economy",
+  "Best Bowling Strike Rate",
+];
 
 const genericSnapshots = {
   "f1-2026": {
@@ -84,9 +109,6 @@ export function League() {
   const [iplMatches, setIplMatches] = useState<IplMatchRow[]>([]);
   const [iplStats, setIplStats] = useState<IplStatsRow[]>([]);
   const [statsCategories, setStatsCategories] = useState<{ batting: string[]; bowling: string[] }>({ batting: [], bowling: [] });
-  const [squadTeams, setSquadTeams] = useState<string[]>([]);
-  const [featuredSquadTeam, setFeaturedSquadTeam] = useState<string | null>(null);
-  const [featuredSquadPlayers, setFeaturedSquadPlayers] = useState<IplSquadPlayer[]>([]);
   const [iplNews, setIplNews] = useState<IplNewsItem[]>([]);
   const leagueKey: LeagueKey = leagueId === "f1-2026" ? "f1-2026" : leagueId === "epl" ? "epl" : "ipl";
 
@@ -102,11 +124,10 @@ export function League() {
         setLoading(true);
         setError(null);
 
-        const [teamsRes, matchesRes, statsRes, squadsRes, newsRes] = await Promise.all([
+        const [teamsRes, matchesRes, statsRes, newsRes] = await Promise.all([
           cricketApi.getIplPoints(),
           cricketApi.getIplScrapedMatches(),
           cricketApi.getIplStats(),
-          cricketApi.getIplSquads(),
           cricketApi.getIplNews(),
         ]);
 
@@ -128,11 +149,54 @@ export function League() {
           }))
           .sort((a, b) => b.pts - a.pts || b.won - a.won);
 
+        const playerImageByName = new Map<string, { image: string | null; teamShort: string | null; teamName: string | null }>();
+        const playerResponses = await Promise.allSettled(
+          teams.map((team) =>
+            cricketApi.getTeamPlayers(team.short, {
+              page: 1,
+              limit: 250,
+              teamName: team.name,
+            }),
+          ),
+        );
+
+        for (let i = 0; i < playerResponses.length; i += 1) {
+          const result = playerResponses[i];
+          const team = teams[i];
+          if (result.status !== "fulfilled") {
+            continue;
+          }
+
+          const teamPlayers = safeArray<any>((result.value as any)?.players);
+          for (const player of teamPlayers) {
+            const key = normalizeText(player?.name);
+            if (!key) {
+              continue;
+            }
+
+            if (playerImageByName.has(key)) {
+              continue;
+            }
+
+            playerImageByName.set(key, {
+              image: player?.image ? String(player.image) : null,
+              teamShort: team?.short || null,
+              teamName: team?.name || null,
+            });
+          }
+        }
+
         const matches = safeArray<any>((matchesRes as any).matches).map((match) => ({
           id: String(match?.id || `${match?.team1 || "team1"}-${match?.team2 || "team2"}`),
-          date: formatApiDate(match?.date),
-          matchup: `${match?.team1 || "Team A"} vs ${match?.team2 || "Team B"}`,
-          score: [match?.team1Score, match?.team2Score].filter(Boolean).join(" | ") || "Score unavailable",
+          date: String(match?.date || "").trim() || "TBA",
+          startTime: String(match?.startTime || "").trim(),
+          team1: String(match?.team1 || "Team A"),
+          team2: String(match?.team2 || "Team B"),
+          team1Display: String(match?.team1Name || match?.team1 || "Team A"),
+          team2Display: String(match?.team2Name || match?.team2 || "Team B"),
+          team1Score: String(match?.team1Score || "").trim(),
+          team2Score: String(match?.team2Score || "").trim(),
+          matchNo: String(match?.matchNo || "").trim(),
           result: match?.result || match?.status || "Status unavailable",
           venue: match?.venue || "Venue unavailable",
           status: String(match?.status || ""),
@@ -140,6 +204,9 @@ export function League() {
 
         const statsRows = safeArray<any>((statsRes as any)?.stats?.leaders).map((row) => ({
           player: String(row?.player || "Unknown Player"),
+          image: playerImageByName.get(normalizeText(row?.player))?.image || null,
+          teamShort: playerImageByName.get(normalizeText(row?.player))?.teamShort || null,
+          teamName: playerImageByName.get(normalizeText(row?.player))?.teamName || null,
           matches: row?.matches ?? null,
           innings: row?.innings ?? null,
           runs: row?.runs ?? null,
@@ -154,15 +221,6 @@ export function League() {
           bowling: safeArray<string>((statsRes as any)?.stats?.categories?.bowling),
         };
 
-        const squadsPayload = (squadsRes as any)?.squads || {};
-        const teamsInSquad = safeArray<string>(squadsPayload?.teams);
-        const featuredTeam = squadsPayload?.featuredTeam || null;
-        const players = safeArray<any>(squadsPayload?.players).map((player) => ({
-          name: String(player?.name || "Unknown"),
-          roleGroup: String(player?.roleGroup || "Squad"),
-          role: String(player?.role || "-"),
-        }));
-
         const newsItems = safeArray<any>((newsRes as any)?.news).map((item) => ({
           title: String(item?.title || "Untitled"),
           summary: item?.summary ? String(item.summary) : null,
@@ -174,9 +232,6 @@ export function League() {
         setIplMatches(matches);
         setIplStats(statsRows);
         setStatsCategories(categories);
-        setSquadTeams(teamsInSquad);
-        setFeaturedSquadTeam(featuredTeam);
-        setFeaturedSquadPlayers(players);
         setIplNews(newsItems);
       } catch (fetchError: any) {
         if (!active) {
@@ -197,8 +252,58 @@ export function League() {
     };
   }, [leagueKey]);
 
-  const completedResults = useMemo(() => iplMatches.filter((match) => match.status === "Completed").slice(0, 40), [iplMatches]);
-  const upcomingFixtures = useMemo(() => iplMatches.filter((match) => isUpcomingStatus(match.status)).slice(0, 40), [iplMatches]);
+  const matchOrder = (value: string) => {
+    const parsed = Number(String(value || "").match(/\d+/)?.[0]);
+    return Number.isFinite(parsed) ? parsed : Number.MAX_SAFE_INTEGER;
+  };
+
+  const completedResults = useMemo(
+    () =>
+      iplMatches
+        .filter((match) => match.status === "Completed")
+        .sort((a, b) => matchOrder(b.matchNo) - matchOrder(a.matchNo))
+        .slice(0, 40),
+    [iplMatches],
+  );
+
+  const upcomingFixtures = useMemo(
+    () =>
+      iplMatches
+        .filter((match) => isUpcomingStatus(match.status))
+        .sort((a, b) => matchOrder(a.matchNo) - matchOrder(b.matchNo))
+        .slice(0, 40),
+    [iplMatches],
+  );
+
+  const runLeaders = useMemo(
+    () =>
+      iplStats
+        .slice()
+        .sort((a, b) => Number(b.runs ?? 0) - Number(a.runs ?? 0) || Number(b.matches ?? 0) - Number(a.matches ?? 0))
+        .map((row, index) => ({ ...row, rank: index + 1 })),
+    [iplStats],
+  );
+
+  const runRankByPlayer = useMemo(() => {
+    const rankMap = new Map<string, number>();
+    for (const row of runLeaders) {
+      const key = normalizeText(row.player);
+      if (key && !rankMap.has(key)) {
+        rankMap.set(key, row.rank);
+      }
+    }
+    return rankMap;
+  }, [runLeaders]);
+
+  const displayedBattingCategories = useMemo(
+    () => Array.from(new Set([...requiredBattingCategories, ...safeArray(statsCategories.batting)])),
+    [statsCategories.batting],
+  );
+
+  const displayedBowlingCategories = useMemo(
+    () => Array.from(new Set([...requiredBowlingCategories, ...safeArray(statsCategories.bowling)])),
+    [statsCategories.bowling],
+  );
 
   if (leagueKey !== "ipl") {
     const generic = genericSnapshots[leagueKey];
@@ -215,7 +320,7 @@ export function League() {
             <p className="text-white/55 mb-5">{generic.summary}</p>
             <div className="space-y-2">
               {generic.bullets.map((b) => (
-                <p key={b} className="text-sm text-white/65">• {b}</p>
+                <p key={b} className="text-sm text-white/65">- {b}</p>
               ))}
             </div>
           </GlassCard>
@@ -342,123 +447,298 @@ export function League() {
           {activeTab === "Matches" && (
             <motion.div key="matches" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} className="space-y-6">
               <GlassCard className="overflow-hidden">
+                <div className="px-6 py-4 flex items-center justify-between" style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+                  <h3 className="text-white font-bold">Upcoming Fixtures</h3>
+                  <span className="text-white/35 text-xs">Live schedule from IPLT20</span>
+                </div>
+                {upcomingFixtures.length === 0 && <div className="px-6 py-5 text-sm text-white/45">No upcoming IPL fixtures available in the current response.</div>}
+                <div className="space-y-3 p-4 md:p-6">
+                  {upcomingFixtures.map((fixture, index) => {
+                    const homeTeam = getIplTeamByShort(String(fixture.team1 || "").toUpperCase());
+                    const awayTeam = getIplTeamByShort(String(fixture.team2 || "").toUpperCase());
+                    const homeLogo = homeTeam ? { teamId: homeTeam.id, short: homeTeam.short } : getTeamLogoProps(fixture.team1);
+                    const awayLogo = awayTeam ? { teamId: awayTeam.id, short: awayTeam.short } : getTeamLogoProps(fixture.team2);
+                    return (
+                      <motion.div
+                        key={fixture.id}
+                        initial={{ opacity: 0, y: 8 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: index * 0.02 }}
+                        className="rounded-2xl p-4 md:p-5"
+                        style={{
+                          background:
+                            index === 0
+                              ? "linear-gradient(135deg, rgba(59,212,231,0.16), rgba(124,77,255,0.16))"
+                              : "linear-gradient(135deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02))",
+                          border: "1px solid rgba(255,255,255,0.08)",
+                        }}
+                      >
+                        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                          <div className="flex items-center gap-4 md:gap-6">
+                            <div className="flex items-center gap-3 min-w-0">
+                              <TeamLogo teamId={homeLogo.teamId} short={fixture.team1} size={42} />
+                              <div className="min-w-0">
+                                <p className="text-white font-semibold text-sm md:text-base truncate">{fixture.team1Display}</p>
+                                <p className="text-white/35 text-xs">{fixture.team1}</p>
+                              </div>
+                            </div>
+                            <span className="text-white/45 font-black tracking-wide">VS</span>
+                            <div className="flex items-center gap-3 min-w-0">
+                              <TeamLogo teamId={awayLogo.teamId} short={fixture.team2} size={42} />
+                              <div className="min-w-0">
+                                <p className="text-white font-semibold text-sm md:text-base truncate">{fixture.team2Display}</p>
+                                <p className="text-white/35 text-xs">{fixture.team2}</p>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-3 text-xs md:text-sm">
+                            {index === 0 && <span className="px-2 py-1 rounded-md font-bold" style={{ background: "rgba(59,212,231,0.18)", color: "#7ad6ff" }}>NEXT</span>}
+                            <span className="px-2 py-1 rounded-md text-white/85" style={{ background: "rgba(255,255,255,0.08)" }}>
+                              <Calendar size={12} className="inline mr-1.5" />
+                              {fixture.date || "TBA"}
+                            </span>
+                            <span className="px-2 py-1 rounded-md font-semibold" style={{ background: "rgba(255,145,0,0.18)", color: "#ffc57a" }}>
+                              {fixture.startTime || "Time TBA"}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="mt-3 pt-3 text-xs text-white/45" style={{ borderTop: "1px dashed rgba(255,255,255,0.14)" }}>
+                          {fixture.matchNo ? `${fixture.matchNo} • ` : ""}
+                          {fixture.venue}
+                        </div>
+                      </motion.div>
+                    );
+                  })}
+                </div>
+              </GlassCard>
+
+              <GlassCard className="overflow-hidden">
                 <div className="px-6 py-4" style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
                   <h3 className="text-white font-bold">Completed Matches</h3>
                 </div>
                 {completedResults.length === 0 && <div className="px-6 py-5 text-sm text-white/45">No completed IPL matches available in the current response.</div>}
-                {completedResults.map((m, i) => (
-                  <div key={m.id} className="grid grid-cols-[0.4fr_0.8fr_1.3fr_1fr_1.8fr] gap-3 px-6 py-3 text-sm" style={{ borderBottom: i < completedResults.length - 1 ? "1px solid rgba(255,255,255,0.04)" : "none" }}>
-                    <span className="text-white/30">{i + 1}</span>
-                    <span className="text-white/55">{m.date}</span>
-                    <span className="text-white/75">{m.matchup}</span>
-                    <span className="text-[#7ad6ff] text-xs font-mono">{m.score}</span>
-                    <span className="text-white">{m.result}</span>
-                  </div>
-                ))}
-              </GlassCard>
+                <div className="space-y-3 p-4 md:p-6">
+                  {completedResults.map((match, index) => {
+                    const homeTeam = getIplTeamByShort(String(match.team1 || "").toUpperCase());
+                    const awayTeam = getIplTeamByShort(String(match.team2 || "").toUpperCase());
+                    const homeLogo = homeTeam ? { teamId: homeTeam.id, short: homeTeam.short } : getTeamLogoProps(match.team1);
+                    const awayLogo = awayTeam ? { teamId: awayTeam.id, short: awayTeam.short } : getTeamLogoProps(match.team2);
+                    return (
+                      <motion.div
+                        key={match.id}
+                        initial={{ opacity: 0, y: 8 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: index * 0.015 }}
+                        className="rounded-2xl p-4 md:p-5"
+                        style={{
+                          background: "linear-gradient(135deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02))",
+                          border: "1px solid rgba(255,255,255,0.08)",
+                        }}
+                      >
+                        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                          <div className="flex items-center gap-4 md:gap-6">
+                            <div className="flex items-center gap-3 min-w-0">
+                              <TeamLogo teamId={homeLogo.teamId} short={match.team1} size={38} />
+                              <div className="min-w-0">
+                                <p className="text-white font-semibold text-sm truncate">{match.team1Display}</p>
+                                <p className="text-[#7ad6ff] text-xs font-mono">{match.team1Score || "-"}</p>
+                              </div>
+                            </div>
+                            <span className="text-white/45 font-black tracking-wide">VS</span>
+                            <div className="flex items-center gap-3 min-w-0">
+                              <TeamLogo teamId={awayLogo.teamId} short={match.team2} size={38} />
+                              <div className="min-w-0">
+                                <p className="text-white font-semibold text-sm truncate">{match.team2Display}</p>
+                                <p className="text-[#7ad6ff] text-xs font-mono">{match.team2Score || "-"}</p>
+                              </div>
+                            </div>
+                          </div>
 
-              <GlassCard className="overflow-hidden">
-                <div className="px-6 py-4 flex items-center justify-between" style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
-                  <h3 className="text-white font-bold">Upcoming Fixtures</h3>
-                  <span className="text-white/35 text-xs">from backend feed</span>
+                          <div className="text-right">
+                            <p className="text-white text-sm font-semibold">{match.result}</p>
+                            <p className="text-white/45 text-xs mt-1">{match.date || "Date unavailable"}{match.startTime ? ` • ${match.startTime}` : ""}</p>
+                          </div>
+                        </div>
+
+                        <div className="mt-3 pt-3 text-xs text-white/45" style={{ borderTop: "1px dashed rgba(255,255,255,0.14)" }}>
+                          {match.matchNo ? `${match.matchNo} • ` : ""}
+                          {match.venue}
+                        </div>
+                      </motion.div>
+                    );
+                  })}
                 </div>
-                {upcomingFixtures.length === 0 && <div className="px-6 py-5 text-sm text-white/45">No upcoming IPL fixtures available in the current response.</div>}
-                {upcomingFixtures.map((f, i) => (
-                  <div key={f.id} className="flex items-center justify-between px-6 py-3" style={{ borderBottom: i < upcomingFixtures.length - 1 ? "1px solid rgba(255,255,255,0.04)" : "none", background: i === 0 ? "rgba(59,212,231,0.08)" : "transparent" }}>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-white/35 text-xs">#{i + 1}</span>
-                        <span className="text-white font-semibold text-sm">{f.matchup}</span>
-                        {i === 0 && <span className="px-1.5 py-0.5 rounded text-[10px] font-bold" style={{ background: "rgba(59,212,231,0.15)", color: "#3BD4E7" }}>NEXT</span>}
-                      </div>
-                      <p className="text-white/35 text-xs mt-0.5">{f.venue}</p>
-                    </div>
-                    <span className="text-[#7ad6ff] text-xs font-semibold flex items-center gap-1"><Calendar size={12} /> {f.date}</span>
-                  </div>
-                ))}
               </GlassCard>
             </motion.div>
           )}
 
           {activeTab === "Stats" && (
             <motion.div key="stats" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-5">
-                <GlassCard className="p-5" glow="none">
-                  <p className="text-white/45 text-xs uppercase tracking-wider mb-2">Batting Categories</p>
-                  <div className="flex flex-wrap gap-2">
-                    {statsCategories.batting.map((category) => (
-                      <span key={category} className="px-2 py-1 rounded text-xs" style={{ background: "rgba(59,212,231,0.12)", color: "#7ad6ff" }}>
-                        {category}
-                      </span>
-                    ))}
-                  </div>
-                </GlassCard>
-                <GlassCard className="p-5" glow="none">
-                  <p className="text-white/45 text-xs uppercase tracking-wider mb-2">Bowling Categories</p>
-                  <div className="flex flex-wrap gap-2">
-                    {statsCategories.bowling.map((category) => (
-                      <span key={category} className="px-2 py-1 rounded text-xs" style={{ background: "rgba(255,145,0,0.15)", color: "#ffb85c" }}>
-                        {category}
-                      </span>
-                    ))}
-                  </div>
-                </GlassCard>
-              </div>
+              {iplStats.length === 0 && (
+                <GlassCard className="p-6 text-sm text-white/45">No IPL stats were returned by the scraper.</GlassCard>
+              )}
 
-              <GlassCard className="overflow-hidden">
-                <div className="grid grid-cols-[2fr_0.7fr_0.7fr_0.7fr_0.7fr_0.7fr_0.7fr] gap-2 px-6 py-4 text-xs uppercase tracking-wider text-white/30 font-semibold" style={{ borderBottom: "1px solid rgba(255,255,255,0.07)" }}>
-                  <span>Player</span>
-                  <span className="text-center">Mat</span>
-                  <span className="text-center">Inns</span>
-                  <span className="text-center">Runs</span>
-                  <span className="text-center">Avg</span>
-                  <span className="text-center">SR</span>
-                  <span className="text-center">4s/6s</span>
-                </div>
+              {iplStats.length > 0 && (
+                <>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                    {iplStats.slice(0, 24).map((row, idx) => {
+                    const playerRank = runRankByPlayer.get(normalizeText(row.player)) ?? null;
+                    const logo = row.teamShort ? getTeamLogoProps(row.teamShort) : null;
 
-                {iplStats.length === 0 && <div className="px-6 py-5 text-sm text-white/45">No IPL stats were returned by the scraper.</div>}
-                {iplStats.slice(0, 20).map((row, idx) => (
-                  <div key={`${row.player}-${idx}`} className="grid grid-cols-[2fr_0.7fr_0.7fr_0.7fr_0.7fr_0.7fr_0.7fr] gap-2 px-6 py-3 text-sm items-center" style={{ borderBottom: idx < Math.min(iplStats.length, 20) - 1 ? "1px solid rgba(255,255,255,0.04)" : "none" }}>
-                    <span className="text-white/85">{row.player}</span>
-                    <span className="text-center text-white/60">{row.matches ?? "-"}</span>
-                    <span className="text-center text-white/60">{row.innings ?? "-"}</span>
-                    <span className="text-center text-white font-semibold">{row.runs ?? "-"}</span>
-                    <span className="text-center text-white/60">{row.average}</span>
-                    <span className="text-center text-white/60">{row.strikeRate}</span>
-                    <span className="text-center text-white/60">{`${row.fours ?? "-"}/${row.sixes ?? "-"}`}</span>
+                    return (
+                      <motion.div
+                        key={`${row.player}-${idx}`}
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: idx * 0.02 }}
+                      >
+                        <GlassCard className="p-4 h-full relative overflow-hidden" glow="none">
+                          {playerRank && (
+                            <div
+                              className="absolute top-3 right-3 px-2 py-1 rounded-md text-xs font-black"
+                              style={{
+                                background: playerRank === 1 ? "linear-gradient(135deg, rgba(255,193,102,0.42), rgba(255,145,0,0.34))" : "rgba(59,212,231,0.2)",
+                                color: playerRank === 1 ? "#fff2c2" : "#7ad6ff",
+                                border: playerRank === 1 ? "1px solid rgba(255,193,102,0.5)" : "1px solid rgba(59,212,231,0.25)",
+                              }}
+                            >
+                              #{playerRank}
+                            </div>
+                          )}
+                          <div className="flex items-start gap-3 mb-4">
+                            <div
+                              style={{
+                                width: 56,
+                                height: 56,
+                                borderRadius: 56,
+                                background: "rgba(255,255,255,0.1)",
+                                border: "1px solid rgba(255,255,255,0.15)",
+                                overflow: "hidden",
+                                flexShrink: 0,
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                              }}
+                            >
+                              {row.image ? (
+                                <img
+                                  src={row.image}
+                                  alt={row.player}
+                                  style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                                />
+                              ) : (
+                                <span className="text-white/50 text-xs font-bold">N/A</span>
+                              )}
+                            </div>
+
+                            <div className="min-w-0 flex-1">
+                              <p className="text-white font-semibold text-sm truncate">{row.player}</p>
+                              <div className="flex items-center gap-2 mt-1">
+                                {logo && <TeamLogo teamId={logo.teamId} short={logo.short} size={22} />}
+                                <p className="text-white/45 text-xs truncate">{row.teamName || row.teamShort || "IPL"}</p>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-3 gap-2">
+                            <div className="p-2 rounded-md text-center" style={{ background: "rgba(59,212,231,0.12)" }}>
+                              <p className="text-white/40 text-[10px] uppercase">Mat</p>
+                              <p className="text-[#7ad6ff] font-bold text-sm">{row.matches ?? "-"}</p>
+                            </div>
+                            <div className="p-2 rounded-md text-center" style={{ background: "rgba(0,230,118,0.12)" }}>
+                              <p className="text-white/40 text-[10px] uppercase">Runs</p>
+                              <p className="text-[#00E676] font-bold text-sm">{row.runs ?? "-"}</p>
+                            </div>
+                            <div className="p-2 rounded-md text-center" style={{ background: "rgba(255,145,0,0.14)" }}>
+                              <p className="text-white/40 text-[10px] uppercase">SR</p>
+                              <p className="text-[#ffc57a] font-bold text-sm">{row.strikeRate}</p>
+                            </div>
+                          </div>
+
+                          <div className="mt-3 grid grid-cols-3 gap-2 text-xs text-white/65">
+                            <div>Avg: <span className="text-white/85">{row.average}</span></div>
+                            <div>4s: <span className="text-white/85">{row.fours ?? "-"}</span></div>
+                            <div>6s: <span className="text-white/85">{row.sixes ?? "-"}</span></div>
+                          </div>
+                        </GlassCard>
+                      </motion.div>
+                    );
+                    })}
                   </div>
-                ))}
-              </GlassCard>
-            </motion.div>
-          )}
 
-          {activeTab === "Squads" && (
-            <motion.div key="squads" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} className="space-y-5">
-              <GlassCard className="p-5">
-                <p className="text-white/40 text-xs uppercase tracking-wider mb-2">Squad Teams</p>
-                <div className="flex flex-wrap gap-2">
-                  {squadTeams.map((team) => (
-                    <span key={team} className="px-2 py-1 rounded text-xs" style={{ background: "rgba(124,77,255,0.15)", color: "#cfbcff" }}>
-                      {team}
-                    </span>
-                  ))}
-                </div>
-                {!loading && squadTeams.length === 0 && <p className="text-white/45 text-sm mt-2">No squads team list returned by scraper.</p>}
-              </GlassCard>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mt-6">
+                    <GlassCard className="p-5" glow="none">
+                      <div className="flex items-center justify-between mb-3">
+                        <h3 className="text-white font-bold text-base">Most Runs</h3>
+                        <span className="px-2 py-1 rounded text-[10px] font-bold uppercase" style={{ background: "rgba(59,212,231,0.15)", color: "#7ad6ff" }}>
+                          Rank + Title
+                        </span>
+                      </div>
+                      <div className="space-y-2">
+                        {runLeaders.slice(0, 8).map((row) => (
+                          <div key={`runs-rank-${row.player}`} className="flex items-center justify-between rounded-md px-3 py-2" style={{ background: row.rank <= 3 ? "rgba(59,212,231,0.11)" : "rgba(255,255,255,0.04)" }}>
+                            <div className="flex items-center gap-3 min-w-0">
+                              <span className="text-[#7ad6ff] font-black text-sm w-6">#{row.rank}</span>
+                              <div className="min-w-0">
+                                <p className="text-white text-sm font-semibold truncate">{row.player}</p>
+                                <p className="text-white/45 text-xs truncate">{row.teamName || row.teamShort || "IPL"}</p>
+                              </div>
+                            </div>
+                            <p className="text-[#00E676] font-black text-sm">{row.runs ?? "-"}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </GlassCard>
 
-              <GlassCard className="overflow-hidden">
-                <div className="px-6 py-4" style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
-                  <h3 className="text-white font-bold">Featured Squad{featuredSquadTeam ? `: ${featuredSquadTeam}` : ""}</h3>
-                </div>
-                {featuredSquadPlayers.length === 0 && <div className="px-6 py-5 text-sm text-white/45">No squad players were parsed from the current page response.</div>}
-                {featuredSquadPlayers.map((player, idx) => (
-                  <div key={`${player.name}-${idx}`} className="grid grid-cols-[1.6fr_1fr_1fr] gap-3 px-6 py-3 text-sm" style={{ borderBottom: idx < featuredSquadPlayers.length - 1 ? "1px solid rgba(255,255,255,0.04)" : "none" }}>
-                    <span className="text-white/85">{player.name}</span>
-                    <span className="text-white/55">{player.roleGroup}</span>
-                    <span className="text-[#7ad6ff]">{player.role}</span>
+                    <GlassCard className="p-5" glow="none">
+                      <div className="flex items-center justify-between mb-3">
+                        <h3 className="text-white font-bold text-base">Orange Cap Race</h3>
+                        <span className="px-2 py-1 rounded text-[10px] font-bold uppercase" style={{ background: "rgba(255,145,0,0.18)", color: "#ffc57a" }}>
+                          Top Batters
+                        </span>
+                      </div>
+                      <div className="space-y-2">
+                        {runLeaders.slice(0, 8).map((row) => (
+                          <div key={`orange-cap-${row.player}`} className="rounded-md px-3 py-2" style={{ background: row.rank === 1 ? "linear-gradient(135deg, rgba(255,145,0,0.22), rgba(255,193,102,0.12))" : "rgba(255,255,255,0.04)", border: row.rank === 1 ? "1px solid rgba(255,193,102,0.35)" : "1px solid rgba(255,255,255,0.06)" }}>
+                            <div className="flex items-center justify-between gap-3">
+                              <div className="min-w-0">
+                                <p className="text-white text-sm font-semibold truncate">#{row.rank} {row.player}</p>
+                                <p className="text-white/45 text-xs">Mat {row.matches ?? "-"} • SR {row.strikeRate || "-"}</p>
+                              </div>
+                              <span className="text-[#ffc57a] font-black text-sm">{row.runs ?? "-"} runs</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </GlassCard>
                   </div>
-                ))}
-              </GlassCard>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mt-6">
+                    <GlassCard className="p-5" glow="none">
+                      <p className="text-white/45 text-xs uppercase tracking-wider mb-3">Batting Categories</p>
+                      <div className="flex flex-wrap gap-2">
+                        {displayedBattingCategories.map((category) => (
+                          <span key={category} className="px-2 py-1 rounded text-xs" style={{ background: "rgba(59,212,231,0.12)", color: "#7ad6ff" }}>
+                            {category}
+                          </span>
+                        ))}
+                      </div>
+                    </GlassCard>
+                    <GlassCard className="p-5" glow="none">
+                      <p className="text-white/45 text-xs uppercase tracking-wider mb-3">Bowling Categories</p>
+                      <div className="flex flex-wrap gap-2">
+                        {displayedBowlingCategories.map((category) => (
+                          <span key={category} className="px-2 py-1 rounded text-xs" style={{ background: "rgba(255,145,0,0.15)", color: "#ffb85c" }}>
+                            {category}
+                          </span>
+                        ))}
+                      </div>
+                    </GlassCard>
+                  </div>
+                </>
+              )}
             </motion.div>
           )}
 

@@ -97,7 +97,7 @@ export function Dashboard() {
       { label: "IPL Matches", value: String(iplMatches.length), icon: Activity, color: "#FF4D8D", bg: "rgba(255,77,141,0.1)" },
       { label: "Live Matches", value: String(liveMatches.length), icon: Trophy, color: "#3BD4E7", bg: "rgba(59,212,231,0.1)" },
       { label: "Upcoming", value: String(upcomingMatches.length), icon: TrendingUp, color: "#7C4DFF", bg: "rgba(124,77,255,0.1)" },
-      { label: "Teams (API)", value: String(teamsCount), icon: Users, color: "#FF9100", bg: "rgba(255,145,0,0.1)" },
+      { label: "Teams", value: String(teamsCount), icon: Users, color: "#FF9100", bg: "rgba(255,145,0,0.1)" },
     ],
     [iplMatches.length, liveMatches.length, upcomingMatches.length, teamsCount]
   );
@@ -156,7 +156,7 @@ export function Dashboard() {
                 Intelligence Hub
               </span>
             </h1>
-            <p className="text-white/50 text-lg max-w-lg">Live scores and match feeds are now powered by your backend RapidAPI integration.</p>
+            <p className="text-white/50 text-lg max-w-lg">Live scores and match feeds are now powered by your backend web scraping pipeline.</p>
             {error && <p className="text-[#ff8ca8] text-sm mt-3">{error}</p>}
           </div>
         </motion.div>

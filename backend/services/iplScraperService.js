@@ -2,8 +2,8 @@ import puppeteer from "puppeteer";
 
 const POINTS_URL =
   "https://www.cricbuzz.com/cricket-series/9241/indian-premier-league-2026/points-table";
-const MATCHES_URL =
-  "https://www.cricbuzz.com/cricket-series/9241/indian-premier-league-2026/matches";
+const FIXTURES_URL = "https://www.iplt20.com/matches/fixtures";
+const RESULTS_URL = "https://www.iplt20.com/matches/results";
 const STATS_URL =
   "https://www.cricbuzz.com/cricket-series/9241/indian-premier-league-2026/stats";
 const SQUADS_URL =
@@ -26,6 +26,39 @@ const IPL_TEAM_ALIASES = {
 
 const IPL_TEAM_CODES = Object.keys(IPL_TEAM_ALIASES);
 const IPL_TEAM_NAMES = IPL_TEAM_CODES.flatMap((code) => IPL_TEAM_ALIASES[code] || []);
+
+const normalizeNameKey = (value) =>
+  String(value || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "");
+
+const resolveIplTeamCode = (value) => {
+  const raw = String(value || "").trim();
+  if (!raw) {
+    return null;
+  }
+
+  const upper = raw.toUpperCase();
+  if (IPL_TEAM_CODES.includes(upper)) {
+    return upper;
+  }
+
+  const key = normalizeNameKey(raw);
+  if (!key) {
+    return null;
+  }
+
+  for (const code of IPL_TEAM_CODES) {
+    const aliases = IPL_TEAM_ALIASES[code] || [];
+    for (const alias of aliases) {
+      if (normalizeNameKey(alias) === key) {
+        return code;
+      }
+    }
+  }
+
+  return extractIplTeamCode(raw);
+};
 
 const extractIplTeamCode = (line) => {
   const normalized = String(line || "").replace(/\s+/g, " ").trim().toLowerCase();
@@ -272,6 +305,139 @@ const extractMatches = async (page) =>
     return unique;
   });
 
+const extractIplt20Matches = async (page, status) =>
+  page.evaluate((matchStatus) => {
+    const clean = (value) => String(value || "").replace(/\s+/g, " ").trim();
+
+    const cards = Array.from(document.querySelectorAll("a.vn-matchBtn"))
+      .map((anchor) => {
+        const card = anchor.closest("li") || anchor.parentElement;
+        if (!card) {
+          return null;
+        }
+
+        const href = clean(anchor.getAttribute("href"));
+        const idFromHref = href.match(/\/match\/\d+\/(\d+)/)?.[1] || href.match(/(\d+)$/)?.[1] || null;
+
+        const matchNo = clean(card.querySelector(".vn-matchOrder")?.textContent || "");
+        const venue = clean(card.querySelector(".vn-venueDet p")?.textContent || "");
+        let date = clean(card.querySelector(".vn-matchDate")?.textContent || "");
+        let startTime = clean(card.querySelector(".vn-matchTime")?.textContent || "");
+        const combinedDateTime = clean(card.querySelector(".vn-matchDateTime")?.textContent || "");
+
+        if ((!date || !startTime) && combinedDateTime) {
+          const timeMatch = combinedDateTime.match(/\d{1,2}:\d{2}\s*(?:am|pm)\s*IST/i);
+          if (!startTime && timeMatch?.[0]) {
+            startTime = clean(timeMatch[0]);
+          }
+          if (!date) {
+            date = clean(
+              combinedDateTime
+                .replace(timeMatch?.[0] || "", "")
+                .replace(/\s+,/g, ",")
+                .replace(/[\s,]+$/, ""),
+            );
+          }
+        }
+        const resultText = clean(card.querySelector(".vn-ticketTitle")?.textContent || "");
+
+        const teams = Array.from(card.querySelectorAll(".vn-shedTeam"))
+          .slice(0, 2)
+          .map((teamEl) => {
+            const name = clean(teamEl.querySelector(".vn-teamName h3")?.textContent || "");
+            const code = clean(teamEl.querySelector(".vn-teamCode h3")?.textContent || "");
+            const text = clean(teamEl.textContent || "");
+            const score = clean(text.match(/\d{1,3}\/\d{1,2}\s*\(\d+(?:\.\d+)?\s*OV\s*\)/i)?.[0] || "");
+
+            return {
+              name,
+              code,
+              score: score || null,
+            };
+          })
+          .filter((team) => team.name || team.code);
+
+        if (teams.length < 2) {
+          return null;
+        }
+
+        return {
+          id: idFromHref,
+          href,
+          matchNo,
+          venue,
+          date,
+          startTime: startTime || null,
+          status: matchStatus,
+          result: resultText || null,
+          team1Name: teams[0]?.name || null,
+          team1Code: teams[0]?.code || null,
+          team1Score: teams[0]?.score || null,
+          team2Name: teams[1]?.name || null,
+          team2Code: teams[1]?.code || null,
+          team2Score: teams[1]?.score || null,
+        };
+      })
+      .filter(Boolean);
+
+    const unique = [];
+    const seen = new Set();
+    for (const match of cards) {
+      const key = String(match.id || `${match.matchNo}-${match.team1Code}-${match.team2Code}`);
+      if (seen.has(key)) {
+        continue;
+      }
+      seen.add(key);
+      unique.push(match);
+    }
+
+    return unique;
+  }, status);
+
+const normalizeIplt20Matches = (rows) => {
+  const mapped = (rows || [])
+    .map((row) => {
+      const team1 = resolveIplTeamCode(row?.team1Code || row?.team1Name) || row?.team1Code || row?.team1Name;
+      const team2 = resolveIplTeamCode(row?.team2Code || row?.team2Name) || row?.team2Code || row?.team2Name;
+
+      if (!team1 || !team2) {
+        return null;
+      }
+
+      const id = String(row?.id || "").trim() || `${String(row?.matchNo || "").trim()}-${team1}-${team2}`;
+
+      return {
+        id,
+        matchNo: String(row?.matchNo || "").trim() || null,
+        team1,
+        team2,
+        team1Name: row?.team1Name || null,
+        team2Name: row?.team2Name || null,
+        team1Score: row?.team1Score || null,
+        team2Score: row?.team2Score || null,
+        date: row?.date || null,
+        startTime: row?.startTime || null,
+        venue: row?.venue || null,
+        status: row?.status || "Upcoming",
+        result: row?.result || null,
+      };
+    })
+    .filter(Boolean);
+
+  const unique = [];
+  const seen = new Set();
+  for (const match of mapped) {
+    const key = String(match.id || `${match.team1}-${match.team2}-${match.date || ""}`);
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    unique.push(match);
+  }
+
+  return unique;
+};
+
 const parseMatchStatus = (text) => {
   const value = String(text || "").toLowerCase();
   if (!value) {
@@ -339,6 +505,7 @@ const parseMatchesFromText = (lines) => {
     const scoresInOrder = [];
     const seenTeams = new Set();
     let statusLine = null;
+    let startTime = null;
 
     for (const candidate of blockLines) {
       const teamCode = extractIplTeamCode(candidate);
@@ -366,6 +533,13 @@ const parseMatchesFromText = (lines) => {
       }
     }
 
+    for (const candidate of blockLines) {
+      if (/^\d{1,2}:\d{2}\s*(AM|PM)\b/i.test(candidate)) {
+        startTime = candidate;
+        break;
+      }
+    }
+
     if (teamsInOrder.length < 2) {
       continue;
     }
@@ -378,6 +552,7 @@ const parseMatchesFromText = (lines) => {
       team1Score: scoresInOrder[0] || null,
       team2Score: scoresInOrder[1] || null,
       date: currentDate,
+      startTime,
       venue,
       status: parseMatchStatus(statusLine || "Upcoming"),
       result: statusLine || null,
@@ -636,12 +811,19 @@ export const iplScraperService = {
 
     try {
       browser = await launchBrowser();
-      const page = await browser.newPage();
-      await configurePage(page);
-      await page.goto(MATCHES_URL, { waitUntil: "networkidle2", timeout: 60000 });
+      const fixturesPage = await browser.newPage();
+      await configurePage(fixturesPage);
+      await fixturesPage.goto(FIXTURES_URL, { waitUntil: "networkidle2", timeout: 60000 });
+      const upcoming = await extractIplt20Matches(fixturesPage, "Upcoming");
+      await fixturesPage.close();
 
-      const textLines = await extractPageTextLines(page);
-      return parseMatchesFromText(textLines);
+      const resultsPage = await browser.newPage();
+      await configurePage(resultsPage);
+      await resultsPage.goto(RESULTS_URL, { waitUntil: "networkidle2", timeout: 60000 });
+      const completed = await extractIplt20Matches(resultsPage, "Completed");
+      await resultsPage.close();
+
+      return normalizeIplt20Matches([...upcoming, ...completed]);
     } catch {
       return [];
     } finally {

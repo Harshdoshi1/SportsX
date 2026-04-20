@@ -9,7 +9,39 @@ import { TeamLogo } from "../ui/TeamLogo";
 import { ImageWithFallback } from "../figma/ImageWithFallback";
 import { Award, Target, TrendingUp, Shield } from "lucide-react";
 import { cricketApi } from "../../services/cricketApi";
-import { deriveTeamShort, getTeamLogoProps, isIplTeamName, normalizeText, safeArray, slugify } from "../../services/cricketUi";
+import { getTeamLogoProps, safeArray, slugify } from "../../services/cricketUi";
+import { getIplTeamByShort } from "../../data/iplTeams";
+
+const TEAM_SLUG_BY_SHORT: Record<string, string> = {
+  CSK: "chennai-super-kings",
+  DC: "delhi-capitals",
+  GT: "gujarat-titans",
+  KKR: "kolkata-knight-riders",
+  LSG: "lucknow-super-giants",
+  MI: "mumbai-indians",
+  PBKS: "punjab-kings",
+  RR: "rajasthan-royals",
+  RCB: "royal-challengers-bengaluru",
+  SRH: "sunrisers-hyderabad",
+};
+
+const SHORT_BY_SLUG = Object.entries(TEAM_SLUG_BY_SHORT).reduce<Record<string, string>>((acc, [short, slug]) => {
+  acc[slug] = short;
+  return acc;
+}, {});
+
+const resolveTeamShort = (input?: string) => {
+  const raw = String(input || "").trim();
+  const normalized = raw.toLowerCase();
+  const upper = raw.toUpperCase();
+  if (TEAM_SLUG_BY_SHORT[upper]) {
+    return upper;
+  }
+  if (SHORT_BY_SLUG[normalized]) {
+    return SHORT_BY_SLUG[normalized];
+  }
+  return "RCB";
+};
 
 type ApiTeam = {
   id: string | number;
@@ -57,22 +89,22 @@ export function PlayerAnalysis() {
         setLoading(true);
         setError(null);
 
-        const teamsRes = await cricketApi.getTeams({ page: 1, limit: 500 });
-        const teams = safeArray<ApiTeam>((teamsRes as any).teams).filter((item) => isIplTeamName(item?.name));
+        const short = resolveTeamShort(teamId);
+        const teamMeta = getIplTeamByShort(short);
+        const pointsRes = await cricketApi.getIplPoints();
+        const row = safeArray<any>((pointsRes as any).points).find((entry) => String(entry?.team || "").toUpperCase() === short);
 
-        const param = String(teamId || "").toLowerCase();
-        const selectedTeam =
-          teams.find((item) => String(item.id) === param) ||
-          teams.find((item) => deriveTeamShort(item.name).toLowerCase() === param) ||
-          teams.find((item) => normalizeText(item.name) === normalizeText(param)) ||
-          teams[0] ||
-          null;
+        const selectedTeam: ApiTeam = {
+          id: short,
+          name: teamMeta?.name || row?.team || short,
+          played: Number(row?.played ?? 0),
+          won: Number(row?.win ?? 0),
+          lost: Number(row?.loss ?? 0),
+          pts: Number(row?.points ?? 0),
+          nrr: String(row?.nrr ?? "-"),
+        };
 
-        if (!selectedTeam) {
-          throw new Error("Could not resolve team for player analysis");
-        }
-
-        const playersRes = await cricketApi.getTeamPlayers(selectedTeam.id);
+        const playersRes = await cricketApi.getTeamPlayers(short, { page: 1, limit: 250, teamName: selectedTeam.name });
         const players = safeArray<ApiPlayer>((playersRes as any).players);
 
         const selectedPlayer =

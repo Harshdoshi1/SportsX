@@ -1,225 +1,138 @@
-import { env } from "../config/env.js";
-import { cricApiService } from "./cricApiService.js";
-import { rapidApiService } from "./rapidApiService.js";
-import { isIplText, normalizeMatch, normalizeMatchList } from "../utils/normalizers.js";
+import { iplScraperService } from "./iplScraperService.js";
 
-const filterIplMatches = (matches) =>
-  matches.filter((match) =>
-    isIplText([match.series, match.name, match.status, match.team1, match.team2].join(" "))
-  );
+const CACHE_TTL_MS = 2 * 60 * 1000;
+let cacheData = null;
+let cacheUntil = 0;
+let inFlight = null;
 
-const asTimeMs = (value) => {
-  if (value === undefined || value === null || value === "") {
-    return null;
-  }
+const normalizeStatus = (value) => String(value || "Upcoming");
 
-  if (typeof value === "number") {
-    return value;
-  }
+const toSafeIdPart = (value) =>
+  String(value || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "") || "na";
 
-  const asNumber = Number(value);
-  if (Number.isFinite(asNumber)) {
-    return asNumber;
-  }
+const buildMatchId = (match) =>
+  [
+    toSafeIdPart(match?.team1),
+    toSafeIdPart(match?.team2),
+    toSafeIdPart(match?.date),
+    toSafeIdPart(match?.venue),
+  ].join("_");
 
-  const asDate = Date.parse(String(value));
-  return Number.isFinite(asDate) ? asDate : null;
+const buildScore = (match) => {
+  const parts = [match?.team1Score, match?.team2Score].filter(Boolean).map((v) => String(v));
+  return parts.length > 0 ? parts.join(" | ") : null;
 };
 
-const isUpcomingMatch = (match) => {
-  if (match?.matchStarted === false) {
-    return true;
-  }
-
-  const startTime = asTimeMs(match?.date);
-  if (!startTime) {
-    return false;
-  }
-
-  return startTime > Date.now();
-};
-
-const isRecentMatch = (match) => {
-  if (match?.matchEnded === true) {
-    return true;
-  }
-
-  const statusText = String(match?.status || "").toLowerCase();
-  if (/(won|result|completed|ended|no result|draw|stumps)/.test(statusText)) {
-    return true;
-  }
-
-  const startTime = asTimeMs(match?.date);
-  if (!startTime) {
-    return false;
-  }
-
-  return startTime < Date.now();
-};
-
-const shouldTryCricApi = () => {
-  const mode = String(env.providerMode || "hybrid").toLowerCase();
-  return mode === "cricapi" || mode === "hybrid";
-};
-
-const shouldTryRapidApi = () => {
-  const mode = String(env.providerMode || "hybrid").toLowerCase();
-  return mode === "rapidapi" || mode === "hybrid";
-};
-
-const responseMeta = (provider, meta, extras = {}) => ({
-  provider,
-  cacheHit: meta?.cacheHit || false,
-  fallback: meta?.fallback || false,
-  ...extras,
+const normalizeScrapedMatch = (match) => ({
+  id: buildMatchId(match),
+  name: `${match?.team1 || "Team A"} vs ${match?.team2 || "Team B"}`,
+  series: "Indian Premier League 2026",
+  team1: match?.team1 || null,
+  team2: match?.team2 || null,
+  score: buildScore(match),
+  status: normalizeStatus(match?.status),
+  venue: match?.venue || null,
+  date: match?.date || null,
+  startTime: match?.startTime || null,
+  result: match?.result || null,
+  matchStarted: String(match?.status || "").toLowerCase() === "live",
+  matchEnded: String(match?.status || "").toLowerCase() === "completed",
+  raw: match,
 });
 
-const getLiveFromCricApi = async () => {
-  const response = await cricApiService.getCurrentMatches();
-  const normalized = normalizeMatchList(response.data);
-  return {
-    data: normalized,
-    meta: responseMeta("cricapi", response.meta),
-  };
-};
-
-const getUpcomingFromCricApi = async () => {
-  const response = await cricApiService.getAllMatches();
-  const normalized = normalizeMatchList(response.data).filter(isUpcomingMatch);
-  return {
-    data: normalized,
-    meta: responseMeta("cricapi", response.meta),
-  };
-};
-
-const getRecentFromCricApi = async () => {
-  const response = await cricApiService.getAllMatches();
-  const normalized = normalizeMatchList(response.data).filter(isRecentMatch);
-  return {
-    data: normalized,
-    meta: responseMeta("cricapi", response.meta),
-  };
-};
-
-const getLiveFromRapidApi = async () => {
-  const response = await rapidApiService.getLiveMatches();
-  return {
-    data: normalizeMatchList(response.data),
-    meta: responseMeta("rapidapi", response.meta),
-  };
-};
-
-const getUpcomingFromRapidApi = async () => {
-  const response = await rapidApiService.getUpcomingMatches();
-  return {
-    data: normalizeMatchList(response.data),
-    meta: responseMeta("rapidapi", response.meta),
-  };
-};
-
-const getRecentFromRapidApi = async () => {
-  const response = await rapidApiService.getRecentMatches();
-  return {
-    data: normalizeMatchList(response.data),
-    meta: responseMeta("rapidapi", response.meta),
-  };
-};
-
-const getPreferredMatches = async (cricFetcher, rapidFetcher) => {
-  let cricError = null;
-
-  if (shouldTryCricApi()) {
-    try {
-      const cricResult = await cricFetcher();
-      if (cricResult.data.length > 0) {
-        return cricResult;
-      }
-
-      if (!shouldTryRapidApi()) {
-        return {
-          data: [],
-          meta: {
-            ...cricResult.meta,
-            fallbackReason: "cricapi-empty",
-          },
-        };
-      }
-    } catch (error) {
-      cricError = error;
-      if (!shouldTryRapidApi()) {
-        throw error;
-      }
-    }
+const loadMatches = async (forceRefresh = false) => {
+  if (!forceRefresh && cacheData && cacheUntil > Date.now()) {
+    return { matches: cacheData, cacheHit: true };
   }
 
-  if (!shouldTryRapidApi()) {
-    return {
-      data: [],
-      meta: {
-        provider: "none",
-        cacheHit: false,
-      },
-    };
+  if (!forceRefresh && inFlight) {
+    const data = await inFlight;
+    return { matches: data, cacheHit: true };
   }
 
-  const rapidResult = await rapidFetcher();
-  return {
-    ...rapidResult,
-    meta: {
-      ...rapidResult.meta,
-      fallbackReason: cricError ? "cricapi-error" : "cricapi-empty",
-    },
-  };
+  inFlight = (async () => {
+    const scraped = await iplScraperService.scrapeMatches();
+    const normalized = Array.isArray(scraped) ? scraped.map(normalizeScrapedMatch) : [];
+    cacheData = normalized;
+    cacheUntil = Date.now() + CACHE_TTL_MS;
+    return normalized;
+  })();
+
+  try {
+    const data = await inFlight;
+    return { matches: data, cacheHit: false };
+  } finally {
+    inFlight = null;
+  }
 };
+
+const byStatus = (matches, expected) =>
+  matches.filter((match) => String(match?.status || "").toLowerCase() === expected);
 
 export const matchesService = {
   async getLiveMatches() {
-    return getPreferredMatches(getLiveFromCricApi, getLiveFromRapidApi);
+    const loaded = await loadMatches();
+    return {
+      data: byStatus(loaded.matches, "live"),
+      meta: {
+        provider: "cricbuzz-scraper",
+        cacheHit: loaded.cacheHit,
+      },
+    };
   },
 
   async getUpcomingMatches() {
-    return getPreferredMatches(getUpcomingFromCricApi, getUpcomingFromRapidApi);
+    const loaded = await loadMatches();
+    return {
+      data: byStatus(loaded.matches, "upcoming"),
+      meta: {
+        provider: "cricbuzz-scraper",
+        cacheHit: loaded.cacheHit,
+      },
+    };
   },
 
   async getRecentMatches() {
-    return getPreferredMatches(getRecentFromCricApi, getRecentFromRapidApi);
+    const loaded = await loadMatches();
+    return {
+      data: byStatus(loaded.matches, "completed"),
+      meta: {
+        provider: "cricbuzz-scraper",
+        cacheHit: loaded.cacheHit,
+      },
+    };
   },
 
   async getIplMatches() {
-    const [live, upcoming, recent] = await Promise.all([
-      rapidApiService.getLiveMatches(),
-      rapidApiService.getUpcomingMatches(),
-      rapidApiService.getRecentMatches(),
-    ]);
-
-    const all = [...normalizeMatchList(live.data), ...normalizeMatchList(upcoming.data), ...normalizeMatchList(recent.data)];
-
-    const dedupedById = Array.from(
-      new Map(all.map((match) => [String(match.id || `${match.team1}-${match.team2}-${match.date}`), match])).values()
-    );
-
+    const loaded = await loadMatches();
     return {
-      data: filterIplMatches(dedupedById),
+      data: loaded.matches,
       meta: {
-        cacheHit: live.meta.cacheHit && upcoming.meta.cacheHit && recent.meta.cacheHit,
-        sourceGroups: ["live", "upcoming", "recent"],
+        provider: "cricbuzz-scraper",
+        cacheHit: loaded.cacheHit,
       },
     };
   },
 
   async getMatchDetails(matchId) {
-    const [info, scoreboard] = await Promise.all([
-      rapidApiService.getMatchInfo(matchId),
-      rapidApiService.getMatchScoreboard(matchId),
-    ]);
+    const loaded = await loadMatches();
+    const id = String(matchId || "");
+    const match = loaded.matches.find((item) => String(item.id) === id) || null;
 
     return {
       data: {
-        match: normalizeMatch(info.data),
-        scoreboard: scoreboard.data,
+        match,
+        scoreboard: {
+          innings: [],
+          commentary: [],
+        },
       },
       meta: {
-        cacheHit: info.meta.cacheHit && scoreboard.meta.cacheHit,
+        provider: "cricbuzz-scraper",
+        cacheHit: loaded.cacheHit,
       },
     };
   },
