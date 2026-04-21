@@ -625,79 +625,84 @@ export function League() {
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ delay: idx * 0.02 }}
                       >
-                        <GlassCard className="p-4 relative overflow-hidden" glow="none">
-                          {playerRank && (
-                            <div
-                              className="absolute top-3 right-3 px-2 py-1 rounded-md text-xs font-black"
-                              style={{
-                                background: playerRank === 1 ? "linear-gradient(135deg, rgba(255,193,102,0.42), rgba(255,145,0,0.34))" : "rgba(59,212,231,0.2)",
-                                color: playerRank === 1 ? "#fff2c2" : "#7ad6ff",
-                                border: playerRank === 1 ? "1px solid rgba(255,193,102,0.5)" : "1px solid rgba(59,212,231,0.25)",
-                              }}
-                            >
-                              #{playerRank}
-                            </div>
-                          )}
-
-                          <div className="flex items-start gap-3 md:gap-4 mb-3">
-                            <div
-                              style={{
-                                width: 56,
-                                height: 56,
-                                borderRadius: 56,
-                                background: "rgba(255,255,255,0.1)",
-                                border: "1px solid rgba(255,255,255,0.15)",
-                                overflow: "hidden",
-                                flexShrink: 0,
-                                display: "flex",
-                                alignItems: "center",
-                                justifyContent: "center",
-                              }}
-                            >
-                              {row.image ? (
-                                <ImageWithFallback
-                                  src={row.image}
-                                  alt={row.player}
-                                  fallbackMode="person"
-                                  style={{ width: "100%", height: "100%", objectFit: "cover" }}
-                                />
-                              ) : (
-                                <span className="text-white/50 text-xs font-bold">N/A</span>
+                        <div
+                          className="rounded-2xl px-4 py-3 md:px-5 md:py-4"
+                          style={{
+                            background: "linear-gradient(90deg, rgba(6,10,22,0.92) 0%, rgba(8,12,28,0.9) 55%, rgba(6,10,22,0.92) 100%)",
+                            border: "1px solid rgba(150,170,255,0.14)",
+                          }}
+                        >
+                          <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-3 md:gap-4 items-stretch">
+                            <div className="flex items-center gap-3 min-w-0 h-full md:self-center">
+                              {playerRank && (
+                                <div
+                                  className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-black"
+                                  style={{
+                                    background:
+                                      playerRank === 1
+                                        ? "linear-gradient(135deg, rgba(255,193,102,0.40), rgba(255,145,0,0.28))"
+                                        : "rgba(255,255,255,0.06)",
+                                    border:
+                                      playerRank === 1
+                                        ? "1px solid rgba(255,193,102,0.45)"
+                                        : "1px solid rgba(255,255,255,0.10)",
+                                    color: playerRank === 1 ? "#fff2c2" : "rgba(255,255,255,0.65)",
+                                    flexShrink: 0,
+                                  }}
+                                >
+                                  #{playerRank}
+                                </div>
                               )}
-                            </div>
 
-                            <div className="min-w-0 flex-1 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                              <div
+                                className="rounded-full overflow-hidden flex items-center justify-center"
+                                style={{ width: 48, height: 48, background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.12)", flexShrink: 0 }}
+                              >
+                                {row.image ? (
+                                  <ImageWithFallback
+                                    src={row.image}
+                                    alt={row.player}
+                                    fallbackMode="person"
+                                    style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                                  />
+                                ) : (
+                                  <span className="text-white/50 text-xs font-bold">N/A</span>
+                                )}
+                              </div>
+
                               <div className="min-w-0">
-                                <p className="text-white font-semibold text-base truncate">{row.player}</p>
+                                <p className="text-white font-semibold text-sm md:text-base leading-tight truncate">{row.player}</p>
                                 <div className="flex items-center gap-2 mt-1">
-                                  {logo && <TeamLogo teamId={logo.teamId} short={logo.short} size={22} />}
+                                  {logo && <TeamLogo teamId={logo.teamId} short={logo.short} size={18} />}
                                   <p className="text-white/45 text-xs truncate">{row.teamName || row.teamShort || "IPL"}</p>
                                 </div>
                               </div>
+                            </div>
 
-                              <div className="grid grid-cols-3 gap-2 md:w-[360px]">
-                                <div className="p-2 rounded-md text-center" style={{ background: "rgba(59,212,231,0.12)" }}>
-                                  <p className="text-white/40 text-[10px] uppercase">Mat</p>
-                                  <p className="text-[#7ad6ff] font-bold text-sm">{row.matches ?? "-"}</p>
+                            <div className="flex flex-col gap-3 md:items-end">
+                              <div className="grid grid-cols-3 gap-2 md:w-[340px]">
+                                <div className="px-3 py-2 rounded-xl text-center" style={{ background: "rgba(59,212,231,0.14)", border: "1px solid rgba(59,212,231,0.16)" }}>
+                                  <p className="text-white/40 text-[10px] uppercase tracking-wide">Mat</p>
+                                  <p className="text-[#7ad6ff] font-black text-sm">{row.matches ?? "-"}</p>
                                 </div>
-                                <div className="p-2 rounded-md text-center" style={{ background: "rgba(0,230,118,0.12)" }}>
-                                  <p className="text-white/40 text-[10px] uppercase">Runs</p>
-                                  <p className="text-[#00E676] font-bold text-sm">{row.runs ?? "-"}</p>
+                                <div className="px-3 py-2 rounded-xl text-center" style={{ background: "rgba(0,230,118,0.14)", border: "1px solid rgba(0,230,118,0.16)" }}>
+                                  <p className="text-white/40 text-[10px] uppercase tracking-wide">Runs</p>
+                                  <p className="text-[#00E676] font-black text-sm">{row.runs ?? "-"}</p>
                                 </div>
-                                <div className="p-2 rounded-md text-center" style={{ background: "rgba(255,145,0,0.14)" }}>
-                                  <p className="text-white/40 text-[10px] uppercase">SR</p>
-                                  <p className="text-[#ffc57a] font-bold text-sm">{row.strikeRate}</p>
+                                <div className="px-3 py-2 rounded-xl text-center" style={{ background: "rgba(255,145,0,0.16)", border: "1px solid rgba(255,145,0,0.16)" }}>
+                                  <p className="text-white/40 text-[10px] uppercase tracking-wide">SR</p>
+                                  <p className="text-[#ffc57a] font-black text-sm">{row.strikeRate}</p>
                                 </div>
+                              </div>
+
+                              <div className="grid grid-cols-3 gap-2 text-xs text-white/60 md:max-w-[340px] md:ml-auto">
+                                <div>Avg: <span className="text-white/85">{row.average}</span></div>
+                                <div>4s: <span className="text-white/85">{row.fours ?? "-"}</span></div>
+                                <div>6s: <span className="text-white/85">{row.sixes ?? "-"}</span></div>
                               </div>
                             </div>
                           </div>
-
-                          <div className="grid grid-cols-3 gap-2 text-xs text-white/65 md:max-w-[360px] md:ml-auto">
-                            <div>Avg: <span className="text-white/85">{row.average}</span></div>
-                            <div>4s: <span className="text-white/85">{row.fours ?? "-"}</span></div>
-                            <div>6s: <span className="text-white/85">{row.sixes ?? "-"}</span></div>
-                          </div>
-                        </GlassCard>
+                        </div>
                       </motion.div>
                     );
                     })}
