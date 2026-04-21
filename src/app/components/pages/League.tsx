@@ -56,6 +56,31 @@ type IplStatsRow = {
   sixes: number | null;
 };
 
+type IplBowlingStatsRow = {
+  player: string;
+  image: string | null;
+  teamShort: string | null;
+  teamName: string | null;
+  matches: number | null;
+  innings: number | null;
+  overs: string;
+  runsConceded: number | null;
+  wickets: number | null;
+  bbi: string;
+  average: string;
+  economy: string;
+  strikeRate: string;
+};
+
+type IplSimpleStatRow = {
+  player: string;
+  image: string | null;
+  teamShort: string | null;
+  teamName: string | null;
+  value: string;
+  rank: number;
+};
+
 type IplNewsItem = {
   title: string;
   summary: string | null;
@@ -110,6 +135,14 @@ export function League() {
   const [iplTeams, setIplTeams] = useState<IplTeamRow[]>([]);
   const [iplMatches, setIplMatches] = useState<IplMatchRow[]>([]);
   const [iplStats, setIplStats] = useState<IplStatsRow[]>([]);
+  const [iplBowlingStats, setIplBowlingStats] = useState<IplBowlingStatsRow[]>([]);
+  const [mostHundreds, setMostHundreds] = useState<IplSimpleStatRow[]>([]);
+  const [mostFifties, setMostFifties] = useState<IplSimpleStatRow[]>([]);
+  const [highestScores, setHighestScores] = useState<IplSimpleStatRow[]>([]);
+  const [bestBowling, setBestBowling] = useState<IplSimpleStatRow[]>([]);
+  const [bestEconomy, setBestEconomy] = useState<IplSimpleStatRow[]>([]);
+  const [mostSixes, setMostSixes] = useState<IplSimpleStatRow[]>([]);
+  const [mostFours, setMostFours] = useState<IplSimpleStatRow[]>([]);
   const [statsCategories, setStatsCategories] = useState<{ batting: string[]; bowling: string[] }>({ batting: [], bowling: [] });
   const [iplNews, setIplNews] = useState<IplNewsItem[]>([]);
   const leagueKey: LeagueKey = leagueId === "f1-2026" ? "f1-2026" : leagueId === "epl" ? "epl" : "ipl";
@@ -214,17 +247,24 @@ export function League() {
           status: String(match?.status || ""),
         }));
 
-        const statsRows = safeArray<any>((statsRes as any)?.stats?.leaders).map((row) => {
+        const statsPayload: any = (statsRes as any)?.stats || {};
+
+        const statsRows = safeArray<any>(statsPayload?.leaders).map((row) => {
           const playerName = String(row?.player || "Unknown Player");
           const key = normalizeText(playerName);
           const slug = slugify(playerName);
           const lookup = playerImageByName.get(key);
 
+          // Priority: 1) Backend ESPN Cricinfo image, 2) Squad data, 3) Static mapping, 4) Stats data
+          const image = row?.image
+            ? String(row.image)
+            : lookup?.image || IPL_PLAYER_IMAGES[slug] || statsImageByName.get(key) || null;
+
           return {
             player: playerName,
-            image: lookup?.image || IPL_PLAYER_IMAGES[slug] || statsImageByName.get(key) || null,
-            teamShort: lookup?.teamShort || null,
-            teamName: lookup?.teamName || null,
+            image,
+            teamShort: row?.teamShort || lookup?.teamShort || null,
+            teamName: row?.teamName || lookup?.teamName || null,
             matches: row?.matches ?? null,
             innings: row?.innings ?? null,
             runs: row?.runs ?? null,
@@ -235,9 +275,37 @@ export function League() {
           };
         });
 
+        const bowlingRows = safeArray<any>(statsPayload?.bowlingLeaders).map((row) => {
+          const playerName = String(row?.player || "Unknown Player");
+          const key = normalizeText(playerName);
+          const slug = slugify(playerName);
+          const lookup = playerImageByName.get(key);
+
+          // Priority: 1) Backend ESPN Cricinfo image, 2) Squad data, 3) Static mapping, 4) Stats data
+          const image = row?.image
+            ? String(row.image)
+            : lookup?.image || IPL_PLAYER_IMAGES[slug] || statsImageByName.get(key) || null;
+
+          return {
+            player: playerName,
+            image,
+            teamShort: row?.teamShort || lookup?.teamShort || null,
+            teamName: row?.teamName || lookup?.teamName || null,
+            matches: row?.matches ?? null,
+            innings: row?.innings ?? null,
+            overs: String(row?.overs ?? "-"),
+            runsConceded: row?.runs ?? null,
+            wickets: row?.wickets ?? null,
+            bbi: String(row?.bbi ?? "-"),
+            average: String(row?.average ?? "-"),
+            economy: String(row?.economy ?? "-"),
+            strikeRate: String(row?.strikeRate ?? "-"),
+          };
+        });
+
         const categories = {
-          batting: safeArray<string>((statsRes as any)?.stats?.categories?.batting),
-          bowling: safeArray<string>((statsRes as any)?.stats?.categories?.bowling),
+          batting: safeArray<string>(statsPayload?.categories?.batting),
+          bowling: safeArray<string>(statsPayload?.categories?.bowling),
         };
 
         const newsItems = safeArray<any>((newsRes as any)?.news).map((item) => ({
@@ -247,9 +315,41 @@ export function League() {
           tag: String(item?.tag || "IPL 2026"),
         }));
 
+        // Parse additional category leaderboards from ESPN Cricinfo scraper
+        const parseSimpleLeaderboard = (data: any[]): IplSimpleStatRow[] => {
+          return safeArray<any>(data).map((row) => {
+            const playerName = String(row?.player || "Unknown Player");
+            const key = normalizeText(playerName);
+            const slug = slugify(playerName);
+            const lookup = playerImageByName.get(key);
+
+            // Priority: 1) Backend ESPN Cricinfo image, 2) Squad data, 3) Static mapping, 4) Stats data
+            const image = row?.image
+              ? String(row.image)
+              : lookup?.image || IPL_PLAYER_IMAGES[slug] || statsImageByName.get(key) || null;
+
+            return {
+              player: playerName,
+              image,
+              teamShort: row?.teamShort || lookup?.teamShort || null,
+              teamName: row?.teamName || lookup?.teamName || null,
+              value: String(row?.value || "-"),
+              rank: Number(row?.rank) || 0,
+            };
+          });
+        };
+
         setIplTeams(teams);
         setIplMatches(matches);
         setIplStats(statsRows);
+        setIplBowlingStats(bowlingRows);
+        setMostHundreds(parseSimpleLeaderboard(statsPayload?.mostHundreds));
+        setMostFifties(parseSimpleLeaderboard(statsPayload?.mostFifties));
+        setHighestScores(parseSimpleLeaderboard(statsPayload?.highestScores));
+        setBestBowling(parseSimpleLeaderboard(statsPayload?.bestBowling));
+        setBestEconomy(parseSimpleLeaderboard(statsPayload?.bestEconomy));
+        setMostSixes(parseSimpleLeaderboard(statsPayload?.mostSixes));
+        setMostFours(parseSimpleLeaderboard(statsPayload?.mostFours));
         setStatsCategories(categories);
         setIplNews(newsItems);
       } catch (fetchError: any) {
@@ -303,7 +403,7 @@ export function League() {
     [iplStats],
   );
 
-  const topRunLeaders = useMemo(() => runLeaders.slice(0, 5), [runLeaders]);
+  const topRunLeaders = useMemo(() => runLeaders.slice(0, 10), [runLeaders]);
 
   const runRankByPlayer = useMemo(() => {
     const rankMap = new Map<string, number>();
@@ -315,6 +415,28 @@ export function League() {
     }
     return rankMap;
   }, [runLeaders]);
+
+  const wicketLeaders = useMemo(
+    () =>
+      iplBowlingStats
+        .slice()
+        .sort((a, b) => Number(b.wickets ?? 0) - Number(a.wickets ?? 0) || Number(b.matches ?? 0) - Number(a.matches ?? 0))
+        .map((row, index) => ({ ...row, rank: index + 1 })),
+    [iplBowlingStats],
+  );
+
+  const topWicketLeaders = useMemo(() => wicketLeaders.slice(0, 10), [wicketLeaders]);
+
+  const wicketRankByPlayer = useMemo(() => {
+    const rankMap = new Map<string, number>();
+    for (const row of wicketLeaders) {
+      const key = normalizeText(row.player);
+      if (key && !rankMap.has(key)) {
+        rankMap.set(key, row.rank);
+      }
+    }
+    return rankMap;
+  }, [wicketLeaders]);
 
   const displayedBattingCategories = useMemo(
     () => Array.from(new Set([...requiredBattingCategories, ...safeArray(statsCategories.batting)])),
@@ -603,15 +725,15 @@ export function League() {
 
               {iplStats.length > 0 && (
                 <>
-                  <GlassCard className="p-5 mb-5" glow="none">
-                    <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center justify-between mb-4">
+                    <div>
                       <h3 className="text-white font-bold text-base">Orange Cap Race</h3>
-                      <span className="px-2 py-1 rounded text-[10px] font-bold uppercase" style={{ background: "rgba(255,145,0,0.18)", color: "#ffc57a" }}>
-                        Top 5
-                      </span>
+                      <p className="text-white/45 text-xs mt-1">Top run scorers</p>
                     </div>
-                    <p className="text-white/45 text-xs">Live from current IPL stats endpoint. Showing top 5 run scorers.</p>
-                  </GlassCard>
+                    <span className="px-2 py-1 rounded text-[10px] font-bold uppercase" style={{ background: "rgba(255,145,0,0.18)", color: "#ffc57a" }}>
+                      Top 10
+                    </span>
+                  </div>
 
                   <div className="space-y-4">
                     {topRunLeaders.map((row, idx) => {
@@ -708,28 +830,288 @@ export function League() {
                     })}
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mt-6">
-                    <GlassCard className="p-5" glow="none">
-                      <p className="text-white/45 text-xs uppercase tracking-wider mb-3">Batting Categories</p>
-                      <div className="flex flex-wrap gap-2">
-                        {displayedBattingCategories.map((category) => (
-                          <span key={category} className="px-2 py-1 rounded text-xs" style={{ background: "rgba(59,212,231,0.12)", color: "#7ad6ff" }}>
-                            {category}
-                          </span>
-                        ))}
+                  {topWicketLeaders.length > 0 && (
+                    <>
+                      <div className="flex items-center justify-between mt-8 mb-4">
+                        <div>
+                          <h3 className="text-white font-bold text-base">Purple Cap Race</h3>
+                          <p className="text-white/45 text-xs mt-1">Most wickets</p>
+                        </div>
+                        <span className="px-2 py-1 rounded text-[10px] font-bold uppercase" style={{ background: "rgba(124,77,255,0.20)", color: "#c5a8ff" }}>
+                          Top 10
+                        </span>
                       </div>
-                    </GlassCard>
-                    <GlassCard className="p-5" glow="none">
-                      <p className="text-white/45 text-xs uppercase tracking-wider mb-3">Bowling Categories</p>
-                      <div className="flex flex-wrap gap-2">
-                        {displayedBowlingCategories.map((category) => (
-                          <span key={category} className="px-2 py-1 rounded text-xs" style={{ background: "rgba(255,145,0,0.15)", color: "#ffb85c" }}>
-                            {category}
-                          </span>
-                        ))}
+
+                      <div className="space-y-4">
+                        {topWicketLeaders.map((row, idx) => {
+                          const playerRank = wicketRankByPlayer.get(normalizeText(row.player)) ?? null;
+                          const logo = row.teamShort ? getTeamLogoProps(row.teamShort) : null;
+
+                          return (
+                            <motion.div
+                              key={`${row.player}-${idx}-wickets`}
+                              initial={{ opacity: 0, y: 10 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              transition={{ delay: idx * 0.02 }}
+                            >
+                              <div
+                                className="rounded-2xl px-4 py-3 md:px-5 md:py-4"
+                                style={{
+                                  background: "linear-gradient(90deg, rgba(6,10,22,0.92) 0%, rgba(8,12,28,0.9) 55%, rgba(6,10,22,0.92) 100%)",
+                                  border: "1px solid rgba(150,170,255,0.14)",
+                                }}
+                              >
+                                <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-3 md:gap-4 items-stretch">
+                                  <div className="flex items-center gap-3 min-w-0 h-full md:self-center">
+                                    {playerRank && (
+                                      <div
+                                        className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-black"
+                                        style={{
+                                          background:
+                                            playerRank === 1
+                                              ? "linear-gradient(135deg, rgba(124,77,255,0.45), rgba(124,77,255,0.25))"
+                                              : "rgba(255,255,255,0.06)",
+                                          border:
+                                            playerRank === 1
+                                              ? "1px solid rgba(124,77,255,0.55)"
+                                              : "1px solid rgba(255,255,255,0.10)",
+                                          color: playerRank === 1 ? "#efe8ff" : "rgba(255,255,255,0.65)",
+                                          flexShrink: 0,
+                                        }}
+                                      >
+                                        #{playerRank}
+                                      </div>
+                                    )}
+
+                                    <div
+                                      className="rounded-full overflow-hidden flex items-center justify-center"
+                                      style={{ width: 48, height: 48, background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.12)", flexShrink: 0 }}
+                                    >
+                                      {row.image ? (
+                                        <ImageWithFallback
+                                          src={row.image}
+                                          alt={row.player}
+                                          fallbackMode="person"
+                                          style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                                        />
+                                      ) : (
+                                        <span className="text-white/50 text-xs font-bold">N/A</span>
+                                      )}
+                                    </div>
+
+                                    <div className="min-w-0">
+                                      <p className="text-white font-semibold text-sm md:text-base leading-tight truncate">{row.player}</p>
+                                      <div className="flex items-center gap-2 mt-1">
+                                        {logo && <TeamLogo teamId={logo.teamId} short={logo.short} size={18} />}
+                                        <p className="text-white/45 text-xs truncate">{row.teamName || row.teamShort || "IPL"}</p>
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  <div className="flex flex-col gap-3 md:items-end">
+                                    <div className="grid grid-cols-3 gap-2 md:w-[340px]">
+                                      <div className="px-3 py-2 rounded-xl text-center" style={{ background: "rgba(59,212,231,0.14)", border: "1px solid rgba(59,212,231,0.16)" }}>
+                                        <p className="text-white/40 text-[10px] uppercase tracking-wide">Mat</p>
+                                        <p className="text-[#7ad6ff] font-black text-sm">{row.matches ?? "-"}</p>
+                                      </div>
+                                      <div className="px-3 py-2 rounded-xl text-center" style={{ background: "rgba(124,77,255,0.20)", border: "1px solid rgba(124,77,255,0.22)" }}>
+                                        <p className="text-white/40 text-[10px] uppercase tracking-wide">Wkts</p>
+                                        <p className="text-[#c5a8ff] font-black text-sm">{row.wickets ?? "-"}</p>
+                                      </div>
+                                      <div className="px-3 py-2 rounded-xl text-center" style={{ background: "rgba(0,230,118,0.14)", border: "1px solid rgba(0,230,118,0.16)" }}>
+                                        <p className="text-white/40 text-[10px] uppercase tracking-wide">Econ</p>
+                                        <p className="text-[#00E676] font-black text-sm">{row.economy}</p>
+                                      </div>
+                                    </div>
+
+                                    <div className="grid grid-cols-3 gap-2 text-xs text-white/60 md:max-w-[340px] md:ml-auto">
+                                      <div>Avg: <span className="text-white/85">{row.average}</span></div>
+                                      <div>SR: <span className="text-white/85">{row.strikeRate}</span></div>
+                                      <div>BBI: <span className="text-white/85">{row.bbi}</span></div>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            </motion.div>
+                          );
+                        })}
                       </div>
-                    </GlassCard>
-                  </div>
+                    </>
+                  )}
+
+                  {/* Additional Category Leaderboards */}
+                  {mostHundreds.length > 0 && (
+                    <>
+                      <div className="flex items-center justify-between mt-8 mb-4">
+                        <div>
+                          <h3 className="text-white font-bold text-base">Most Hundreds</h3>
+                          <p className="text-white/45 text-xs mt-1">Century makers</p>
+                        </div>
+                        <span className="px-2 py-1 rounded text-[10px] font-bold uppercase" style={{ background: "rgba(255,193,102,0.20)", color: "#ffd8a8" }}>
+                          Top 10
+                        </span>
+                      </div>
+                      <div className="space-y-4">
+                        {mostHundreds.slice(0, 10).map((row, idx) => {
+                          const logo = row.teamShort ? getTeamLogoProps(row.teamShort) : null;
+                          return (
+                            <motion.div key={`${row.player}-${idx}-100s`} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: idx * 0.02 }}>
+                              <div className="rounded-2xl px-4 py-3 md:px-5 md:py-4" style={{ background: "linear-gradient(90deg, rgba(6,10,22,0.92) 0%, rgba(8,12,28,0.9) 55%, rgba(6,10,22,0.92) 100%)", border: "1px solid rgba(150,170,255,0.14)" }}>
+                                <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-3 md:gap-4 items-stretch">
+                                  <div className="flex items-center gap-3 min-w-0 h-full md:self-center">
+                                    <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-black" style={{ background: "rgba(255,193,102,0.20)", border: "1px solid rgba(255,193,102,0.35)", color: "#ffd8a8", flexShrink: 0 }}>#{idx + 1}</div>
+                                    <div className="rounded-full overflow-hidden flex items-center justify-center" style={{ width: 48, height: 48, background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.12)", flexShrink: 0 }}>
+                                      {row.image ? <ImageWithFallback src={row.image} alt={row.player} fallbackMode="person" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : <span className="text-white/50 text-xs font-bold">N/A</span>}
+                                    </div>
+                                    <div className="min-w-0">
+                                      <p className="text-white font-semibold text-sm md:text-base leading-tight truncate">{row.player}</p>
+                                      <div className="flex items-center gap-2 mt-1">{logo && <TeamLogo teamId={logo.teamId} short={logo.short} size={18} />}<p className="text-white/45 text-xs truncate">{row.teamName || row.teamShort || "IPL"}</p></div>
+                                    </div>
+                                  </div>
+                                  <div className="flex items-center justify-end md:w-[120px]">
+                                    <div className="px-4 py-2 rounded-xl text-center" style={{ background: "rgba(255,193,102,0.16)", border: "1px solid rgba(255,193,102,0.20)" }}>
+                                      <p className="text-white/40 text-[10px] uppercase tracking-wide">100s</p>
+                                      <p className="text-[#ffd8a8] font-black text-lg">{row.value}</p>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            </motion.div>
+                          );
+                        })}
+                      </div>
+                    </>
+                  )}
+
+                  {mostFifties.length > 0 && (
+                    <>
+                      <div className="flex items-center justify-between mt-8 mb-4">
+                        <div>
+                          <h3 className="text-white font-bold text-base">Most Fifties</h3>
+                          <p className="text-white/45 text-xs mt-1">Half-century makers</p>
+                        </div>
+                        <span className="px-2 py-1 rounded text-[10px] font-bold uppercase" style={{ background: "rgba(59,212,231,0.20)", color: "#7ad6ff" }}>
+                          Top 10
+                        </span>
+                      </div>
+                      <div className="space-y-4">
+                        {mostFifties.slice(0, 10).map((row, idx) => {
+                          const logo = row.teamShort ? getTeamLogoProps(row.teamShort) : null;
+                          return (
+                            <motion.div key={`${row.player}-${idx}-50s`} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: idx * 0.02 }}>
+                              <div className="rounded-2xl px-4 py-3 md:px-5 md:py-4" style={{ background: "linear-gradient(90deg, rgba(6,10,22,0.92) 0%, rgba(8,12,28,0.9) 55%, rgba(6,10,22,0.92) 100%)", border: "1px solid rgba(150,170,255,0.14)" }}>
+                                <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-3 md:gap-4 items-stretch">
+                                  <div className="flex items-center gap-3 min-w-0 h-full md:self-center">
+                                    <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-black" style={{ background: "rgba(59,212,231,0.15)", border: "1px solid rgba(59,212,231,0.25)", color: "#7ad6ff", flexShrink: 0 }}>#{idx + 1}</div>
+                                    <div className="rounded-full overflow-hidden flex items-center justify-center" style={{ width: 48, height: 48, background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.12)", flexShrink: 0 }}>
+                                      {row.image ? <ImageWithFallback src={row.image} alt={row.player} fallbackMode="person" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : <span className="text-white/50 text-xs font-bold">N/A</span>}
+                                    </div>
+                                    <div className="min-w-0">
+                                      <p className="text-white font-semibold text-sm md:text-base leading-tight truncate">{row.player}</p>
+                                      <div className="flex items-center gap-2 mt-1">{logo && <TeamLogo teamId={logo.teamId} short={logo.short} size={18} />}<p className="text-white/45 text-xs truncate">{row.teamName || row.teamShort || "IPL"}</p></div>
+                                    </div>
+                                  </div>
+                                  <div className="flex items-center justify-end md:w-[120px]">
+                                    <div className="px-4 py-2 rounded-xl text-center" style={{ background: "rgba(59,212,231,0.14)", border: "1px solid rgba(59,212,231,0.18)" }}>
+                                      <p className="text-white/40 text-[10px] uppercase tracking-wide">50s</p>
+                                      <p className="text-[#7ad6ff] font-black text-lg">{row.value}</p>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            </motion.div>
+                          );
+                        })}
+                      </div>
+                    </>
+                  )}
+
+                  {mostSixes.length > 0 && (
+                    <>
+                      <div className="flex items-center justify-between mt-8 mb-4">
+                        <div>
+                          <h3 className="text-white font-bold text-base">Most Sixes</h3>
+                          <p className="text-white/45 text-xs mt-1">Maximum hitters</p>
+                        </div>
+                        <span className="px-2 py-1 rounded text-[10px] font-bold uppercase" style={{ background: "rgba(255,77,141,0.20)", color: "#ff9dc0" }}>
+                          Top 10
+                        </span>
+                      </div>
+                      <div className="space-y-4">
+                        {mostSixes.slice(0, 10).map((row, idx) => {
+                          const logo = row.teamShort ? getTeamLogoProps(row.teamShort) : null;
+                          return (
+                            <motion.div key={`${row.player}-${idx}-6s`} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: idx * 0.02 }}>
+                              <div className="rounded-2xl px-4 py-3 md:px-5 md:py-4" style={{ background: "linear-gradient(90deg, rgba(6,10,22,0.92) 0%, rgba(8,12,28,0.9) 55%, rgba(6,10,22,0.92) 100%)", border: "1px solid rgba(150,170,255,0.14)" }}>
+                                <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-3 md:gap-4 items-stretch">
+                                  <div className="flex items-center gap-3 min-w-0 h-full md:self-center">
+                                    <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-black" style={{ background: "rgba(255,77,141,0.15)", border: "1px solid rgba(255,77,141,0.25)", color: "#ff9dc0", flexShrink: 0 }}>#{idx + 1}</div>
+                                    <div className="rounded-full overflow-hidden flex items-center justify-center" style={{ width: 48, height: 48, background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.12)", flexShrink: 0 }}>
+                                      {row.image ? <ImageWithFallback src={row.image} alt={row.player} fallbackMode="person" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : <span className="text-white/50 text-xs font-bold">N/A</span>}
+                                    </div>
+                                    <div className="min-w-0">
+                                      <p className="text-white font-semibold text-sm md:text-base leading-tight truncate">{row.player}</p>
+                                      <div className="flex items-center gap-2 mt-1">{logo && <TeamLogo teamId={logo.teamId} short={logo.short} size={18} />}<p className="text-white/45 text-xs truncate">{row.teamName || row.teamShort || "IPL"}</p></div>
+                                    </div>
+                                  </div>
+                                  <div className="flex items-center justify-end md:w-[120px]">
+                                    <div className="px-4 py-2 rounded-xl text-center" style={{ background: "rgba(255,77,141,0.14)", border: "1px solid rgba(255,77,141,0.18)" }}>
+                                      <p className="text-white/40 text-[10px] uppercase tracking-wide">6s</p>
+                                      <p className="text-[#ff9dc0] font-black text-lg">{row.value}</p>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            </motion.div>
+                          );
+                        })}
+                      </div>
+                    </>
+                  )}
+
+                  {mostFours.length > 0 && (
+                    <>
+                      <div className="flex items-center justify-between mt-8 mb-4">
+                        <div>
+                          <h3 className="text-white font-bold text-base">Most Fours</h3>
+                          <p className="text-white/45 text-xs mt-1">Boundary hitters</p>
+                        </div>
+                        <span className="px-2 py-1 rounded text-[10px] font-bold uppercase" style={{ background: "rgba(0,230,118,0.20)", color: "#00E676" }}>
+                          Top 10
+                        </span>
+                      </div>
+                      <div className="space-y-4">
+                        {mostFours.slice(0, 10).map((row, idx) => {
+                          const logo = row.teamShort ? getTeamLogoProps(row.teamShort) : null;
+                          return (
+                            <motion.div key={`${row.player}-${idx}-4s`} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: idx * 0.02 }}>
+                              <div className="rounded-2xl px-4 py-3 md:px-5 md:py-4" style={{ background: "linear-gradient(90deg, rgba(6,10,22,0.92) 0%, rgba(8,12,28,0.9) 55%, rgba(6,10,22,0.92) 100%)", border: "1px solid rgba(150,170,255,0.14)" }}>
+                                <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-3 md:gap-4 items-stretch">
+                                  <div className="flex items-center gap-3 min-w-0 h-full md:self-center">
+                                    <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-black" style={{ background: "rgba(0,230,118,0.12)", border: "1px solid rgba(0,230,118,0.22)", color: "#00E676", flexShrink: 0 }}>#{idx + 1}</div>
+                                    <div className="rounded-full overflow-hidden flex items-center justify-center" style={{ width: 48, height: 48, background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.12)", flexShrink: 0 }}>
+                                      {row.image ? <ImageWithFallback src={row.image} alt={row.player} fallbackMode="person" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : <span className="text-white/50 text-xs font-bold">N/A</span>}
+                                    </div>
+                                    <div className="min-w-0">
+                                      <p className="text-white font-semibold text-sm md:text-base leading-tight truncate">{row.player}</p>
+                                      <div className="flex items-center gap-2 mt-1">{logo && <TeamLogo teamId={logo.teamId} short={logo.short} size={18} />}<p className="text-white/45 text-xs truncate">{row.teamName || row.teamShort || "IPL"}</p></div>
+                                    </div>
+                                  </div>
+                                  <div className="flex items-center justify-end md:w-[120px]">
+                                    <div className="px-4 py-2 rounded-xl text-center" style={{ background: "rgba(0,230,118,0.12)", border: "1px solid rgba(0,230,118,0.16)" }}>
+                                      <p className="text-white/40 text-[10px] uppercase tracking-wide">4s</p>
+                                      <p className="text-[#00E676] font-black text-lg">{row.value}</p>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            </motion.div>
+                          );
+                        })}
+                      </div>
+                    </>
+                  )}
+
                 </>
               )}
             </motion.div>

@@ -7,8 +7,10 @@ const POINTS_URL =
   "https://www.cricbuzz.com/cricket-series/9241/indian-premier-league-2026/points-table";
 const FIXTURES_URL = "https://www.iplt20.com/matches/fixtures";
 const RESULTS_URL = "https://www.iplt20.com/matches/results";
-const STATS_URL =
-  "https://www.cricbuzz.com/cricket-series/9241/indian-premier-league-2026/stats";
+const IPL_STATS_S3_BASE =
+  "https://ipl-stats-sports-mechanic.s3.ap-south-1.amazonaws.com/ipl/feeds/stats";
+const IPL_PLAYER_IMAGE_BASE =
+  "https://ipl-stats-sports-mechanic.s3.ap-south-1.amazonaws.com/ipl/playerimages";
 const SQUADS_URL =
   "https://www.cricbuzz.com/cricket-series/9241/indian-premier-league-2026/squads";
 const NEWS_URL =
@@ -128,6 +130,18 @@ const launchBrowser = async () =>
     headless: true,
     args: ["--no-sandbox", "--disable-setuid-sandbox"],
   });
+
+const fetchIplStatsJsonp = async (endpoint) => {
+  const cb = "on" + endpoint.replace(/-/g, "").replace("284", "");
+  const url = `${IPL_STATS_S3_BASE}/${endpoint}.js?callback=${cb}&_=${Date.now()}`;
+  const res = await fetch(url, {
+    headers: { "Referer": "https://www.iplt20.com/" },
+  });
+  const text = await res.text();
+  const match = text.match(/\((\{[\s\S]*\})\)/);
+  if (!match) return null;
+  return JSON.parse(match[1]);
+};
 
 const configurePage = async (page) => {
   await page.setUserAgent(
@@ -619,9 +633,147 @@ const parseMatchesFromText = (lines) => {
   return unique;
 };
 
+const parseGoogleStatsFromText = (lines) => {
+  const result = {
+    categories: { batting: [], bowling: [] },
+    leaders: [],
+    battingLeaders: [],
+    bowlingLeaders: [],
+    mostRuns: [],
+    mostWickets: [],
+    mostHundreds: [],
+    mostFifties: [],
+    highestScores: [],
+    bestBowling: [],
+    bestEconomy: [],
+    mostSixes: [],
+    mostFours: [],
+  };
+
+  // Look for category headers in text
+  let currentSection = null;
+  const sectionData = {};
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]?.toLowerCase() || "";
+
+    // Detect section headers
+    if (line.includes("most runs") || line.includes("orange cap")) {
+      currentSection = "mostRuns";
+      result.categories.batting.push("Most Runs");
+      sectionData[currentSection] = [];
+    } else if (line.includes("most wickets") || line.includes("purple cap")) {
+      currentSection = "mostWickets";
+      result.categories.bowling.push("Most Wickets");
+      sectionData[currentSection] = [];
+    } else if (line.includes("most hundreds") || line.includes("100s") || line.includes("hundreds")) {
+      currentSection = "mostHundreds";
+      result.categories.batting.push("Most Hundreds");
+      sectionData[currentSection] = [];
+    } else if (line.includes("most fifties") || line.includes("50s") || line.includes("fifties")) {
+      currentSection = "mostFifties";
+      result.categories.batting.push("Most Fifties");
+      sectionData[currentSection] = [];
+    } else if (line.includes("highest score")) {
+      currentSection = "highestScores";
+      result.categories.batting.push("Highest Scores");
+      sectionData[currentSection] = [];
+    } else if (line.includes("best bowling")) {
+      currentSection = "bestBowling";
+      result.categories.bowling.push("Best Bowling");
+      sectionData[currentSection] = [];
+    } else if (line.includes("best economy")) {
+      currentSection = "bestEconomy";
+      result.categories.bowling.push("Best Economy");
+      sectionData[currentSection] = [];
+    } else if (line.includes("most sixes")) {
+      currentSection = "mostSixes";
+      result.categories.batting.push("Most Sixes");
+      sectionData[currentSection] = [];
+    } else if (line.includes("most fours")) {
+      currentSection = "mostFours";
+      result.categories.batting.push("Most Fours");
+      sectionData[currentSection] = [];
+    }
+
+    // If we're in a section and find player-like lines
+    if (currentSection && line && !line.includes("most ") && !line.includes("best ")) {
+      // Look for lines that might contain player names and values
+      // Pattern: Player Name Team Value
+      const parts = lines[i].split(/\t+|\s{2,}/).filter(Boolean);
+      if (parts.length >= 3) {
+        const possibleValue = parts[parts.length - 1];
+        const possiblePlayer = parts[0];
+        const possibleTeam = parts[1];
+
+        // Check if last part looks like a number/stat
+        if (/^\d+/.test(possibleValue) || /^\d+\.\d+/.test(possibleValue) || /^\d+\/\d+/.test(possibleValue)) {
+          if (possiblePlayer.length > 2 && !possiblePlayer.match(/^\d+$/)) {
+            sectionData[currentSection].push({
+              player: possiblePlayer,
+              teamShort: possibleTeam,
+              teamName: possibleTeam,
+              value: possibleValue,
+              rank: sectionData[currentSection].length + 1,
+            });
+
+            if (sectionData[currentSection].length >= 5) {
+              currentSection = null; // Move to next section
+            }
+          }
+        }
+      }
+    }
+  }
+
+  // Transfer section data to result
+  Object.keys(sectionData).forEach((key) => {
+    if (sectionData[key].length > 0) {
+      result[key] = sectionData[key];
+
+      // Populate main leader arrays
+      if (key === "mostRuns") {
+        result.leaders = sectionData[key].map(p => ({
+          player: p.player,
+          image: null,
+          teamShort: p.teamShort,
+          teamName: p.teamName,
+          matches: null,
+          innings: null,
+          runs: parseInt(p.value) || null,
+          average: "-",
+          strikeRate: "-",
+          fours: null,
+          sixes: null,
+        }));
+        result.battingLeaders = result.leaders;
+      } else if (key === "mostWickets") {
+        result.bowlingLeaders = sectionData[key].map(p => ({
+          player: p.player,
+          image: null,
+          teamShort: p.teamShort,
+          teamName: p.teamName,
+          matches: null,
+          innings: null,
+          overs: "-",
+          runs: null,
+          wickets: parseInt(p.value) || null,
+          bbi: "-",
+          average: "-",
+          economy: "-",
+          strikeRate: "-",
+        }));
+      }
+    }
+  });
+
+  return result;
+};
+
 const parseStatsFromText = (lines) => {
   const start = lines.findIndex((line) => line.toLowerCase() === "batting");
   const tableHeaderIndex = lines.findIndex((line) => /player\s+matches\s+inns\s+runs\s+avg\s+sr/i.test(line));
+  const bowlingHeaderIndex = lines.findIndex((line) => /player\s+matches\s+inns\s+overs\s+runs\s+wkts\s+bbi\s+avg\s+econ\s+sr/i.test(line));
 
   if (start < 0 || tableHeaderIndex < 0) {
     return {
@@ -630,6 +782,8 @@ const parseStatsFromText = (lines) => {
         bowling: [],
       },
       leaders: [],
+      battingLeaders: [],
+      bowlingLeaders: [],
     };
   }
 
@@ -658,8 +812,9 @@ const parseStatsFromText = (lines) => {
     }
   }
 
-  const leaders = [];
-  for (let i = tableHeaderIndex + 1; i < lines.length; i += 1) {
+  const battingLeaders = [];
+  const battingEnd = bowlingHeaderIndex > tableHeaderIndex ? bowlingHeaderIndex : lines.length;
+  for (let i = tableHeaderIndex + 1; i < battingEnd; i += 1) {
     const line = lines[i];
     if (!line || line === ";" || /^home$/i.test(line)) {
       break;
@@ -670,7 +825,7 @@ const parseStatsFromText = (lines) => {
       continue;
     }
 
-    leaders.push({
+    battingLeaders.push({
       player: cols[0],
       matches: parseIntSafe(cols[1]),
       innings: parseIntSafe(cols[2]),
@@ -682,12 +837,42 @@ const parseStatsFromText = (lines) => {
     });
   }
 
+  const bowlingLeaders = [];
+  if (bowlingHeaderIndex >= 0) {
+    for (let i = bowlingHeaderIndex + 1; i < lines.length; i += 1) {
+      const line = lines[i];
+      if (!line || line === ";" || /^home$/i.test(line)) {
+        break;
+      }
+
+      const cols = line.split(/\t+/).map((c) => c.trim()).filter(Boolean);
+      if (cols.length < 10) {
+        continue;
+      }
+
+      bowlingLeaders.push({
+        player: cols[0],
+        matches: parseIntSafe(cols[1]),
+        innings: parseIntSafe(cols[2]),
+        overs: cols[3],
+        runs: parseIntSafe(cols[4]),
+        wickets: parseIntSafe(cols[5]),
+        bbi: cols[6],
+        average: cols[7],
+        economy: cols[8],
+        strikeRate: cols[9],
+      });
+    }
+  }
+
   return {
     categories: {
       batting: battingCategories,
       bowling: bowlingCategories,
     },
-    leaders,
+    leaders: battingLeaders,
+    battingLeaders,
+    bowlingLeaders,
   };
 };
 
@@ -891,40 +1076,224 @@ export const iplScraperService = {
   },
 
   async scrapeStats() {
-    let browser;
-
     try {
-      browser = await launchBrowser();
-      const page = await browser.newPage();
-      await configurePage(page);
-      await page.goto(STATS_URL, { waitUntil: "networkidle2", timeout: 60000 });
-
-      const textLines = await extractPageTextLines(page);
-      const parsed = parseStatsFromText(textLines);
-      if ((parsed?.leaders || []).length > 0) {
-        await writeSnapshot(IPL_CACHE_FILES.stats, parsed);
-        return parsed;
-      }
-
-      return await readSnapshot(IPL_CACHE_FILES.stats, {
+      const result = {
         categories: {
-          batting: [],
-          bowling: [],
+          batting: ["Most Runs"],
+          bowling: ["Most Wickets"],
         },
         leaders: [],
-      });
-    } catch {
-      return await readSnapshot(IPL_CACHE_FILES.stats, {
-        categories: {
-          batting: [],
-          bowling: [],
-        },
-        leaders: [],
-      });
-    } finally {
-      if (browser) {
-        await browser.close();
+        battingLeaders: [],
+        bowlingLeaders: [],
+        mostRuns: [],
+        mostWickets: [],
+        mostHundreds: [],
+        mostFifties: [],
+        highestScores: [],
+        bestBowling: [],
+        bestEconomy: [],
+        mostSixes: [],
+        mostFours: [],
+      };
+
+      // Fetch batting stats from iplt20.com S3 JSONP API
+      try {
+        const battingRes = await fetchIplStatsJsonp("284-toprunsscorers");
+        const battingData = battingRes?.toprunsscorers || [];
+
+        if (battingData.length > 0) {
+          result.battingLeaders = battingData.slice(0, 10).map((p) => ({
+            player: p.StrikerName,
+            image: `${IPL_PLAYER_IMAGE_BASE}/${encodeURIComponent(p.StrikerName)}.png`,
+            teamShort: p.TeamCode,
+            teamName: p.TeamName,
+            matches: parseIntSafe(p.Matches),
+            innings: parseIntSafe(p.Innings),
+            runs: parseIntSafe(p.TotalRuns),
+            average: p.BattingAverage || "-",
+            strikeRate: p.StrikeRate || "-",
+            fours: parseIntSafe(p.Fours),
+            sixes: parseIntSafe(p.Sixes),
+          }));
+          result.leaders = result.battingLeaders;
+
+          result.mostRuns = battingData.slice(0, 10).map((p, idx) => ({
+            rank: idx + 1,
+            player: p.StrikerName,
+            image: `${IPL_PLAYER_IMAGE_BASE}/${encodeURIComponent(p.StrikerName)}.png`,
+            teamShort: p.TeamCode,
+            teamName: p.TeamName,
+            value: String(p.TotalRuns),
+          }));
+
+          result.mostHundreds = battingData
+            .filter((p) => parseIntSafe(p.Centuries) > 0)
+            .sort((a, b) => parseIntSafe(b.Centuries) - parseIntSafe(a.Centuries))
+            .slice(0, 10)
+            .map((p, idx) => ({
+              rank: idx + 1,
+              player: p.StrikerName,
+              image: `${IPL_PLAYER_IMAGE_BASE}/${encodeURIComponent(p.StrikerName)}.png`,
+              teamShort: p.TeamCode,
+              teamName: p.TeamName,
+              value: String(p.Centuries),
+            }));
+
+          result.mostFifties = battingData
+            .filter((p) => parseIntSafe(p.FiftyPlusRuns) > 0)
+            .sort((a, b) => parseIntSafe(b.FiftyPlusRuns) - parseIntSafe(a.FiftyPlusRuns))
+            .slice(0, 10)
+            .map((p, idx) => ({
+              rank: idx + 1,
+              player: p.StrikerName,
+              image: `${IPL_PLAYER_IMAGE_BASE}/${encodeURIComponent(p.StrikerName)}.png`,
+              teamShort: p.TeamCode,
+              teamName: p.TeamName,
+              value: String(p.FiftyPlusRuns),
+            }));
+
+          result.mostSixes = battingData
+            .filter((p) => parseIntSafe(p.Sixes) > 0)
+            .sort((a, b) => parseIntSafe(b.Sixes) - parseIntSafe(a.Sixes))
+            .slice(0, 10)
+            .map((p, idx) => ({
+              rank: idx + 1,
+              player: p.StrikerName,
+              image: `${IPL_PLAYER_IMAGE_BASE}/${encodeURIComponent(p.StrikerName)}.png`,
+              teamShort: p.TeamCode,
+              teamName: p.TeamName,
+              value: String(p.Sixes),
+            }));
+
+          result.mostFours = battingData
+            .filter((p) => parseIntSafe(p.Fours) > 0)
+            .sort((a, b) => parseIntSafe(b.Fours) - parseIntSafe(a.Fours))
+            .slice(0, 10)
+            .map((p, idx) => ({
+              rank: idx + 1,
+              player: p.StrikerName,
+              image: `${IPL_PLAYER_IMAGE_BASE}/${encodeURIComponent(p.StrikerName)}.png`,
+              teamShort: p.TeamCode,
+              teamName: p.TeamName,
+              value: String(p.Fours),
+            }));
+        }
+      } catch (battingError) {
+        console.error("Batting stats fetch failed:", battingError);
       }
+
+      // Fetch bowling stats from iplt20.com S3 JSONP API
+      try {
+        const bowlingRes = await fetchIplStatsJsonp("284-mostwickets");
+        const bowlingData = bowlingRes?.mostwickets || [];
+
+        if (bowlingData.length > 0) {
+          result.bowlingLeaders = bowlingData.slice(0, 10).map((p) => ({
+            player: p.BowlerName,
+            image: `${IPL_PLAYER_IMAGE_BASE}/${encodeURIComponent(p.BowlerName)}.png`,
+            teamShort: p.TeamCode,
+            teamName: p.TeamName,
+            matches: parseIntSafe(p.Matches),
+            innings: parseIntSafe(p.Innings),
+            overs: p.OversBowled || "-",
+            runs: parseIntSafe(p.TotalRunsConceded),
+            wickets: parseIntSafe(p.Wickets),
+            bbi: p.BBIW || "-",
+            average: p.BowlingAverage || "-",
+            economy: p.EconomyRate || "-",
+            strikeRate: p.BowlingSR || p.StrikeRate || "-",
+          }));
+
+          result.mostWickets = bowlingData.slice(0, 10).map((p, idx) => ({
+            rank: idx + 1,
+            player: p.BowlerName,
+            image: `${IPL_PLAYER_IMAGE_BASE}/${encodeURIComponent(p.BowlerName)}.png`,
+            teamShort: p.TeamCode,
+            teamName: p.TeamName,
+            value: String(p.Wickets),
+          }));
+        }
+      } catch (bowlingError) {
+        console.error("Bowling stats fetch failed:", bowlingError);
+      }
+
+      // Fetch additional category leaderboards from iplt20.com S3 JSONP APIs
+      try {
+        const fiftiesRes = await fetchIplStatsJsonp("284-mostfifties");
+        const fiftiesData = fiftiesRes?.mostfifties || [];
+        if (fiftiesData.length > 0 && result.mostFifties.length === 0) {
+          result.mostFifties = fiftiesData.slice(0, 10).map((p, idx) => ({
+            rank: idx + 1,
+            player: p.StrikerName,
+            image: `${IPL_PLAYER_IMAGE_BASE}/${encodeURIComponent(p.StrikerName)}.png`,
+            teamShort: p.TeamCode,
+            teamName: p.TeamName,
+            value: String(p.FiftyPlusRuns),
+          }));
+        }
+      } catch (e) {
+        console.error("Most fifties fetch failed:", e);
+      }
+
+      try {
+        const sixesRes = await fetchIplStatsJsonp("284-mostsixes");
+        const sixesData = sixesRes?.mostsixes || [];
+        if (sixesData.length > 0 && result.mostSixes.length === 0) {
+          result.mostSixes = sixesData.slice(0, 10).map((p, idx) => ({
+            rank: idx + 1,
+            player: p.StrikerName,
+            image: `${IPL_PLAYER_IMAGE_BASE}/${encodeURIComponent(p.StrikerName)}.png`,
+            teamShort: p.TeamCode,
+            teamName: p.TeamName,
+            value: String(p.Sixes),
+          }));
+        }
+      } catch (e) {
+        console.error("Most sixes fetch failed:", e);
+      }
+
+      try {
+        const foursRes = await fetchIplStatsJsonp("284-mostfours");
+        const foursData = foursRes?.mostfours || [];
+        if (foursData.length > 0 && result.mostFours.length === 0) {
+          result.mostFours = foursData.slice(0, 10).map((p, idx) => ({
+            rank: idx + 1,
+            player: p.StrikerName,
+            image: `${IPL_PLAYER_IMAGE_BASE}/${encodeURIComponent(p.StrikerName)}.png`,
+            teamShort: p.TeamCode,
+            teamName: p.TeamName,
+            value: String(p.Fours),
+          }));
+        }
+      } catch (e) {
+        console.error("Most fours fetch failed:", e);
+      }
+
+      // Cache and return if we have data
+      if (result.battingLeaders.length > 0 || result.bowlingLeaders.length > 0) {
+        await writeSnapshot(IPL_CACHE_FILES.stats, result);
+        return result;
+      }
+
+      // Fallback to cached data
+      return await readSnapshot(IPL_CACHE_FILES.stats, {
+        categories: { batting: [], bowling: [] },
+        leaders: [],
+        battingLeaders: [],
+        bowlingLeaders: [],
+        mostRuns: [],
+        mostWickets: [],
+      });
+    } catch (error) {
+      console.error("Stats scraping failed:", error);
+      return await readSnapshot(IPL_CACHE_FILES.stats, {
+        categories: { batting: [], bowling: [] },
+        leaders: [],
+        battingLeaders: [],
+        bowlingLeaders: [],
+        mostRuns: [],
+        mostWickets: [],
+      });
     }
   },
 
