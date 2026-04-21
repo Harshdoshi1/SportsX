@@ -1,19 +1,91 @@
 import { iplScraperService } from "../services/iplScraperService.js";
 import { ok } from "../utils/response.js";
 
+const IPL_ENDPOINT_TTL_MS = 90 * 1000;
+
+const endpointCache = {
+  points: { data: null, meta: null, updatedAt: 0, pending: null },
+  matches: { data: null, meta: null, updatedAt: 0, pending: null },
+  stats: { data: null, meta: null, updatedAt: 0, pending: null },
+  squads: { data: null, meta: null, updatedAt: 0, pending: null },
+  news: { data: null, meta: null, updatedAt: 0, pending: null },
+};
+
+const setNoStore = (res) => {
+  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+  res.setHeader("Pragma", "no-cache");
+  res.setHeader("Expires", "0");
+};
+
+const shouldUseCached = (entry, forceFresh) => {
+  if (forceFresh) {
+    return false;
+  }
+  if (entry.data === null || entry.updatedAt <= 0) {
+    return false;
+  }
+  return Date.now() - entry.updatedAt < IPL_ENDPOINT_TTL_MS;
+};
+
+const resolveEndpoint = async (key, forceFresh, fetcher, metaFactory) => {
+  const entry = endpointCache[key];
+
+  if (shouldUseCached(entry, forceFresh)) {
+    return {
+      data: entry.data,
+      meta: entry.meta,
+      cached: true,
+    };
+  }
+
+  if (entry.pending) {
+    return entry.pending;
+  }
+
+  entry.pending = (async () => {
+    const data = await fetcher();
+    const meta = {
+      ...metaFactory(data),
+      scrapedAt: new Date().toISOString(),
+    };
+
+    entry.data = data;
+    entry.meta = meta;
+    entry.updatedAt = Date.now();
+
+    return {
+      data,
+      meta,
+      cached: false,
+    };
+  })();
+
+  try {
+    return await entry.pending;
+  } finally {
+    entry.pending = null;
+  }
+};
+
 export const iplController = {
-  async getPoints(_req, res, next) {
+  async getPoints(req, res, next) {
     try {
-      const points = await iplScraperService.scrapePointsTable();
+      setNoStore(res);
+      const forceFresh = String(req.query?.fresh || "") === "1";
+      const result = await resolveEndpoint(
+        "points",
+        forceFresh,
+        () => iplScraperService.scrapePointsTable(),
+        (points) => ({ source: "cricbuzz-scraper", count: points.length }),
+      );
       ok(
         res,
         {
-          points,
+          points: result.data,
         },
         {
-          source: "cricbuzz-scraper",
-          scrapedAt: new Date().toISOString(),
-          count: points.length,
+          ...result.meta,
+          cached: result.cached,
         },
       );
     } catch (error) {
@@ -21,18 +93,24 @@ export const iplController = {
     }
   },
 
-  async getMatches(_req, res, next) {
+  async getMatches(req, res, next) {
     try {
-      const matches = await iplScraperService.scrapeMatches();
+      setNoStore(res);
+      const forceFresh = String(req.query?.fresh || "") === "1";
+      const result = await resolveEndpoint(
+        "matches",
+        forceFresh,
+        () => iplScraperService.scrapeMatches(),
+        (matches) => ({ source: "cricbuzz-scraper", count: matches.length }),
+      );
       ok(
         res,
         {
-          matches,
+          matches: result.data,
         },
         {
-          source: "cricbuzz-scraper",
-          scrapedAt: new Date().toISOString(),
-          count: matches.length,
+          ...result.meta,
+          cached: result.cached,
         },
       );
     } catch (error) {
@@ -40,18 +118,24 @@ export const iplController = {
     }
   },
 
-  async getStats(_req, res, next) {
+  async getStats(req, res, next) {
     try {
-      const stats = await iplScraperService.scrapeStats();
+      setNoStore(res);
+      const forceFresh = String(req.query?.fresh || "") === "1";
+      const result = await resolveEndpoint(
+        "stats",
+        forceFresh,
+        () => iplScraperService.scrapeStats(),
+        (stats) => ({ source: "cricbuzz-scraper", count: stats?.leaders?.length || 0 }),
+      );
       ok(
         res,
         {
-          stats,
+          stats: result.data,
         },
         {
-          source: "cricbuzz-scraper",
-          scrapedAt: new Date().toISOString(),
-          count: stats?.leaders?.length || 0,
+          ...result.meta,
+          cached: result.cached,
         },
       );
     } catch (error) {
@@ -59,18 +143,24 @@ export const iplController = {
     }
   },
 
-  async getSquads(_req, res, next) {
+  async getSquads(req, res, next) {
     try {
-      const squads = await iplScraperService.scrapeSquads();
+      setNoStore(res);
+      const forceFresh = String(req.query?.fresh || "") === "1";
+      const result = await resolveEndpoint(
+        "squads",
+        forceFresh,
+        () => iplScraperService.scrapeSquads(),
+        (squads) => ({ source: "cricbuzz-scraper", count: squads?.players?.length || 0 }),
+      );
       ok(
         res,
         {
-          squads,
+          squads: result.data,
         },
         {
-          source: "cricbuzz-scraper",
-          scrapedAt: new Date().toISOString(),
-          count: squads?.players?.length || 0,
+          ...result.meta,
+          cached: result.cached,
         },
       );
     } catch (error) {
@@ -78,18 +168,24 @@ export const iplController = {
     }
   },
 
-  async getNews(_req, res, next) {
+  async getNews(req, res, next) {
     try {
-      const news = await iplScraperService.scrapeNews();
+      setNoStore(res);
+      const forceFresh = String(req.query?.fresh || "") === "1";
+      const result = await resolveEndpoint(
+        "news",
+        forceFresh,
+        () => iplScraperService.scrapeNews(),
+        (news) => ({ source: "cricbuzz-scraper", count: news.length }),
+      );
       ok(
         res,
         {
-          news,
+          news: result.data,
         },
         {
-          source: "cricbuzz-scraper",
-          scrapedAt: new Date().toISOString(),
-          count: news.length,
+          ...result.meta,
+          cached: result.cached,
         },
       );
     } catch (error) {

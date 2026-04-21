@@ -6,10 +6,12 @@ import { GlassCard } from "../ui/GlassCard";
 import { BackButton } from "../ui/BackButton";
 import { Breadcrumbs } from "../ui/Breadcrumbs";
 import { TeamLogo } from "../ui/TeamLogo";
+import { ImageWithFallback } from "../figma/ImageWithFallback";
 import { Calendar } from "lucide-react";
 import { cricketApi } from "../../services/cricketApi";
-import { deriveTeamShort, getTeamLogoProps, isIplTeamName, isUpcomingStatus, normalizeText, safeArray } from "../../services/cricketUi";
+import { deriveTeamShort, getTeamLogoProps, isIplTeamName, isUpcomingStatus, normalizeText, safeArray, slugify } from "../../services/cricketUi";
 import { getIplTeamByShort } from "../../data/iplTeams";
+import { IPL_PLAYER_IMAGES, IPL_STATS_SECTIONS } from "../../data/ipl2026";
 
 type LeagueKey = "ipl" | "f1-2026" | "epl";
 
@@ -150,6 +152,16 @@ export function League() {
           .sort((a, b) => b.pts - a.pts || b.won - a.won);
 
         const playerImageByName = new Map<string, { image: string | null; teamShort: string | null; teamName: string | null }>();
+        const statsImageByName = new Map<string, string>();
+
+        for (const section of IPL_STATS_SECTIONS) {
+          for (const entry of section.entries) {
+            const key = normalizeText(entry.player);
+            if (key && entry.image && !statsImageByName.has(key)) {
+              statsImageByName.set(key, entry.image);
+            }
+          }
+        }
         const playerResponses = await Promise.allSettled(
           teams.map((team) =>
             cricketApi.getTeamPlayers(team.short, {
@@ -202,19 +214,26 @@ export function League() {
           status: String(match?.status || ""),
         }));
 
-        const statsRows = safeArray<any>((statsRes as any)?.stats?.leaders).map((row) => ({
-          player: String(row?.player || "Unknown Player"),
-          image: playerImageByName.get(normalizeText(row?.player))?.image || null,
-          teamShort: playerImageByName.get(normalizeText(row?.player))?.teamShort || null,
-          teamName: playerImageByName.get(normalizeText(row?.player))?.teamName || null,
-          matches: row?.matches ?? null,
-          innings: row?.innings ?? null,
-          runs: row?.runs ?? null,
-          average: String(row?.average ?? "-"),
-          strikeRate: String(row?.strikeRate ?? "-"),
-          fours: row?.fours ?? null,
-          sixes: row?.sixes ?? null,
-        }));
+        const statsRows = safeArray<any>((statsRes as any)?.stats?.leaders).map((row) => {
+          const playerName = String(row?.player || "Unknown Player");
+          const key = normalizeText(playerName);
+          const slug = slugify(playerName);
+          const lookup = playerImageByName.get(key);
+
+          return {
+            player: playerName,
+            image: lookup?.image || IPL_PLAYER_IMAGES[slug] || statsImageByName.get(key) || null,
+            teamShort: lookup?.teamShort || null,
+            teamName: lookup?.teamName || null,
+            matches: row?.matches ?? null,
+            innings: row?.innings ?? null,
+            runs: row?.runs ?? null,
+            average: String(row?.average ?? "-"),
+            strikeRate: String(row?.strikeRate ?? "-"),
+            fours: row?.fours ?? null,
+            sixes: row?.sixes ?? null,
+          };
+        });
 
         const categories = {
           batting: safeArray<string>((statsRes as any)?.stats?.categories?.batting),
@@ -283,6 +302,8 @@ export function League() {
         .map((row, index) => ({ ...row, rank: index + 1 })),
     [iplStats],
   );
+
+  const topRunLeaders = useMemo(() => runLeaders.slice(0, 5), [runLeaders]);
 
   const runRankByPlayer = useMemo(() => {
     const rankMap = new Map<string, number>();
@@ -582,8 +603,18 @@ export function League() {
 
               {iplStats.length > 0 && (
                 <>
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-                    {iplStats.slice(0, 24).map((row, idx) => {
+                  <GlassCard className="p-5 mb-5" glow="none">
+                    <div className="flex items-center justify-between mb-3">
+                      <h3 className="text-white font-bold text-base">Orange Cap Race</h3>
+                      <span className="px-2 py-1 rounded text-[10px] font-bold uppercase" style={{ background: "rgba(255,145,0,0.18)", color: "#ffc57a" }}>
+                        Top 5
+                      </span>
+                    </div>
+                    <p className="text-white/45 text-xs">Live from current IPL stats endpoint. Showing top 5 run scorers.</p>
+                  </GlassCard>
+
+                  <div className="space-y-4">
+                    {topRunLeaders.map((row, idx) => {
                     const playerRank = runRankByPlayer.get(normalizeText(row.player)) ?? null;
                     const logo = row.teamShort ? getTeamLogoProps(row.teamShort) : null;
 
@@ -594,7 +625,7 @@ export function League() {
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ delay: idx * 0.02 }}
                       >
-                        <GlassCard className="p-4 h-full relative overflow-hidden" glow="none">
+                        <GlassCard className="p-4 relative overflow-hidden" glow="none">
                           {playerRank && (
                             <div
                               className="absolute top-3 right-3 px-2 py-1 rounded-md text-xs font-black"
@@ -607,7 +638,8 @@ export function League() {
                               #{playerRank}
                             </div>
                           )}
-                          <div className="flex items-start gap-3 mb-4">
+
+                          <div className="flex items-start gap-3 md:gap-4 mb-3">
                             <div
                               style={{
                                 width: 56,
@@ -623,9 +655,10 @@ export function League() {
                               }}
                             >
                               {row.image ? (
-                                <img
+                                <ImageWithFallback
                                   src={row.image}
                                   alt={row.player}
+                                  fallbackMode="person"
                                   style={{ width: "100%", height: "100%", objectFit: "cover" }}
                                 />
                               ) : (
@@ -633,31 +666,33 @@ export function League() {
                               )}
                             </div>
 
-                            <div className="min-w-0 flex-1">
-                              <p className="text-white font-semibold text-sm truncate">{row.player}</p>
-                              <div className="flex items-center gap-2 mt-1">
-                                {logo && <TeamLogo teamId={logo.teamId} short={logo.short} size={22} />}
-                                <p className="text-white/45 text-xs truncate">{row.teamName || row.teamShort || "IPL"}</p>
+                            <div className="min-w-0 flex-1 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                              <div className="min-w-0">
+                                <p className="text-white font-semibold text-base truncate">{row.player}</p>
+                                <div className="flex items-center gap-2 mt-1">
+                                  {logo && <TeamLogo teamId={logo.teamId} short={logo.short} size={22} />}
+                                  <p className="text-white/45 text-xs truncate">{row.teamName || row.teamShort || "IPL"}</p>
+                                </div>
+                              </div>
+
+                              <div className="grid grid-cols-3 gap-2 md:w-[360px]">
+                                <div className="p-2 rounded-md text-center" style={{ background: "rgba(59,212,231,0.12)" }}>
+                                  <p className="text-white/40 text-[10px] uppercase">Mat</p>
+                                  <p className="text-[#7ad6ff] font-bold text-sm">{row.matches ?? "-"}</p>
+                                </div>
+                                <div className="p-2 rounded-md text-center" style={{ background: "rgba(0,230,118,0.12)" }}>
+                                  <p className="text-white/40 text-[10px] uppercase">Runs</p>
+                                  <p className="text-[#00E676] font-bold text-sm">{row.runs ?? "-"}</p>
+                                </div>
+                                <div className="p-2 rounded-md text-center" style={{ background: "rgba(255,145,0,0.14)" }}>
+                                  <p className="text-white/40 text-[10px] uppercase">SR</p>
+                                  <p className="text-[#ffc57a] font-bold text-sm">{row.strikeRate}</p>
+                                </div>
                               </div>
                             </div>
                           </div>
 
-                          <div className="grid grid-cols-3 gap-2">
-                            <div className="p-2 rounded-md text-center" style={{ background: "rgba(59,212,231,0.12)" }}>
-                              <p className="text-white/40 text-[10px] uppercase">Mat</p>
-                              <p className="text-[#7ad6ff] font-bold text-sm">{row.matches ?? "-"}</p>
-                            </div>
-                            <div className="p-2 rounded-md text-center" style={{ background: "rgba(0,230,118,0.12)" }}>
-                              <p className="text-white/40 text-[10px] uppercase">Runs</p>
-                              <p className="text-[#00E676] font-bold text-sm">{row.runs ?? "-"}</p>
-                            </div>
-                            <div className="p-2 rounded-md text-center" style={{ background: "rgba(255,145,0,0.14)" }}>
-                              <p className="text-white/40 text-[10px] uppercase">SR</p>
-                              <p className="text-[#ffc57a] font-bold text-sm">{row.strikeRate}</p>
-                            </div>
-                          </div>
-
-                          <div className="mt-3 grid grid-cols-3 gap-2 text-xs text-white/65">
+                          <div className="grid grid-cols-3 gap-2 text-xs text-white/65 md:max-w-[360px] md:ml-auto">
                             <div>Avg: <span className="text-white/85">{row.average}</span></div>
                             <div>4s: <span className="text-white/85">{row.fours ?? "-"}</span></div>
                             <div>6s: <span className="text-white/85">{row.sixes ?? "-"}</span></div>
@@ -666,53 +701,6 @@ export function League() {
                       </motion.div>
                     );
                     })}
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mt-6">
-                    <GlassCard className="p-5" glow="none">
-                      <div className="flex items-center justify-between mb-3">
-                        <h3 className="text-white font-bold text-base">Most Runs</h3>
-                        <span className="px-2 py-1 rounded text-[10px] font-bold uppercase" style={{ background: "rgba(59,212,231,0.15)", color: "#7ad6ff" }}>
-                          Rank + Title
-                        </span>
-                      </div>
-                      <div className="space-y-2">
-                        {runLeaders.slice(0, 8).map((row) => (
-                          <div key={`runs-rank-${row.player}`} className="flex items-center justify-between rounded-md px-3 py-2" style={{ background: row.rank <= 3 ? "rgba(59,212,231,0.11)" : "rgba(255,255,255,0.04)" }}>
-                            <div className="flex items-center gap-3 min-w-0">
-                              <span className="text-[#7ad6ff] font-black text-sm w-6">#{row.rank}</span>
-                              <div className="min-w-0">
-                                <p className="text-white text-sm font-semibold truncate">{row.player}</p>
-                                <p className="text-white/45 text-xs truncate">{row.teamName || row.teamShort || "IPL"}</p>
-                              </div>
-                            </div>
-                            <p className="text-[#00E676] font-black text-sm">{row.runs ?? "-"}</p>
-                          </div>
-                        ))}
-                      </div>
-                    </GlassCard>
-
-                    <GlassCard className="p-5" glow="none">
-                      <div className="flex items-center justify-between mb-3">
-                        <h3 className="text-white font-bold text-base">Orange Cap Race</h3>
-                        <span className="px-2 py-1 rounded text-[10px] font-bold uppercase" style={{ background: "rgba(255,145,0,0.18)", color: "#ffc57a" }}>
-                          Top Batters
-                        </span>
-                      </div>
-                      <div className="space-y-2">
-                        {runLeaders.slice(0, 8).map((row) => (
-                          <div key={`orange-cap-${row.player}`} className="rounded-md px-3 py-2" style={{ background: row.rank === 1 ? "linear-gradient(135deg, rgba(255,145,0,0.22), rgba(255,193,102,0.12))" : "rgba(255,255,255,0.04)", border: row.rank === 1 ? "1px solid rgba(255,193,102,0.35)" : "1px solid rgba(255,255,255,0.06)" }}>
-                            <div className="flex items-center justify-between gap-3">
-                              <div className="min-w-0">
-                                <p className="text-white text-sm font-semibold truncate">#{row.rank} {row.player}</p>
-                                <p className="text-white/45 text-xs">Mat {row.matches ?? "-"} • SR {row.strikeRate || "-"}</p>
-                              </div>
-                              <span className="text-[#ffc57a] font-black text-sm">{row.runs ?? "-"} runs</span>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </GlassCard>
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mt-6">

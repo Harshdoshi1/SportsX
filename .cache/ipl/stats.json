@@ -1,0 +1,178 @@
+{
+  "updatedAt": "2026-04-21T06:01:51.445Z",
+  "data": {
+    "categories": {
+      "batting": [
+        "Most Runs",
+        "Highest Scores",
+        "Best Batting Average",
+        "Best Batting Strike Rate",
+        "Most Hundreds",
+        "Most Fifties",
+        "Most Fours",
+        "Most Sixes",
+        "Most Nineties"
+      ],
+      "bowling": [
+        "Most Wickets",
+        "Best Bowling Average",
+        "Best Bowling",
+        "Most 5 Wickets Haul",
+        "Best Economy",
+        "Best Bowling Strike Rate"
+      ]
+    },
+    "leaders": [
+      {
+        "player": "Heinrich Klaasen",
+        "matches": 6,
+        "innings": 6,
+        "runs": 283,
+        "average": "47.17",
+        "strikeRate": "144.39",
+        "fours": 19,
+        "sixes": 10
+      },
+      {
+        "player": "Shubman Gill",
+        "matches": 5,
+        "innings": 5,
+        "runs": 265,
+        "average": "53.00",
+        "strikeRate": "151.43",
+        "fours": 27,
+        "sixes": 10
+      },
+      {
+        "player": "Virat Kohli",
+        "matches": 6,
+        "innings": 6,
+        "runs": 247,
+        "average": "49.40",
+        "strikeRate": "157.32",
+        "fours": 28,
+        "sixes": 8
+      },
+      {
+        "player": "Vaibhav Sooryavanshi",
+        "matches": 6,
+        "innings": 6,
+        "runs": 246,
+        "average": "41.00",
+        "strikeRate": "236.54",
+        "fours": 24,
+        "sixes": 20
+      },
+      {
+        "player": "Rajat Patidar",
+        "matches": 6,
+        "innings": 6,
+        "runs": 230,
+        "average": "46.00",
+        "strikeRate": "212.96",
+        "fours": 12,
+        "sixes": 22
+      },
+      {
+        "player": "Cooper Connolly",
+        "matches": 6,
+        "innings": 5,
+        "runs": 223,
+        "average": "55.75",
+        "strikeRate": "163.97",
+        "fours": 21,
+        "sixes": 14
+      },
+      {
+        "player": "Yashasvi Jaiswal",
+        "matches": 6,
+        "innings": 6,
+        "runs": 223,
+        "average": "55.75",
+        "strikeRate": "152.74",
+        "fours": 23,
+        "sixes": 12
+      },
+      {
+        "player": "Ishan Kishan",
+        "matches": 6,
+        "innings": 6,
+        "runs": 213,
+        "average": "35.50",
+        "strikeRate": "188.50",
+        "fours": 22,
+        "sixes": 12
+      },
+      {
+        "player": "Prabhsimran Singh",
+        "matches": 6,
+        "innings": 5,
+        "runs": 211,
+        "average": "52.75",
+        "strikeRate": "171.54",
+        "fours": 22,
+        "sixes": 11
+      },
+      {
+        "player": "Priyansh Arya",
+        "matches": 5,
+        "innings": 5,
+        "runs": 211,
+        "average": "42.20",
+        "strikeRate": "248.24",
+        "fours": 14,
+        "sixes": 20
+      },
+      {
+        "player": "Shreyas Iyer",
+        "matches": 6,
+        "innings": 5,
+        "runs": 208,
+        "average": "52.00",
+        "strikeRate": "182.46",
+        "fours": 14,
+        "sixes": 14
+      },
+      {
+        "player": "Jos Buttler",
+        "matches": 6,
+        "innings": 6,
+        "runs": 206,
+        "average": "34.33",
+        "strikeRate": "156.06",
+        "fours": 25,
+        "sixes": 9
+      },
+      {
+        "player": "Philip Salt",
+        "matches": 6,
+        "innings": 6,
+        "runs": 202,
+        "average": "33.67",
+        "strikeRate": "168.33",
+        "fours": 16,
+        "sixes": 11
+      },
+      {
+        "player": "Ayush Mhatre",
+        "matches": 6,
+        "innings": 6,
+        "runs": 201,
+        "average": "33.50",
+        "strikeRate": "177.88",
+        "fours": 20,
+        "sixes": 12
+      },
+      {
+        "player": "Angkrish Raghuvanshi",
+        "matches": 7,
+        "innings": 7,
+        "runs": 200,
+        "average": "33.33",
+        "strikeRate": "142.86",
+        "fours": 23,
+        "sixes": 7
+      }
+    ]
+  }
+}

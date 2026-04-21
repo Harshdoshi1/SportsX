@@ -1,4 +1,7 @@
 import puppeteer from "puppeteer";
+import fs from "node:fs/promises";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 const POINTS_URL =
   "https://www.cricbuzz.com/cricket-series/9241/indian-premier-league-2026/points-table";
@@ -10,6 +13,47 @@ const SQUADS_URL =
   "https://www.cricbuzz.com/cricket-series/9241/indian-premier-league-2026/squads";
 const NEWS_URL =
   "https://www.cricbuzz.com/cricket-series/9241/indian-premier-league-2026/news";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const IPL_CACHE_DIR = path.join(__dirname, "..", "..", ".cache", "ipl");
+const IPL_CACHE_FILES = {
+  points: path.join(IPL_CACHE_DIR, "points.json"),
+  matches: path.join(IPL_CACHE_DIR, "matches.json"),
+  stats: path.join(IPL_CACHE_DIR, "stats.json"),
+  squads: path.join(IPL_CACHE_DIR, "squads.json"),
+  news: path.join(IPL_CACHE_DIR, "news.json"),
+};
+
+const ensureCacheDir = async () => {
+  await fs.mkdir(IPL_CACHE_DIR, { recursive: true });
+};
+
+const readSnapshot = async (filePath, fallbackValue) => {
+  try {
+    const raw = await fs.readFile(filePath, "utf8");
+    const parsed = JSON.parse(raw);
+    if (parsed && Object.prototype.hasOwnProperty.call(parsed, "data")) {
+      return parsed.data;
+    }
+    return fallbackValue;
+  } catch {
+    return fallbackValue;
+  }
+};
+
+const writeSnapshot = async (filePath, data) => {
+  try {
+    await ensureCacheDir();
+    await fs.writeFile(
+      filePath,
+      JSON.stringify({ updatedAt: new Date().toISOString(), data }, null, 2),
+      "utf8",
+    );
+  } catch {
+    // Ignore snapshot write errors to avoid blocking API responses.
+  }
+};
 
 const IPL_TEAM_ALIASES = {
   CSK: ["CSK", "Chennai Super Kings"],
@@ -792,13 +836,20 @@ export const iplScraperService = {
         .filter(Boolean);
 
       if (tableRows.length > 0) {
+        await writeSnapshot(IPL_CACHE_FILES.points, tableRows);
         return tableRows;
       }
 
       const textLines = await extractPageTextLines(page);
-      return parsePointsFromText(textLines);
+      const parsed = parsePointsFromText(textLines);
+      if (parsed.length > 0) {
+        await writeSnapshot(IPL_CACHE_FILES.points, parsed);
+        return parsed;
+      }
+
+      return await readSnapshot(IPL_CACHE_FILES.points, []);
     } catch {
-      return [];
+      return await readSnapshot(IPL_CACHE_FILES.points, []);
     } finally {
       if (browser) {
         await browser.close();
@@ -823,9 +874,15 @@ export const iplScraperService = {
       const completed = await extractIplt20Matches(resultsPage, "Completed");
       await resultsPage.close();
 
-      return normalizeIplt20Matches([...upcoming, ...completed]);
+      const normalized = normalizeIplt20Matches([...upcoming, ...completed]);
+      if (normalized.length > 0) {
+        await writeSnapshot(IPL_CACHE_FILES.matches, normalized);
+        return normalized;
+      }
+
+      return await readSnapshot(IPL_CACHE_FILES.matches, []);
     } catch {
-      return [];
+      return await readSnapshot(IPL_CACHE_FILES.matches, []);
     } finally {
       if (browser) {
         await browser.close();
@@ -843,15 +900,27 @@ export const iplScraperService = {
       await page.goto(STATS_URL, { waitUntil: "networkidle2", timeout: 60000 });
 
       const textLines = await extractPageTextLines(page);
-      return parseStatsFromText(textLines);
-    } catch {
-      return {
+      const parsed = parseStatsFromText(textLines);
+      if ((parsed?.leaders || []).length > 0) {
+        await writeSnapshot(IPL_CACHE_FILES.stats, parsed);
+        return parsed;
+      }
+
+      return await readSnapshot(IPL_CACHE_FILES.stats, {
         categories: {
           batting: [],
           bowling: [],
         },
         leaders: [],
-      };
+      });
+    } catch {
+      return await readSnapshot(IPL_CACHE_FILES.stats, {
+        categories: {
+          batting: [],
+          bowling: [],
+        },
+        leaders: [],
+      });
     } finally {
       if (browser) {
         await browser.close();
@@ -869,13 +938,23 @@ export const iplScraperService = {
       await page.goto(SQUADS_URL, { waitUntil: "networkidle2", timeout: 60000 });
 
       const textLines = await extractPageTextLines(page);
-      return parseSquadsFromText(textLines);
-    } catch {
-      return {
+      const parsed = parseSquadsFromText(textLines);
+      if ((parsed?.players || []).length > 0) {
+        await writeSnapshot(IPL_CACHE_FILES.squads, parsed);
+        return parsed;
+      }
+
+      return await readSnapshot(IPL_CACHE_FILES.squads, {
         teams: [],
         featuredTeam: null,
         players: [],
-      };
+      });
+    } catch {
+      return await readSnapshot(IPL_CACHE_FILES.squads, {
+        teams: [],
+        featuredTeam: null,
+        players: [],
+      });
     } finally {
       if (browser) {
         await browser.close();
@@ -893,9 +972,15 @@ export const iplScraperService = {
       await page.goto(NEWS_URL, { waitUntil: "networkidle2", timeout: 60000 });
 
       const textLines = await extractPageTextLines(page);
-      return parseNewsFromText(textLines);
+      const parsed = parseNewsFromText(textLines);
+      if (parsed.length > 0) {
+        await writeSnapshot(IPL_CACHE_FILES.news, parsed);
+        return parsed;
+      }
+
+      return await readSnapshot(IPL_CACHE_FILES.news, []);
     } catch {
-      return [];
+      return await readSnapshot(IPL_CACHE_FILES.news, []);
     } finally {
       if (browser) {
         await browser.close();

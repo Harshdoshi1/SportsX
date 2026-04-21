@@ -1,0 +1,95 @@
+{
+  "updatedAt": "2026-04-21T06:01:51.632Z",
+  "data": [
+    {
+      "team": "PBKS",
+      "played": 6,
+      "win": 5,
+      "loss": 0,
+      "nr": 1,
+      "points": 11,
+      "nrr": "+1.420"
+    },
+    {
+      "team": "RCB",
+      "played": 6,
+      "win": 4,
+      "loss": 2,
+      "nr": 0,
+      "points": 8,
+      "nrr": "+1.171"
+    },
+    {
+      "team": "RR",
+      "played": 6,
+      "win": 4,
+      "loss": 2,
+      "nr": 0,
+      "points": 8,
+      "nrr": "+0.599"
+    },
+    {
+      "team": "SRH",
+      "played": 6,
+      "win": 3,
+      "loss": 3,
+      "nr": 0,
+      "points": 6,
+      "nrr": "+0.566"
+    },
+    {
+      "team": "DC",
+      "played": 5,
+      "win": 3,
+      "loss": 2,
+      "nr": 0,
+      "points": 6,
+      "nrr": "+0.310"
+    },
+    {
+      "team": "GT",
+      "played": 6,
+      "win": 3,
+      "loss": 3,
+      "nr": 0,
+      "points": 6,
+      "nrr": "-0.821"
+    },
+    {
+      "team": "MI",
+      "played": 6,
+      "win": 2,
+      "loss": 4,
+      "nr": 0,
+      "points": 4,
+      "nrr": "+0.067"
+    },
+    {
+      "team": "CSK",
+      "played": 6,
+      "win": 2,
+      "loss": 4,
+      "nr": 0,
+      "points": 4,
+      "nrr": "-0.780"
+    },
+    {
+      "team": "LSG",
+      "played": 6,
+      "win": 2,
+      "loss": 4,
+      "nr": 0,
+      "points": 4,
+      "nrr": "-1.173"
+    },
+    {
+      "team": "KKR",
+      "played": 7,
+      "win": 1,
+      "loss": 5,
+      "nr": 1,
+      "points": 3,
+      "nrr": "-0.879"
+    }
+  ]
+}

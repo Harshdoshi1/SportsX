@@ -1,0 +1,140 @@
+{
+  "updatedAt": "2026-04-21T05:10:06.912Z",
+  "data": {
+    "teams": [
+      "Chennai Super Kings",
+      "Delhi Capitals",
+      "Gujarat Titans",
+      "Royal Challengers Bengaluru",
+      "Punjab Kings",
+      "Kolkata Knight Riders",
+      "Sunrisers Hyderabad",
+      "Rajasthan Royals",
+      "Lucknow Super Giants",
+      "Mumbai Indians"
+    ],
+    "featuredTeam": "Chennai Super Kings",
+    "players": [
+      {
+        "name": "Ruturaj Gaikwad (Captain)",
+        "roleGroup": "BATTERS",
+        "role": "Batsman"
+      },
+      {
+        "name": "Dewald Brevis",
+        "roleGroup": "BATTERS",
+        "role": "Batsman"
+      },
+      {
+        "name": "Ayush Mhatre",
+        "roleGroup": "BATTERS",
+        "role": "Batsman"
+      },
+      {
+        "name": "Matthew Short",
+        "roleGroup": "BATTERS",
+        "role": "Batsman"
+      },
+      {
+        "name": "Sarfaraz Khan",
+        "roleGroup": "BATTERS",
+        "role": "Batsman"
+      },
+      {
+        "name": "Shivam Dube",
+        "roleGroup": "ALL ROUNDERS",
+        "role": "Batting Allrounder"
+      },
+      {
+        "name": "Ramakrishna Ghosh",
+        "roleGroup": "ALL ROUNDERS",
+        "role": "Batting Allrounder"
+      },
+      {
+        "name": "Jamie Overton",
+        "roleGroup": "ALL ROUNDERS",
+        "role": "Bowling Allrounder"
+      },
+      {
+        "name": "Anshul Kamboj",
+        "roleGroup": "ALL ROUNDERS",
+        "role": "Bowling Allrounder"
+      },
+      {
+        "name": "Prashant Veer",
+        "roleGroup": "ALL ROUNDERS",
+        "role": "Bowling Allrounder"
+      },
+      {
+        "name": "Zakary Foulkes",
+        "roleGroup": "ALL ROUNDERS",
+        "role": "Bowling Allrounder"
+      },
+      {
+        "name": "Aman Khan",
+        "roleGroup": "ALL ROUNDERS",
+        "role": "Bowling Allrounder"
+      },
+      {
+        "name": "MS Dhoni",
+        "roleGroup": "WICKET KEEPERS",
+        "role": "WK-Batsman"
+      },
+      {
+        "name": "Urvil Patel",
+        "roleGroup": "WICKET KEEPERS",
+        "role": "WK-Batsman"
+      },
+      {
+        "name": "Sanju Samson",
+        "roleGroup": "WICKET KEEPERS",
+        "role": "WK-Batsman"
+      },
+      {
+        "name": "Kartik Sharma",
+        "roleGroup": "WICKET KEEPERS",
+        "role": "WK-Batsman"
+      },
+      {
+        "name": "Shreyas Gopal",
+        "roleGroup": "BOWLERS",
+        "role": "Bowler"
+      },
+      {
+        "name": "Gurjapneet Singh",
+        "roleGroup": "BOWLERS",
+        "role": "Bowler"
+      },
+      {
+        "name": "Mukesh Choudhary",
+        "roleGroup": "BOWLERS",
+        "role": "Bowler"
+      },
+      {
+        "name": "Noor Ahmad",
+        "roleGroup": "BOWLERS",
+        "role": "Bowler"
+      },
+      {
+        "name": "Akeal Hosein",
+        "roleGroup": "BOWLERS",
+        "role": "Bowler"
+      },
+      {
+        "name": "Matt Henry",
+        "roleGroup": "BOWLERS",
+        "role": "Bowler"
+      },
+      {
+        "name": "Rahul Chahar",
+        "roleGroup": "BOWLERS",
+        "role": "Bowler"
+      },
+      {
+        "name": "Spencer Johnson",
+        "roleGroup": "BOWLERS",
+        "role": "Bowler"
+      }
+    ]
+  }
+}

@@ -88,10 +88,18 @@ export interface ApiResponse<T> {
   data?: T;
 }
 
-async function request<T>(path: string): Promise<T> {
-  const cached = getCachedResponse<T>(path);
-  if (cached) {
-    return cached;
+type RequestOptions = {
+  bypassCache?: boolean;
+};
+
+async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
+  const cacheKey = path;
+
+  if (!options.bypassCache) {
+    const cached = getCachedResponse<T>(cacheKey);
+    if (cached) {
+      return cached;
+    }
   }
 
   if (Date.now() < globalRateLimitUntil) {
@@ -102,7 +110,8 @@ async function request<T>(path: string): Promise<T> {
     throw rateLimitedError;
   }
 
-  const existingRequest = inFlightRequests.get(path);
+  const inFlightKey = options.bypassCache ? `${path}::live` : path;
+  const existingRequest = inFlightRequests.get(inFlightKey);
   if (existingRequest) {
     return existingRequest as Promise<T>;
   }
@@ -111,7 +120,9 @@ async function request<T>(path: string): Promise<T> {
   let res: Response;
 
   try {
-    res = await fetch(`${API_BASE_URL}${path}`);
+    res = await fetch(`${API_BASE_URL}${path}`, {
+      cache: options.bypassCache ? "no-store" : "default",
+    });
   } catch {
     const networkError: ApiError = new Error(
       "Cannot reach backend API. Make sure the server is running on port 4000.",
@@ -132,9 +143,11 @@ async function request<T>(path: string): Promise<T> {
     const cooldownMs = retryAfterMs ?? 30_000;
     globalRateLimitUntil = Date.now() + cooldownMs;
 
-    const stale = getCachedResponse<T>(path);
-    if (stale) {
-      return stale;
+    if (!options.bypassCache) {
+      const stale = getCachedResponse<T>(cacheKey);
+      if (stale) {
+        return stale;
+      }
     }
   }
 
@@ -147,29 +160,41 @@ async function request<T>(path: string): Promise<T> {
     throw err;
   }
 
-  setCachedResponse(path, data);
+  if (!options.bypassCache) {
+    setCachedResponse(cacheKey, data);
+  }
   return data as T;
   })();
 
-  inFlightRequests.set(path, requestPromise);
+  inFlightRequests.set(inFlightKey, requestPromise);
 
   try {
     return await requestPromise;
   } finally {
-    inFlightRequests.delete(path);
+    inFlightRequests.delete(inFlightKey);
   }
 }
 
+const withFreshQuery = (basePath: string) => {
+  const separator = basePath.includes("?") ? "&" : "?";
+  return `${basePath}${separator}fresh=1&t=${Date.now()}`;
+};
+
 export const cricketApi = {
-  getIplPoints: () => request(`/ipl/points`),
+  getIplPoints: (fresh = false) =>
+    request(fresh ? withFreshQuery(`/ipl/points`) : `/ipl/points`, { bypassCache: fresh }),
 
-  getIplScrapedMatches: () => request(`/ipl/matches`),
+  getIplScrapedMatches: (fresh = false) =>
+    request(fresh ? withFreshQuery(`/ipl/matches`) : `/ipl/matches`, { bypassCache: fresh }),
 
-  getIplStats: () => request(`/ipl/stats`),
+  getIplStats: (fresh = false) =>
+    request(fresh ? withFreshQuery(`/ipl/stats`) : `/ipl/stats`, { bypassCache: fresh }),
 
-  getIplSquads: () => request(`/ipl/squads`),
+  getIplSquads: (fresh = false) =>
+    request(fresh ? withFreshQuery(`/ipl/squads`) : `/ipl/squads`, { bypassCache: fresh }),
 
-  getIplNews: () => request(`/ipl/news`),
+  getIplNews: (fresh = false) =>
+    request(fresh ? withFreshQuery(`/ipl/news`) : `/ipl/news`, { bypassCache: fresh }),
 
   getLiveMatches: (page = 1, limit = 20) =>
     request(`/matches/live?page=${page}&limit=${limit}`),
