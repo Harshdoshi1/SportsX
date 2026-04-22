@@ -11,6 +11,8 @@ import { LiveRoom } from "./components/pages/LiveRoom";
 import { Profile } from "./components/pages/Profile";
 import { TeamAnalysis } from "./components/pages/TeamAnalysis";
 import { PlayerAnalysis } from "./components/pages/PlayerAnalysis";
+import { MatchLounge } from "./components/pages/MatchLounge";
+import { LoungeRoom } from "./components/pages/LoungeRoom";
 
 export const router = createBrowserRouter([
   {
@@ -33,6 +35,9 @@ export const router = createBrowserRouter([
       { path: "match/:matchId", Component: MatchDetails },
       { path: "analytics", Component: Analytics },
       { path: "live-room/:matchId", Component: LiveRoom },
+      // Lounge system
+      { path: "lounge/:matchId", Component: MatchLounge },
+      { path: "lounge/:matchId/room/:roomId", Component: LoungeRoom },
       { path: "profile", Component: Profile },
     ],
   },

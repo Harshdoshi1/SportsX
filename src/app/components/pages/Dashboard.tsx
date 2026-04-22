@@ -1,13 +1,15 @@
-import { useEffect, useMemo, useState } from "react";
-import { motion } from "motion/react";
+import { useEffect, useMemo, useState, useCallback } from "react";
+import { motion, AnimatePresence } from "motion/react";
 import { Navbar } from "../ui/Navbar";
 import { GlassCard } from "../ui/GlassCard";
 import { useNavigate } from "react-router";
-import { TrendingUp, Users, Activity, Trophy, ChevronRight, Star, Flame } from "lucide-react";
+import { TrendingUp, Users, Activity, Trophy, ChevronRight, Star, Flame, Clock, MapPin, Zap, Timer } from "lucide-react";
 import { ImageWithFallback } from "../figma/ImageWithFallback";
 import { TeamLogo } from "../ui/TeamLogo";
 import { cricketApi } from "../../services/cricketApi";
-import { getTeamLogoProps, isLiveStatus, isUpcomingStatus, safeArray } from "../../services/cricketUi";
+import { getTeamLogoProps, isLiveStatus, isUpcomingStatus, safeArray, deriveTeamShort } from "../../services/cricketUi";
+import { IPL_STANDINGS } from "../../data/ipl2026";
+import { getIplTeamByShort, type IplTeamId } from "../../data/iplTeams";
 
 const CRICKET_ICON_IMAGE =
   "https://img.freepik.com/free-vector/red-ball-hitting-wicket-stumps-with-bat-black-abstract-splash-background-cricket-fever-concept_1302-5492.jpg?semt=ais_hybrid&w=740&q=80";
@@ -27,15 +29,35 @@ const sports = [
   { id: "basketball", name: "Basketball", icon: "🏀", color: "#FF4D8D", shadow: "rgba(255,77,141,0.3)", desc: "NBA · EuroLeague" },
 ];
 
+/* ─── Tournament Favorites ─── */
+type TournamentFilter = {
+  id: string;
+  name: string;
+  short: string;
+  logo?: string;
+  color: string;
+};
+
+const cricketTournaments: TournamentFilter[] = [
+  { id: "ipl", name: "Indian Premier League", short: "IPL", logo: "/assets/teams/IPL_logo.webp", color: "#3BD4E7" },
+  { id: "icc", name: "ICC World Cup", short: "ICC", color: "#FF9100" },
+  { id: "hundred", name: "The Hundred", short: "100s", color: "#7C4DFF" },
+  { id: "bbl", name: "Big Bash League", short: "BBL", color: "#FF4D8D" },
+];
+
 type UiMatch = {
   id: string;
   league: string;
   teamA: string;
   teamB: string;
+  teamADisplay: string;
+  teamBDisplay: string;
   score: string;
   status: string;
   date: string;
   startTime: string;
+  venue: string;
+  matchNo: string;
 };
 
 const formatMatchDateSafe = (value: unknown) => {
@@ -65,6 +87,8 @@ const toUiMatch = (match: any): UiMatch => ({
   league: match?.series || "Indian Premier League 2026",
   teamA: match?.team1 || match?.teamA || "Team A",
   teamB: match?.team2 || match?.teamB || "Team B",
+  teamADisplay: match?.team1Name || match?.team1Display || match?.team1 || "Team A",
+  teamBDisplay: match?.team2Name || match?.team2Display || match?.team2 || "Team B",
   score:
     match?.score ||
     (match?.team1Score || match?.team2Score
@@ -73,7 +97,238 @@ const toUiMatch = (match: any): UiMatch => ({
   status: match?.status || "Status unavailable",
   date: formatMatchDateSafe(match?.date || match?.starts_at || match?.startsAt),
   startTime: String(match?.startTime || "").trim(),
+  venue: match?.venue || "Venue TBA",
+  matchNo: String(match?.matchNo || "").trim(),
 });
+
+/* ─── Countdown Timer Hook ─── */
+function useCountdown(targetTimeString: string, dateString: string) {
+  const [timeLeft, setTimeLeft] = useState({ hours: 0, minutes: 0, seconds: 0, isExpired: true });
+
+  useEffect(() => {
+    const parseTargetDate = () => {
+      // Try to parse "7:30 PM IST" style time with date
+      const timeMatch = targetTimeString.match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i);
+      if (!timeMatch) return null;
+
+      let hours = parseInt(timeMatch[1]);
+      const minutes = parseInt(timeMatch[2]);
+      const ampm = timeMatch[3].toUpperCase();
+
+      if (ampm === "PM" && hours !== 12) hours += 12;
+      if (ampm === "AM" && hours === 12) hours = 0;
+
+      // Get today's date in IST
+      const now = new Date();
+      const target = new Date(now);
+      target.setHours(hours, minutes, 0, 0);
+
+      // If date is provided and is in the future, use it
+      if (dateString) {
+        const dateParts = dateString.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+        if (dateParts) {
+          target.setFullYear(parseInt(dateParts[3]), parseInt(dateParts[2]) - 1, parseInt(dateParts[1]));
+        }
+      }
+
+      return target;
+    };
+
+    const target = parseTargetDate();
+    if (!target) {
+      setTimeLeft({ hours: 0, minutes: 0, seconds: 0, isExpired: true });
+      return;
+    }
+
+    const interval = setInterval(() => {
+      const now = new Date();
+      const diff = target.getTime() - now.getTime();
+
+      if (diff <= 0) {
+        setTimeLeft({ hours: 0, minutes: 0, seconds: 0, isExpired: true });
+        return;
+      }
+
+      const hours = Math.floor(diff / (1000 * 60 * 60));
+      const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+      const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+
+      setTimeLeft({ hours, minutes, seconds, isExpired: false });
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [targetTimeString, dateString]);
+
+  return timeLeft;
+}
+
+/* ─── Countdown Display Component ─── */
+function CountdownTimer({ startTime, date }: { startTime: string; date: string }) {
+  const { hours, minutes, seconds, isExpired } = useCountdown(startTime, date);
+
+  if (isExpired || !startTime) {
+    return (
+      <div className="flex items-center gap-1.5 text-xs">
+        <Timer size={12} className="text-[#FF4D8D]" />
+        <span className="text-[#FF4D8D] font-semibold">{startTime ? "Match Started" : "Time TBA"}</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex items-center gap-2">
+      <Timer size={14} className="text-[#FF9100]" />
+      <div className="flex items-center gap-1">
+        {[
+          { value: hours, label: "h" },
+          { value: minutes, label: "m" },
+          { value: seconds, label: "s" },
+        ].map(({ value, label }, i) => (
+          <div key={label} className="flex items-center">
+            {i > 0 && (
+              <motion.span
+                animate={{ opacity: [1, 0.3, 1] }}
+                transition={{ duration: 1, repeat: Infinity }}
+                className="text-white/30 font-bold mx-0.5"
+              >
+                :
+              </motion.span>
+            )}
+            <div
+              className="px-1.5 py-0.5 rounded-md text-center min-w-[28px]"
+              style={{ background: "rgba(255,145,0,0.12)", border: "1px solid rgba(255,145,0,0.25)" }}
+            >
+              <span className="text-sm font-black font-mono" style={{ color: "#ffc57a" }}>
+                {String(value).padStart(2, "0")}
+              </span>
+              <span className="text-[8px] text-white/30 ml-0.5">{label}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ─── Premium Match Card ─── */
+function PremiumMatchCard({ match, index }: { match: UiMatch; index: number }) {
+  const navigate = useNavigate();
+  const teamA = getTeamLogoProps(match.teamA);
+  const teamB = getTeamLogoProps(match.teamB);
+
+  // Win Probability from standings
+  const team1Standing = IPL_STANDINGS.find(s => s.short === match.teamA || s.short === deriveTeamShort(match.teamA));
+  const team2Standing = IPL_STANDINGS.find(s => s.short === match.teamB || s.short === deriveTeamShort(match.teamB));
+  const team1WinRate = team1Standing ? (team1Standing.won / Math.max(team1Standing.played, 1)) * 100 : 50;
+  const team2WinRate = team2Standing ? (team2Standing.won / Math.max(team2Standing.played, 1)) * 100 : 50;
+  const totalRate = team1WinRate + team2WinRate || 1;
+  const team1Prob = Math.round((team1WinRate / totalRate) * 100);
+  const team2Prob = 100 - team1Prob;
+
+  const matchRouteId = `${match.teamA.toLowerCase()}-vs-${match.teamB.toLowerCase()}`;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: 0.3 + index * 0.1 }}
+    >
+      <GlassCard className="p-0 overflow-hidden" hover>
+        {/* Top gradient accent */}
+        <div className="h-1" style={{ background: "linear-gradient(90deg, #FF4D8D, #7C4DFF, #3BD4E7)" }} />
+
+        <div className="p-5 md:p-6">
+          {/* League Header */}
+          <div className="flex items-center justify-between mb-5">
+            <div className="flex items-center gap-2.5">
+              <div className="w-7 h-7 rounded-lg overflow-hidden flex items-center justify-center" style={{ background: "#fff", border: "1px solid rgba(255,255,255,0.2)" }}>
+                <img src="/assets/teams/IPL_logo.webp" alt="IPL" className="w-5 h-5 object-contain" />
+              </div>
+              <div>
+                <span className="text-white/70 text-xs font-semibold">Indian Premier League 2026</span>
+                {match.matchNo && <span className="text-white/30 text-xs ml-2">• {match.matchNo}</span>}
+              </div>
+            </div>
+            <CountdownTimer startTime={match.startTime} date={match.date} />
+          </div>
+
+          {/* Teams */}
+          <div className="grid grid-cols-[1fr_auto_1fr] gap-4 items-center mb-5">
+            {/* Team A */}
+            <div className="flex items-center gap-3">
+              <TeamLogo teamId={teamA.teamId} short={teamA.short} size={48} />
+              <div>
+                <p className="text-white font-black text-base md:text-lg">{match.teamA}</p>
+                <p className="text-white/35 text-xs truncate">{match.teamADisplay}</p>
+              </div>
+            </div>
+
+            {/* VS */}
+            <div className="text-center">
+              <div
+                className="w-10 h-10 rounded-xl flex items-center justify-center mx-auto"
+                style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)" }}
+              >
+                <span className="text-white/40 font-black text-xs">VS</span>
+              </div>
+            </div>
+
+            {/* Team B */}
+            <div className="flex items-center gap-3 justify-end">
+              <div className="text-right">
+                <p className="text-white font-black text-base md:text-lg">{match.teamB}</p>
+                <p className="text-white/35 text-xs truncate">{match.teamBDisplay}</p>
+              </div>
+              <TeamLogo teamId={teamB.teamId} short={teamB.short} size={48} />
+            </div>
+          </div>
+
+          {/* Venue */}
+          <div className="flex items-center gap-1.5 text-xs text-white/35 mb-4">
+            <MapPin size={11} />
+            <span>{match.venue}</span>
+            <span className="text-white/20 mx-1">·</span>
+            <span className="text-[#3BD4E7]">{match.date}{match.startTime ? `, ${match.startTime}` : ""}</span>
+          </div>
+
+          {/* Win Probability */}
+          <div className="mb-5">
+            <div className="flex items-center justify-between text-xs mb-1.5">
+              <span className="font-bold" style={{ color: "#FF4D8D" }}>{match.teamA} {team1Prob}%</span>
+              <span className="text-white/25 text-[10px] uppercase tracking-wider">Win Probability</span>
+              <span className="font-bold" style={{ color: "#3BD4E7" }}>{match.teamB} {team2Prob}%</span>
+            </div>
+            <div className="h-1.5 rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.06)" }}>
+              <motion.div
+                initial={{ width: "50%" }}
+                animate={{ width: `${team1Prob}%` }}
+                transition={{ duration: 1.5, ease: "easeOut" }}
+                className="h-full rounded-full"
+                style={{ background: "linear-gradient(90deg, #FF4D8D, #7C4DFF)" }}
+              />
+            </div>
+          </div>
+
+          {/* Join Lounge Button */}
+          <motion.button
+            whileHover={{ scale: 1.02, y: -1 }}
+            whileTap={{ scale: 0.98 }}
+            onClick={() => navigate(`/lounge/${matchRouteId}`)}
+            className="w-full flex items-center justify-center gap-2.5 px-5 py-3 rounded-xl font-bold text-sm text-white"
+            style={{
+              background: "linear-gradient(135deg, #7C4DFF, #FF4D8D)",
+              boxShadow: "0 4px 20px rgba(124,77,255,0.3), 0 0 40px rgba(255,77,141,0.15)",
+            }}
+          >
+            <Users size={16} />
+            Join Lounge
+            <ChevronRight size={14} />
+          </motion.button>
+        </div>
+      </GlassCard>
+    </motion.div>
+  );
+}
 
 export function Dashboard() {
   const navigate = useNavigate();
@@ -83,6 +338,25 @@ export function Dashboard() {
   const [teamsCount, setTeamsCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Tournament favorites
+  const [favTournaments, setFavTournaments] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem("sportsx-fav-tournaments");
+      return saved ? JSON.parse(saved) : ["ipl"];
+    } catch {
+      return ["ipl"];
+    }
+  });
+
+  const toggleFavTournament = useCallback((id: string) => {
+    setFavTournaments((prev) => {
+      const next = prev.includes(id) ? prev.filter((t) => t !== id) : [...prev, id];
+      const result = next.length === 0 ? [id] : next;
+      localStorage.setItem("sportsx-fav-tournaments", JSON.stringify(result));
+      return result;
+    });
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -109,10 +383,9 @@ export function Dashboard() {
         const scrapedIpl = safeArray<any>((iplScrapedRes as any).matches).map(toUiMatch);
         const fallbackIpl = safeArray<any>((iplRes as any).matches).map(toUiMatch);
         const ipl = scrapedIpl.length > 0 ? scrapedIpl : fallbackIpl;
-        const upcoming =
-          ipl.filter((match) => isUpcomingStatus(match.status)).slice(0, 8).length > 0
-            ? ipl.filter((match) => isUpcomingStatus(match.status)).slice(0, 8)
-            : rawUpcoming;
+        const upcoming = ipl.filter((match) => isUpcomingStatus(match.status)).length > 0
+          ? ipl.filter((match) => isUpcomingStatus(match.status))
+          : rawUpcoming;
         const teams = safeArray<any>((teamsRes as any).teams);
 
         setLiveMatches(live);
@@ -149,7 +422,7 @@ export function Dashboard() {
   );
 
   const liveMatchCards = liveMatches.filter((match) => isLiveStatus(match.status)).slice(0, 3);
-  const upcomingMatchCards = upcomingMatches.slice(0, 3);
+  const upcomingMatchCards = upcomingMatches.slice(0, 6);
 
   return (
     <motion.div
@@ -273,140 +546,168 @@ export function Dashboard() {
           </div>
         </div>
 
-        {/* Live Matches + Upcoming */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Live Matches */}
-          <div className="lg:col-span-2">
-            <div className="flex items-center gap-3 mb-5">
-              <div className="flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold" style={{ background: "rgba(255,77,141,0.15)", border: "1px solid rgba(255,77,141,0.3)", color: "#FF4D8D" }}>
-                <motion.div animate={{ scale: [1, 1.4, 1] }} transition={{ duration: 1.2, repeat: Infinity }} className="w-1.5 h-1.5 rounded-full bg-[#FF4D8D]" />
-                LIVE
-              </div>
-              <h2 className="text-xl font-bold text-white">Live Matches</h2>
+        {/* ─── Live Matches + Tournament Favorites ─── */}
+        <div>
+          <div className="flex items-center gap-3 mb-5">
+            <div className="flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold" style={{ background: "rgba(255,77,141,0.15)", border: "1px solid rgba(255,77,141,0.3)", color: "#FF4D8D" }}>
+              <motion.div animate={{ scale: [1, 1.4, 1] }} transition={{ duration: 1.2, repeat: Infinity }} className="w-1.5 h-1.5 rounded-full bg-[#FF4D8D]" />
+              LIVE
             </div>
-            <div className="space-y-4">
-              {liveMatchCards.length === 0 && (
-                <GlassCard className="p-5">
-                  <p className="text-white/50 text-sm">No live matches available right now from the API.</p>
-                </GlassCard>
-              )}
+            <h2 className="text-xl font-bold text-white">Live Matches</h2>
+          </div>
 
-              {liveMatchCards.map((match, i) => {
-                const teamA = getTeamLogoProps(match.teamA);
-                const teamB = getTeamLogoProps(match.teamB);
-
-                return (
-                <motion.div
-                  key={match.id}
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: 0.3 + i * 0.1 }}
+          {/* ─── Tournament Favorite Chips ─── */}
+          <div className="flex items-center gap-2 mb-6 flex-wrap">
+            <span className="text-white/30 text-xs mr-1">Favorites:</span>
+            {cricketTournaments.map((t) => {
+              const isSelected = favTournaments.includes(t.id);
+              return (
+                <motion.button
+                  key={t.id}
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                  onClick={() => toggleFavTournament(t.id)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all"
+                  style={
+                    isSelected
+                      ? {
+                          background: `${t.color}20`,
+                          border: `1px solid ${t.color}60`,
+                          color: t.color,
+                          boxShadow: `0 0 12px ${t.color}30`,
+                        }
+                      : {
+                          background: "rgba(255,255,255,0.04)",
+                          border: "1px solid rgba(255,255,255,0.08)",
+                          color: "rgba(255,255,255,0.35)",
+                        }
+                  }
                 >
-                  <GlassCard className="p-5 cursor-pointer" hover onClick={() => navigate(`/match/${match.id}`)}>
-                    <div className="flex items-center justify-between mb-4">
-                      <span className="text-xs font-semibold text-white/40">{match.league}</span>
-                      <div className="flex items-center gap-3">
-                        <span className="text-white/40 text-xs">{match.date}</span>
-                        <button
-                          onClick={(e) => { e.stopPropagation(); navigate(`/live-room/${match.id}`); }}
-                          className="px-3 py-1 rounded-lg text-xs font-semibold"
-                          style={{ background: "rgba(124,77,255,0.2)", border: "1px solid rgba(124,77,255,0.4)", color: "#a78bfa" }}
-                        >
-                          Join Room
-                        </button>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-4">
-                      <div className="flex-1">
-                        <div className="flex items-center justify-between mb-2">
-                          <div className="flex items-center gap-2">
-                            <TeamLogo teamId={teamA.teamId} short={teamA.short} size={28} />
-                            <span className="text-white font-bold">{match.teamA}</span>
-                          </div>
-                          <span className="text-white font-black text-sm md:text-base">{match.score}</span>
-                        </div>
-                        <div className="h-px my-2" style={{ background: "rgba(255,255,255,0.06)" }} />
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <TeamLogo teamId={teamB.teamId} short={teamB.short} size={28} />
-                            <span className="text-white font-bold">{match.teamB}</span>
-                          </div>
-                          <span className="text-white/60 text-xs uppercase">{match.status}</span>
-                        </div>
-                      </div>
-                    </div>
-                  </GlassCard>
-                </motion.div>
-              );})}
-            </div>
+                  <Star size={11} fill={isSelected ? t.color : "none"} />
+                  {t.logo && (
+                    <img src={t.logo} alt={t.short} className="w-4 h-4 object-contain rounded-sm" style={{ background: isSelected ? "#fff" : "transparent" }} />
+                  )}
+                  {t.short}
+                </motion.button>
+              );
+            })}
           </div>
 
-          {/* Upcoming + Trending */}
-          <div className="space-y-5">
-            <div>
-              <h2 className="text-xl font-bold text-white mb-4">Upcoming</h2>
-              <div className="space-y-3">
-                {upcomingMatchCards.length === 0 && (
-                  <GlassCard className="p-4">
-                    <p className="text-white/50 text-sm">No upcoming fixtures returned by the API.</p>
-                  </GlassCard>
-                )}
-
-                {upcomingMatchCards.map((match, i) => (
-                  <motion.div
-                    key={match.id}
-                    initial={{ opacity: 0, x: 20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: 0.3 + i * 0.1 }}
-                  >
-                    <GlassCard className="p-4 cursor-pointer" hover onClick={() => navigate(`/match/${match.id}`)}>
-                      <div className="text-white/30 text-xs mb-2">{match.league}</div>
-                      <div className="flex items-center justify-between">
-                        <div className="text-white font-semibold text-sm">{match.teamA} vs {match.teamB}</div>
-                        <ChevronRight size={14} className="text-white/30" />
-                      </div>
-                      <div className="text-[#3BD4E7] text-xs mt-1.5 font-medium">
-                        {match.date}
-                        {match.startTime ? `, ${match.startTime}` : ""}
-                      </div>
-                    </GlassCard>
-                  </motion.div>
-                ))}
-              </div>
-            </div>
-
-            {/* Trending */}
-            <div>
-              <h2 className="text-xl font-bold text-white mb-4">🔥 Trending</h2>
+          {/* Live Match Cards */}
+          <div className="space-y-4 mb-8">
+            {liveMatchCards.length === 0 && (
               <GlassCard className="p-5">
-                <div className="space-y-4">
-                  {(iplMatches.slice(0, 3).map((m, index) => ({
-                    name: `${m.teamA} vs ${m.teamB}`,
-                    detail: `${m.status} · ${m.score}`,
-                    badge: index === 0 ? "#1" : index === 1 ? "HOT" : "#3",
-                  })) ).map((item, i) => (
-                    <div key={i} className="flex items-center gap-3">
-                      <div
-                        className="w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold flex-shrink-0"
-                        style={{
-                          background: i === 0 ? "rgba(255,145,0,0.15)" : "rgba(255,255,255,0.05)",
-                          border: i === 0 ? "1px solid rgba(255,145,0,0.3)" : "1px solid rgba(255,255,255,0.06)",
-                          color: i === 0 ? "#FF9100" : "rgba(255,255,255,0.4)",
-                        }}
-                      >
-                        {item.badge}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-white text-sm font-semibold truncate">{item.name}</p>
-                        <p className="text-white/30 text-xs truncate">{item.detail}</p>
-                      </div>
-                      <Star size={14} className="text-white/20 flex-shrink-0" />
-                    </div>
-                  ))}
-                </div>
+                <p className="text-white/50 text-sm">No live matches available right now from the API.</p>
               </GlassCard>
-            </div>
+            )}
+
+            {liveMatchCards.map((match, i) => {
+              const teamA = getTeamLogoProps(match.teamA);
+              const teamB = getTeamLogoProps(match.teamB);
+              const matchRouteId = `${match.teamA.toLowerCase()}-vs-${match.teamB.toLowerCase()}`;
+
+              return (
+              <motion.div
+                key={match.id}
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: 0.3 + i * 0.1 }}
+              >
+                <GlassCard className="p-5 cursor-pointer" hover onClick={() => navigate(`/match/${match.id}`)}>
+                  <div className="flex items-center justify-between mb-4">
+                    <span className="text-xs font-semibold text-white/40">{match.league}</span>
+                    <div className="flex items-center gap-3">
+                      <span className="text-white/40 text-xs">{match.date}</span>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); navigate(`/lounge/${matchRouteId}`); }}
+                        className="px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5"
+                        style={{ background: "linear-gradient(135deg, rgba(124,77,255,0.3), rgba(255,77,141,0.3))", border: "1px solid rgba(124,77,255,0.4)", color: "#e0d0ff" }}
+                      >
+                        <Users size={12} />
+                        Join Lounge
+                      </button>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <div className="flex-1">
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          <TeamLogo teamId={teamA.teamId} short={teamA.short} size={28} />
+                          <span className="text-white font-bold">{match.teamA}</span>
+                        </div>
+                        <span className="text-white font-black text-sm md:text-base">{match.score}</span>
+                      </div>
+                      <div className="h-px my-2" style={{ background: "rgba(255,255,255,0.06)" }} />
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <TeamLogo teamId={teamB.teamId} short={teamB.short} size={28} />
+                          <span className="text-white font-bold">{match.teamB}</span>
+                        </div>
+                        <span className="text-white/60 text-xs uppercase">{match.status}</span>
+                      </div>
+                    </div>
+                  </div>
+                </GlassCard>
+              </motion.div>
+            );})}
           </div>
+        </div>
+
+        {/* ─── Upcoming IPL Matches (Premium Cards) ─── */}
+        <div>
+          <div className="flex items-center justify-between mb-5">
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold" style={{ background: "rgba(124,77,255,0.15)", border: "1px solid rgba(124,77,255,0.3)", color: "#a78bfa" }}>
+                <Clock size={11} />
+                UPCOMING
+              </div>
+              <h2 className="text-xl font-bold text-white">Today's Matches</h2>
+            </div>
+            <span className="text-white/30 text-sm">{upcomingMatchCards.length} fixtures</span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            {upcomingMatchCards.length === 0 && (
+              <GlassCard className="p-5 md:col-span-2">
+                <p className="text-white/50 text-sm">No upcoming fixtures returned by the API.</p>
+              </GlassCard>
+            )}
+            {upcomingMatchCards.map((match, i) => (
+              <PremiumMatchCard key={match.id} match={match} index={i} />
+            ))}
+          </div>
+        </div>
+
+        {/* Trending */}
+        <div>
+          <h2 className="text-xl font-bold text-white mb-4">🔥 Trending</h2>
+          <GlassCard className="p-5">
+            <div className="space-y-4">
+              {(iplMatches.slice(0, 3).map((m, index) => ({
+                name: `${m.teamA} vs ${m.teamB}`,
+                detail: `${m.status} · ${m.score}`,
+                badge: index === 0 ? "#1" : index === 1 ? "HOT" : "#3",
+              })) ).map((item, i) => (
+                <div key={i} className="flex items-center gap-3">
+                  <div
+                    className="w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold flex-shrink-0"
+                    style={{
+                      background: i === 0 ? "rgba(255,145,0,0.15)" : "rgba(255,255,255,0.05)",
+                      border: i === 0 ? "1px solid rgba(255,145,0,0.3)" : "1px solid rgba(255,255,255,0.06)",
+                      color: i === 0 ? "#FF9100" : "rgba(255,255,255,0.4)",
+                    }}
+                  >
+                    {item.badge}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-white text-sm font-semibold truncate">{item.name}</p>
+                    <p className="text-white/30 text-xs truncate">{item.detail}</p>
+                  </div>
+                  <Star size={14} className="text-white/20 flex-shrink-0" />
+                </div>
+              ))}
+            </div>
+          </GlassCard>
         </div>
       </div>
     </motion.div>
