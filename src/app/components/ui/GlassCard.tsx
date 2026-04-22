@@ -7,6 +7,7 @@ interface GlassCardProps {
   hover?: boolean;
   glow?: "blue" | "purple" | "pink" | "green" | "none";
   onClick?: () => void;
+  style?: React.CSSProperties;
 }
 
 const glowMap = {
@@ -17,7 +18,7 @@ const glowMap = {
   none: "",
 };
 
-export function GlassCard({ children, className = "", hover = false, glow = "blue", onClick }: GlassCardProps) {
+export function GlassCard({ children, className = "", hover = false, glow = "blue", onClick, style }: GlassCardProps) {
   return (
     <motion.div
       onClick={onClick}
@@ -30,6 +31,7 @@ export function GlassCard({ children, className = "", hover = false, glow = "blu
         background: "rgba(6, 9, 22, 0.82)",
         borderColor: "rgba(123, 142, 214, 0.2)",
         boxShadow: "0 14px 34px rgba(0, 0, 0, 0.62), inset 0 1px 0 rgba(255, 255, 255, 0.03)",
+        ...style,
       }}
       whileHover={hover ? { scale: 1.02, y: -2 } : {}}
       transition={{ duration: 0.2 }}

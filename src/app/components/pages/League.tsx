@@ -12,6 +12,8 @@ import { cricketApi } from "../../services/cricketApi";
 import { deriveTeamShort, getTeamLogoProps, isIplTeamName, isUpcomingStatus, normalizeText, safeArray, slugify } from "../../services/cricketUi";
 import { getIplTeamByShort } from "../../data/iplTeams";
 import { IPL_PLAYER_IMAGES, IPL_STATS_SECTIONS } from "../../data/ipl2026";
+import { hasUnifiedAdapter } from "../../sports/adapters";
+import { UnifiedLeague } from "../../sports/pages/UnifiedLeague";
 
 type LeagueKey = "ipl" | "f1-2026" | "epl";
 
@@ -456,6 +458,12 @@ export function League() {
   };
 
   if (leagueKey !== "ipl") {
+    // Use the new unified sport page for leagues with adapters
+    if (leagueId && hasUnifiedAdapter(leagueId)) {
+      return <UnifiedLeague />;
+    }
+
+    // Fallback for leagues without adapters (e.g. laliga, bundesliga, euroleague)
     const generic = genericSnapshots[leagueKey];
     return (
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.4 }} className="min-h-screen">
