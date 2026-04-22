@@ -1,21 +1,6 @@
 {
-  "updatedAt": "2026-04-21T11:32:29.694Z",
+  "updatedAt": "2026-04-22T07:13:34.430Z",
   "data": [
-    {
-      "id": "2471",
-      "matchNo": "Match 31",
-      "team1": "SRH",
-      "team2": "DC",
-      "team1Name": "Sunrisers Hyderabad",
-      "team2Name": "Delhi Capitals",
-      "team1Score": null,
-      "team2Score": null,
-      "date": "APR, TUE 21",
-      "startTime": "7:30 pm IST",
-      "venue": "Rajiv Gandhi International Stadium, Hyderabad",
-      "status": "Upcoming",
-      "result": null
-    },
     {
       "id": "2472",
       "matchNo": "Match 32",
@@ -600,6 +585,21 @@
       "venue": "Eden Gardens, Kolkata",
       "status": "Upcoming",
       "result": null
+    },
+    {
+      "id": "2471",
+      "matchNo": "Match 31",
+      "team1": "SRH",
+      "team2": "DC",
+      "team1Name": "Sunrisers Hyderabad",
+      "team2Name": "Delhi Capitals",
+      "team1Score": "242/2 (20.0 OV)",
+      "team2Score": "195/9 (20.0 OV )",
+      "date": "APR, TUE 21",
+      "startTime": "7:30 pm IST",
+      "venue": "Rajiv Gandhi International Stadium, Hyderabad",
+      "status": "Completed",
+      "result": "Sunrisers Hyderabad Won by 47 Runs"
     },
     {
       "id": "2470",

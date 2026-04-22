@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-04-21T11:25:05.985Z",
+  "updatedAt": "2026-04-22T07:13:29.496Z",
   "data": [
     {
       "team": "PBKS",
@@ -20,6 +20,15 @@
       "nrr": "+1.171"
     },
     {
+      "team": "SRH",
+      "played": 7,
+      "win": 4,
+      "loss": 3,
+      "nr": 0,
+      "points": 8,
+      "nrr": "+0.820"
+    },
+    {
       "team": "RR",
       "played": 6,
       "win": 4,
@@ -29,22 +38,13 @@
       "nrr": "+0.599"
     },
     {
-      "team": "SRH",
+      "team": "DC",
       "played": 6,
       "win": 3,
       "loss": 3,
       "nr": 0,
       "points": 6,
-      "nrr": "+0.566"
-    },
-    {
-      "team": "DC",
-      "played": 5,
-      "win": 3,
-      "loss": 2,
-      "nr": 0,
-      "points": 6,
-      "nrr": "+0.310"
+      "nrr": "-0.130"
     },
     {
       "team": "GT",

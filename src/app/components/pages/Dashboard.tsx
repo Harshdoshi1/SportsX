@@ -7,10 +7,21 @@ import { TrendingUp, Users, Activity, Trophy, ChevronRight, Star, Flame } from "
 import { ImageWithFallback } from "../figma/ImageWithFallback";
 import { TeamLogo } from "../ui/TeamLogo";
 import { cricketApi } from "../../services/cricketApi";
-import { formatApiDate, getTeamLogoProps, isLiveStatus, safeArray } from "../../services/cricketUi";
+import { getTeamLogoProps, isLiveStatus, isUpcomingStatus, safeArray } from "../../services/cricketUi";
+
+const CRICKET_ICON_IMAGE =
+  "https://img.freepik.com/free-vector/red-ball-hitting-wicket-stumps-with-bat-black-abstract-splash-background-cricket-fever-concept_1302-5492.jpg?semt=ais_hybrid&w=740&q=80";
 
 const sports = [
-  { id: "cricket", name: "Cricket", icon: "🏏", color: "#00E676", shadow: "rgba(0,230,118,0.3)", desc: "IPL · World Cup · Big Bash" },
+  {
+    id: "cricket",
+    name: "Cricket",
+    icon: "🏏",
+    iconImage: CRICKET_ICON_IMAGE,
+    color: "#00E676",
+    shadow: "rgba(0,230,118,0.3)",
+    desc: "IPL · World Cup · Big Bash",
+  },
   { id: "football", name: "Football", icon: "⚽", color: "#3BD4E7", shadow: "rgba(59,212,231,0.3)", desc: "Premier League · Champions League" },
   { id: "f1", name: "Formula 1", icon: "🏎️", color: "#FF9100", shadow: "rgba(255,145,0,0.3)", desc: "F1 2026 Championship" },
   { id: "basketball", name: "Basketball", icon: "🏀", color: "#FF4D8D", shadow: "rgba(255,77,141,0.3)", desc: "NBA · EuroLeague" },
@@ -24,16 +35,44 @@ type UiMatch = {
   score: string;
   status: string;
   date: string;
+  startTime: string;
+};
+
+const formatMatchDateSafe = (value: unknown) => {
+  const raw = String(value || "").trim();
+  if (!raw) {
+    return "TBD";
+  }
+
+  if (/[A-Za-z]{3}/.test(raw) && !/\d{4}/.test(raw)) {
+    return raw;
+  }
+
+  const parsed = new Date(raw);
+  if (!Number.isNaN(parsed.getTime())) {
+    return parsed.toLocaleDateString("en-IN", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+    });
+  }
+
+  return raw;
 };
 
 const toUiMatch = (match: any): UiMatch => ({
   id: String(match?.id || `${match?.team1 || "team1"}-${match?.team2 || "team2"}-${match?.date || "date"}`),
-  league: match?.series || "Cricket",
-  teamA: match?.team1 || "Team A",
-  teamB: match?.team2 || "Team B",
-  score: match?.score || "Score unavailable",
+  league: match?.series || "Indian Premier League 2026",
+  teamA: match?.team1 || match?.teamA || "Team A",
+  teamB: match?.team2 || match?.teamB || "Team B",
+  score:
+    match?.score ||
+    (match?.team1Score || match?.team2Score
+      ? `${match?.team1Score || "-"} · ${match?.team2Score || "-"}`
+      : "Score unavailable"),
   status: match?.status || "Status unavailable",
-  date: formatApiDate(match?.date),
+  date: formatMatchDateSafe(match?.date || match?.starts_at || match?.startsAt),
+  startTime: String(match?.startTime || "").trim(),
 });
 
 export function Dashboard() {
@@ -53,10 +92,11 @@ export function Dashboard() {
         setLoading(true);
         setError(null);
 
-        const [liveRes, upcomingRes, iplRes, teamsRes] = await Promise.all([
+        const [liveRes, upcomingRes, iplRes, iplScrapedRes, teamsRes] = await Promise.all([
           cricketApi.getLiveMatches(1, 8),
           cricketApi.getUpcomingMatches(1, 8),
           cricketApi.getIplMatches(1, 30),
+          cricketApi.getIplScrapedMatches(),
           cricketApi.getTeams({ page: 1, limit: 500 }),
         ]);
 
@@ -65,8 +105,14 @@ export function Dashboard() {
         }
 
         const live = safeArray<any>((liveRes as any).matches).map(toUiMatch);
-        const upcoming = safeArray<any>((upcomingRes as any).matches).map(toUiMatch);
-        const ipl = safeArray<any>((iplRes as any).matches).map(toUiMatch);
+        const rawUpcoming = safeArray<any>((upcomingRes as any).matches).map(toUiMatch);
+        const scrapedIpl = safeArray<any>((iplScrapedRes as any).matches).map(toUiMatch);
+        const fallbackIpl = safeArray<any>((iplRes as any).matches).map(toUiMatch);
+        const ipl = scrapedIpl.length > 0 ? scrapedIpl : fallbackIpl;
+        const upcoming =
+          ipl.filter((match) => isUpcomingStatus(match.status)).slice(0, 8).length > 0
+            ? ipl.filter((match) => isUpcomingStatus(match.status)).slice(0, 8)
+            : rawUpcoming;
         const teams = safeArray<any>((teamsRes as any).teams);
 
         setLiveMatches(live);
@@ -203,13 +249,18 @@ export function Dashboard() {
                   hover
                   onClick={() => navigate(`/sport/${sport.id}`)}
                 >
-                  <motion.div
-                    whileHover={{ scale: 1.2, rotate: [0, -10, 10, 0] }}
-                    transition={{ duration: 0.4 }}
-                    className="text-5xl mb-4 block"
-                  >
-                    {sport.icon}
-                  </motion.div>
+                  {sport.iconImage ? (
+                    <div
+                      className="w-14 h-14 rounded-2xl overflow-hidden mx-auto mb-4"
+                      style={{ border: "1px solid rgba(255,255,255,0.15)" }}
+                    >
+                      <img src={sport.iconImage} alt={`${sport.name} logo`} className="w-full h-full object-cover" loading="lazy" />
+                    </div>
+                  ) : (
+                    <div className="text-5xl mb-4 block">
+                      {sport.icon}
+                    </div>
+                  )}
                   <h3 className="text-white font-bold mb-1">{sport.name}</h3>
                   <p className="text-white/30 text-xs">{sport.desc}</p>
                   <div className="mt-4 flex items-center justify-center gap-1 text-xs font-medium" style={{ color: sport.color }}>
@@ -314,7 +365,10 @@ export function Dashboard() {
                         <div className="text-white font-semibold text-sm">{match.teamA} vs {match.teamB}</div>
                         <ChevronRight size={14} className="text-white/30" />
                       </div>
-                      <div className="text-[#3BD4E7] text-xs mt-1.5 font-medium">{match.date}</div>
+                      <div className="text-[#3BD4E7] text-xs mt-1.5 font-medium">
+                        {match.date}
+                        {match.startTime ? `, ${match.startTime}` : ""}
+                      </div>
                     </GlassCard>
                   </motion.div>
                 ))}

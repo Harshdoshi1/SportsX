@@ -50,12 +50,85 @@ const resolveTeamSelection = (input: string | undefined) => {
   return { short: "RCB", slug: TEAM_SLUG_BY_SHORT.RCB };
 };
 
-const RCB_FIXED_LINEUP = {
-  openers: ["Virat Kohli", "Phil Salt"],
-  middle: ["Devdutt Padikkal", "Rajat Patidar", "Jitesh Sharma"],
-  finishers: ["Tim David", "Romario Shepherd", "Krunal Pandya"],
-  bowlers: ["Suyash Sharma", "Bhuvneshwar Kumar", "Josh Hazlewood"],
-  impactPlayers: ["Rasikh Dar", "Jacob Bethell", "Swapnil Singh"],
+type TeamFixedLineup = {
+  openers: string[];
+  middle: string[];
+  finishers: string[];
+  bowlers: string[];
+  impactPlayers: string[];
+};
+
+const TEAM_FIXED_LINEUPS: Record<string, TeamFixedLineup> = {
+  RCB: {
+    openers: ["Virat Kohli", "Phil Salt"],
+    middle: ["Devdutt Padikkal", "Rajat Patidar", "Jitesh Sharma"],
+    finishers: ["Tim David", "Romario Shepherd", "Krunal Pandya"],
+    bowlers: ["Suyash Sharma", "Bhuvneshwar Kumar", "Josh Hazlewood"],
+    impactPlayers: ["Rasikh Dar", "Jacob Bethell", "Swapnil Singh"],
+  },
+  MI: {
+    openers: ["Rohit", "DeCock"],
+    middle: ["Surya", "Tilak", "Naman Dhir"],
+    finishers: ["Rutherford", "Hardik"],
+    bowlers: ["Santner", "Allah", "Bumrah", "Ashwini"],
+    impactPlayers: [],
+  },
+  CSK: {
+    openers: ["Sanju", "Ruturaj"],
+    middle: ["Ayush", "Sarfaraz", "Brevis"],
+    finishers: ["Shivam", "MS Dhoni"],
+    bowlers: ["Anshul", "Noor", "Gurjapneet", "Jamie Overton"],
+    impactPlayers: ["Hosein"],
+  },
+  PBKS: {
+    openers: ["Priyansh", "Prabh Simran"],
+    middle: ["Cooper", "Shreyas", "Nehal"],
+    finishers: ["Stoinis", "Shashank", "Jansen"],
+    bowlers: ["Bartlett", "Arshdeep", "Chahal"],
+    impactPlayers: [],
+  },
+  SRH: {
+    openers: ["Abhishek", "Head"],
+    middle: ["Kishan", "Klaasen", "Nitish"],
+    finishers: ["Salil", "Aniket"],
+    bowlers: ["Pat Cummins", "Eshan Malinga", "Shivang", "Sakib"],
+    impactPlayers: ["Livingstone"],
+  },
+  DC: {
+    openers: ["Rahul", "Nissanka"],
+    middle: ["Axar", "Stubs", "Sameer"],
+    finishers: ["Miller", "Ashutosh"],
+    bowlers: ["Ngidi", "Natarajan", "Mukesh", "Kuldeep"],
+    impactPlayers: ["Starc"],
+  },
+  KKR: {
+    openers: ["Fin", "Rahane"],
+    middle: ["Raghuvanshi", "Green", "Anukul"],
+    finishers: ["Rinku", "Powell", "Narine", "Ramandeep"],
+    bowlers: ["Varun", "Arora", "Tyagi"],
+    impactPlayers: [],
+  },
+  RR: {
+    openers: ["Vaibhav", "Jaiswal"],
+    middle: ["Jurel", "Parag", "Donovan"],
+    finishers: ["Hetmyer", "Jadeja"],
+    bowlers: ["Archer", "Bishnoi", "Sandeep", "Burger"],
+    impactPlayers: [],
+  },
+  LSG: {
+    openers: ["Marsh", "Markram"],
+    middle: ["Pant", "Badoni", "Pooran"],
+    finishers: ["Samad", "Mukul"],
+    bowlers: ["Prince", "Digvesh", "Shami", "Avesh"],
+    impactPlayers: [],
+  },
+  GT: {
+    openers: ["Gill", "Sai"],
+    middle: ["Buttler", "Sunder", "Phillips"],
+    finishers: ["Tewatia", "Shahrukh"],
+    bowlers: ["Rashid", "Rabada", "Krishna", "Siraj"],
+    impactPlayers: [],
+  },
 };
 
 type ApiTeam = {
@@ -111,7 +184,6 @@ type StatsLeader = {
 
 const isBatterRole = (role?: string | null) => /(batter|batsman|wk|wicket)/i.test(String(role || ""));
 const isBowlingRole = (role?: string | null) => /(bowler|all.?rounder)/i.test(String(role || ""));
-const isRcbTeamName = (teamName?: string | null) => /royal challengers|\brcb\b/i.test(String(teamName || ""));
 
 const normalizeNameKey = (value?: string | null) =>
   String(value || "")
@@ -201,23 +273,83 @@ const pickBestPlayingXi = (squad: ApiPlayer[]) => {
   return selected.slice(0, 11);
 };
 
+const findPlayerByName = (players: ApiPlayer[], requestedName: string) => {
+  const target = normalizeNameKey(requestedName);
+  if (!target) return null;
+
+  const exact = players.find((player) => normalizeNameKey(player.name) === target);
+  if (exact) return exact;
+
+  const containsMatch = players.find((player) => {
+    const key = normalizeNameKey(player.name);
+    return key.includes(target) || target.includes(key);
+  });
+  if (containsMatch) return containsMatch;
+
+  const requestedTokens = String(requestedName)
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter((token) => token.length > 1);
+
+  if (requestedTokens.length === 0) {
+    return null;
+  }
+
+  const scored = players
+    .map((player) => {
+      const playerTokens = String(player.name || "")
+        .toLowerCase()
+        .split(/[^a-z0-9]+/)
+        .filter((token) => token.length > 1);
+
+      const score = requestedTokens.reduce((acc, token) => {
+        const tokenMatched = playerTokens.some((playerToken) => playerToken.includes(token) || token.includes(playerToken));
+        return tokenMatched ? acc + 1 : acc;
+      }, 0);
+
+      return { player, score };
+    })
+    .sort((left, right) => right.score - left.score);
+
+  return scored[0]?.score > 0 ? scored[0].player : null;
+};
+
 const pickPlayersByNames = (players: ApiPlayer[], names: string[]) => {
-  const byName = new Map(players.map((player) => [normalizeNameKey(player.name), player]));
-  return names
-    .map((name) => byName.get(normalizeNameKey(name)))
-    .filter(Boolean) as ApiPlayer[];
+  return names.map((name) => {
+    const found = findPlayerByName(players, name);
+    if (found) {
+      return found;
+    }
+
+    // Keep card visible even when API naming differs from the custom XI list.
+    return {
+      id: `manual-${normalizeNameKey(name)}`,
+      name,
+      role: "Custom Selection",
+      season: "2026",
+      matches: 0,
+      runs: 0,
+      wickets: 0,
+      average: 0,
+      strikeRate: 0,
+      economy: 0,
+    } as ApiPlayer;
+  });
 };
 
 const buildLineupGroups = (xiPlayers, allPlayers, teamName?: string | null) => {
-  if (isRcbTeamName(teamName)) {
+  const teamShort = deriveTeamShort(teamName);
+  const fixedLineup = TEAM_FIXED_LINEUPS[teamShort];
+
+  if (fixedLineup) {
     return {
       groups: [
-        { title: "Openers", players: pickPlayersByNames(allPlayers, RCB_FIXED_LINEUP.openers) },
-        { title: "Middle order", players: pickPlayersByNames(allPlayers, RCB_FIXED_LINEUP.middle) },
-        { title: "Finishers", players: pickPlayersByNames(allPlayers, RCB_FIXED_LINEUP.finishers) },
-        { title: "Bowlers", players: pickPlayersByNames(allPlayers, RCB_FIXED_LINEUP.bowlers) },
+        { title: "Openers", players: pickPlayersByNames(allPlayers, fixedLineup.openers) },
+        { title: "Middle order", players: pickPlayersByNames(allPlayers, fixedLineup.middle) },
+        { title: "Finishers", players: pickPlayersByNames(allPlayers, fixedLineup.finishers) },
+        { title: "Bowlers", players: pickPlayersByNames(allPlayers, fixedLineup.bowlers) },
       ],
-      impactPlayers: pickPlayersByNames(allPlayers, RCB_FIXED_LINEUP.impactPlayers),
+      impactPlayers: pickPlayersByNames(allPlayers, fixedLineup.impactPlayers),
     };
   }
 
@@ -750,6 +882,8 @@ export function TeamAnalysis() {
                   </div>
                 </div>
               </GlassCard>
+
+              <p className="text-[#7ad6ff] text-xs mb-4">Click any player card to open detailed player stats and analysis.</p>
 
               {activeTab === "Playing XI" && (
                 <div className="space-y-6">

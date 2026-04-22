@@ -9,6 +9,7 @@ import { Trophy, Users, ChevronRight, Calendar } from "lucide-react";
 const sportData: Record<string, {
   name: string;
   icon: string;
+  iconImage?: string;
   color: string;
   tournaments: {
     id: string;
@@ -18,6 +19,7 @@ const sportData: Record<string, {
     status: string;
     season: string;
     logo: string;
+    logoImage?: string;
     prize: string;
     country: string;
   }[];
@@ -25,9 +27,22 @@ const sportData: Record<string, {
   cricket: {
     name: "Cricket",
     icon: "🏏",
+    iconImage:
+      "https://img.freepik.com/free-vector/red-ball-hitting-wicket-stumps-with-bat-black-abstract-splash-background-cricket-fever-concept_1302-5492.jpg?semt=ais_hybrid&w=740&q=80",
     color: "#00E676",
     tournaments: [
-      { id: "ipl", name: "Indian Premier League", shortName: "IPL 2026", teams: 10, status: "LIVE", season: "2026", logo: "🏆", prize: "₹50 Cr", country: "India" },
+      {
+        id: "ipl",
+        name: "Indian Premier League",
+        shortName: "IPL 2026",
+        teams: 10,
+        status: "LIVE",
+        season: "2026",
+        logo: "🏆",
+        logoImage: "/assets/teams/IPL_logo.webp",
+        prize: "₹50 Cr",
+        country: "India",
+      },
       { id: "wc", name: "ICC World Cup", shortName: "World Cup 2026", teams: 16, status: "Upcoming", season: "2026", logo: "🌍", prize: "$4M", country: "Global" },
       { id: "bbl", name: "Big Bash League", shortName: "BBL 2025", teams: 8, status: "Completed", season: "2025", logo: "🔥", prize: "AUD 2M", country: "Australia" },
       { id: "hundred", name: "The Hundred", shortName: "The Hundred 2026", teams: 8, status: "Upcoming", season: "2026", logo: "💯", prize: "£1.2M", country: "England" },
@@ -103,14 +118,16 @@ export function SportPage() {
           }}
         >
           <div className="flex items-center gap-6">
-            <motion.div
-              initial={{ scale: 0, rotate: -180 }}
-              animate={{ scale: 1, rotate: 0 }}
-              transition={{ type: "spring", stiffness: 200, delay: 0.2 }}
-              className="text-8xl"
+            <div
+              className="w-24 h-24 rounded-3xl overflow-hidden flex items-center justify-center"
+              style={{ border: "1px solid rgba(255,255,255,0.18)", background: "rgba(255,255,255,0.06)" }}
             >
-              {data.icon}
-            </motion.div>
+              {data.iconImage ? (
+                <img src={data.iconImage} alt={`${data.name} logo`} className="w-full h-full object-cover" loading="lazy" />
+              ) : (
+                <span className="text-8xl">{data.icon}</span>
+              )}
+            </div>
             <div>
               <p className="text-white/40 text-sm uppercase tracking-widest mb-2">Select Tournament</p>
               <h1 className="text-4xl font-black text-white mb-2">{data.name}</h1>
@@ -138,10 +155,19 @@ export function SportPage() {
                   <div className="flex items-start justify-between mb-5">
                     <div className="flex items-center gap-4">
                       <div
-                        className="w-14 h-14 rounded-2xl flex items-center justify-center text-3xl"
-                        style={{ background: `${data.color}15`, border: `1px solid ${data.color}25` }}
+                        className="w-16 h-16 rounded-2xl flex items-center justify-center text-3xl overflow-hidden"
+                        style={{ background: tournament.id === "ipl" ? "#ffffff" : `${data.color}15`, border: tournament.id === "ipl" ? "1px solid rgba(255,255,255,0.9)" : `1px solid ${data.color}25` }}
                       >
-                        {tournament.logo}
+                        {tournament.logoImage ? (
+                          <img
+                            src={tournament.logoImage}
+                            alt={`${tournament.name} logo`}
+                            className="w-12 h-12 object-contain"
+                            loading="lazy"
+                          />
+                        ) : (
+                          tournament.logo
+                        )}
                       </div>
                       <div>
                         <h3 className="text-white font-bold text-lg leading-tight">{tournament.name}</h3>

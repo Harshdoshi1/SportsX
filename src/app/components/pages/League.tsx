@@ -448,6 +448,13 @@ export function League() {
     [statsCategories.bowling],
   );
 
+  const openPlayerAnalysis = (row: { player: string; teamShort?: string | null; teamName?: string | null }) => {
+    const resolvedTeamShort =
+      String(row?.teamShort || "").toUpperCase() || deriveTeamShort(row?.teamName || "") || "RCB";
+    const playerKey = slugify(row?.player || "player");
+    navigate(`/sport/${sportId}/league/${leagueId}/team/${resolvedTeamShort}/player/${playerKey}`);
+  };
+
   if (leagueKey !== "ipl") {
     const generic = genericSnapshots[leagueKey];
     return (
@@ -746,6 +753,8 @@ export function League() {
                         initial={{ opacity: 0, y: 10 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ delay: idx * 0.02 }}
+                        className="cursor-pointer"
+                        onClick={() => openPlayerAnalysis(row)}
                       >
                         <div
                           className="rounded-2xl px-4 py-3 md:px-5 md:py-4"
@@ -853,6 +862,8 @@ export function League() {
                               initial={{ opacity: 0, y: 10 }}
                               animate={{ opacity: 1, y: 0 }}
                               transition={{ delay: idx * 0.02 }}
+                              className="cursor-pointer"
+                              onClick={() => openPlayerAnalysis(row)}
                             >
                               <div
                                 className="rounded-2xl px-4 py-3 md:px-5 md:py-4"
@@ -955,7 +966,7 @@ export function League() {
                         {mostHundreds.slice(0, 10).map((row, idx) => {
                           const logo = row.teamShort ? getTeamLogoProps(row.teamShort) : null;
                           return (
-                            <motion.div key={`${row.player}-${idx}-100s`} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: idx * 0.02 }}>
+                            <motion.div key={`${row.player}-${idx}-100s`} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: idx * 0.02 }} className="cursor-pointer" onClick={() => openPlayerAnalysis(row)}>
                               <div className="rounded-2xl px-4 py-3 md:px-5 md:py-4" style={{ background: "linear-gradient(90deg, rgba(6,10,22,0.92) 0%, rgba(8,12,28,0.9) 55%, rgba(6,10,22,0.92) 100%)", border: "1px solid rgba(150,170,255,0.14)" }}>
                                 <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-3 md:gap-4 items-stretch">
                                   <div className="flex items-center gap-3 min-w-0 h-full md:self-center">
@@ -998,7 +1009,7 @@ export function League() {
                         {mostFifties.slice(0, 10).map((row, idx) => {
                           const logo = row.teamShort ? getTeamLogoProps(row.teamShort) : null;
                           return (
-                            <motion.div key={`${row.player}-${idx}-50s`} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: idx * 0.02 }}>
+                            <motion.div key={`${row.player}-${idx}-50s`} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: idx * 0.02 }} className="cursor-pointer" onClick={() => openPlayerAnalysis(row)}>
                               <div className="rounded-2xl px-4 py-3 md:px-5 md:py-4" style={{ background: "linear-gradient(90deg, rgba(6,10,22,0.92) 0%, rgba(8,12,28,0.9) 55%, rgba(6,10,22,0.92) 100%)", border: "1px solid rgba(150,170,255,0.14)" }}>
                                 <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-3 md:gap-4 items-stretch">
                                   <div className="flex items-center gap-3 min-w-0 h-full md:self-center">
@@ -1041,7 +1052,7 @@ export function League() {
                         {mostSixes.slice(0, 10).map((row, idx) => {
                           const logo = row.teamShort ? getTeamLogoProps(row.teamShort) : null;
                           return (
-                            <motion.div key={`${row.player}-${idx}-6s`} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: idx * 0.02 }}>
+                            <motion.div key={`${row.player}-${idx}-6s`} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: idx * 0.02 }} className="cursor-pointer" onClick={() => openPlayerAnalysis(row)}>
                               <div className="rounded-2xl px-4 py-3 md:px-5 md:py-4" style={{ background: "linear-gradient(90deg, rgba(6,10,22,0.92) 0%, rgba(8,12,28,0.9) 55%, rgba(6,10,22,0.92) 100%)", border: "1px solid rgba(150,170,255,0.14)" }}>
                                 <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-3 md:gap-4 items-stretch">
                                   <div className="flex items-center gap-3 min-w-0 h-full md:self-center">
@@ -1084,7 +1095,7 @@ export function League() {
                         {mostFours.slice(0, 10).map((row, idx) => {
                           const logo = row.teamShort ? getTeamLogoProps(row.teamShort) : null;
                           return (
-                            <motion.div key={`${row.player}-${idx}-4s`} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: idx * 0.02 }}>
+                            <motion.div key={`${row.player}-${idx}-4s`} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: idx * 0.02 }} className="cursor-pointer" onClick={() => openPlayerAnalysis(row)}>
                               <div className="rounded-2xl px-4 py-3 md:px-5 md:py-4" style={{ background: "linear-gradient(90deg, rgba(6,10,22,0.92) 0%, rgba(8,12,28,0.9) 55%, rgba(6,10,22,0.92) 100%)", border: "1px solid rgba(150,170,255,0.14)" }}>
                                 <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-3 md:gap-4 items-stretch">
                                   <div className="flex items-center gap-3 min-w-0 h-full md:self-center">

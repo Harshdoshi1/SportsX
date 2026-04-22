@@ -1,4 +1,4 @@
-import { iplScraperService } from "../services/iplScraperService.js";
+import { supabaseIplSyncService } from "../services/supabaseIplSyncService.js";
 import { ok } from "../utils/response.js";
 
 const IPL_ENDPOINT_TTL_MS = 90 * 1000;
@@ -75,7 +75,7 @@ export const iplController = {
       const result = await resolveEndpoint(
         "points",
         forceFresh,
-        () => iplScraperService.scrapePointsTable(),
+        () => supabaseIplSyncService.getPoints(forceFresh),
         (points) => ({ source: "cricbuzz-scraper", count: points.length }),
       );
       ok(
@@ -100,7 +100,7 @@ export const iplController = {
       const result = await resolveEndpoint(
         "matches",
         forceFresh,
-        () => iplScraperService.scrapeMatches(),
+        () => supabaseIplSyncService.getMatches(forceFresh),
         (matches) => ({ source: "cricbuzz-scraper", count: matches.length }),
       );
       ok(
@@ -125,7 +125,7 @@ export const iplController = {
       const result = await resolveEndpoint(
         "stats",
         forceFresh,
-        () => iplScraperService.scrapeStats(),
+        () => supabaseIplSyncService.getStats(forceFresh),
         (stats) => ({ source: "cricbuzz-scraper", count: stats?.leaders?.length || 0 }),
       );
       ok(
@@ -150,7 +150,7 @@ export const iplController = {
       const result = await resolveEndpoint(
         "squads",
         forceFresh,
-        () => iplScraperService.scrapeSquads(),
+        () => supabaseIplSyncService.getSquads(forceFresh),
         (squads) => ({ source: "cricbuzz-scraper", count: squads?.players?.length || 0 }),
       );
       ok(
@@ -175,7 +175,7 @@ export const iplController = {
       const result = await resolveEndpoint(
         "news",
         forceFresh,
-        () => iplScraperService.scrapeNews(),
+        () => supabaseIplSyncService.getNews(forceFresh),
         (news) => ({ source: "cricbuzz-scraper", count: news.length }),
       );
       ok(

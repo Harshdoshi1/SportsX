@@ -1,6 +1,6 @@
 import { iplTeamPlayersService } from "./iplTeamPlayersService.js";
 import { iplPlayerProfileService } from "./iplPlayerProfileService.js";
-import { iplScraperService } from "./iplScraperService.js";
+import { supabaseIplSyncService } from "./supabaseIplSyncService.js";
 
 const normalizeNameKey = (value) =>
   String(value || "")
@@ -100,12 +100,26 @@ export const teamsService = {
   async getTeams() {
     const [catalog, points] = await Promise.all([
       iplTeamPlayersService.getTeamCatalog(),
-      iplScraperService.scrapePointsTable(),
+      supabaseIplSyncService.getPoints(false),
     ]);
 
     const byShort = new Map(points.map((row) => [String(row?.team || "").toUpperCase(), row]));
+    const byName = new Map(
+      points.map((row) => [
+        String(row?.team || "")
+          .toLowerCase()
+          .replace(/[^a-z0-9]/g, ""),
+        row,
+      ]),
+    );
     const deduped = catalog.map((team) => {
-      const row = byShort.get(team.short);
+      const row =
+        byShort.get(team.short) ||
+        byName.get(
+          String(team.name || "")
+            .toLowerCase()
+            .replace(/[^a-z0-9]/g, ""),
+        );
       return {
         id: team.short,
         name: team.name,
@@ -139,7 +153,7 @@ export const teamsService = {
 
     const resolvedTeamName = team?.name || teamName || String(teamId || "");
     const [scrapedPlayers, linkedProfiles] = await Promise.all([
-      iplTeamPlayersService.scrapeTeamPlayersWithStats(resolvedTeamName),
+      supabaseIplSyncService.getTeamPlayersByTeamCode(team?.short || String(teamId || ""), false),
       isRcbTeam(resolvedTeamName) ? iplPlayerProfileService.getProvidedPlayerProfiles() : Promise.resolve([]),
     ]);
 
