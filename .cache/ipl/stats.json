@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-04-22T12:59:18.218Z",
+  "updatedAt": "2026-04-23T12:02:03.482Z",
   "data": {
     "categories": {
       "batting": [
@@ -50,6 +50,19 @@
         "sixes": 10
       },
       {
+        "player": "Vaibhav Sooryavanshi",
+        "image": "https://ipl-stats-sports-mechanic.s3.ap-south-1.amazonaws.com/ipl/playerimages/Vaibhav%20Sooryavanshi.png",
+        "teamShort": "RR",
+        "teamName": "Rajasthan Royals",
+        "matches": 7,
+        "innings": 7,
+        "runs": 254,
+        "average": "36.29",
+        "strikeRate": "220.86",
+        "fours": 26,
+        "sixes": 20
+      },
+      {
         "player": "Virat Kohli",
         "image": "https://ipl-stats-sports-mechanic.s3.ap-south-1.amazonaws.com/ipl/playerimages/Virat%20Kohli.png",
         "teamShort": "RCB",
@@ -63,17 +76,17 @@
         "sixes": 8
       },
       {
-        "player": "Vaibhav Sooryavanshi",
-        "image": "https://ipl-stats-sports-mechanic.s3.ap-south-1.amazonaws.com/ipl/playerimages/Vaibhav%20Sooryavanshi.png",
+        "player": "Yashasvi Jaiswal",
+        "image": "https://ipl-stats-sports-mechanic.s3.ap-south-1.amazonaws.com/ipl/playerimages/Yashasvi%20Jaiswal.png",
         "teamShort": "RR",
         "teamName": "Rajasthan Royals",
-        "matches": 6,
-        "innings": 6,
-        "runs": 246,
-        "average": "41.00",
-        "strikeRate": "236.53",
-        "fours": 24,
-        "sixes": 20
+        "matches": 7,
+        "innings": 7,
+        "runs": 245,
+        "average": "49.00",
+        "strikeRate": "155.06",
+        "fours": 27,
+        "sixes": 12
       },
       {
         "player": "Ishan Kishan",
@@ -113,19 +126,6 @@
         "strikeRate": "163.97",
         "fours": 21,
         "sixes": 14
-      },
-      {
-        "player": "Yashasvi Jaiswal",
-        "image": "https://ipl-stats-sports-mechanic.s3.ap-south-1.amazonaws.com/ipl/playerimages/Yashasvi%20Jaiswal.png",
-        "teamShort": "RR",
-        "teamName": "Rajasthan Royals",
-        "matches": 6,
-        "innings": 6,
-        "runs": 223,
-        "average": "55.75",
-        "strikeRate": "152.73",
-        "fours": 23,
-        "sixes": 12
       },
       {
         "player": "Priyansh Arya",
@@ -182,6 +182,19 @@
         "sixes": 10
       },
       {
+        "player": "Vaibhav Sooryavanshi",
+        "image": "https://ipl-stats-sports-mechanic.s3.ap-south-1.amazonaws.com/ipl/playerimages/Vaibhav%20Sooryavanshi.png",
+        "teamShort": "RR",
+        "teamName": "Rajasthan Royals",
+        "matches": 7,
+        "innings": 7,
+        "runs": 254,
+        "average": "36.29",
+        "strikeRate": "220.86",
+        "fours": 26,
+        "sixes": 20
+      },
+      {
         "player": "Virat Kohli",
         "image": "https://ipl-stats-sports-mechanic.s3.ap-south-1.amazonaws.com/ipl/playerimages/Virat%20Kohli.png",
         "teamShort": "RCB",
@@ -195,17 +208,17 @@
         "sixes": 8
       },
       {
-        "player": "Vaibhav Sooryavanshi",
-        "image": "https://ipl-stats-sports-mechanic.s3.ap-south-1.amazonaws.com/ipl/playerimages/Vaibhav%20Sooryavanshi.png",
+        "player": "Yashasvi Jaiswal",
+        "image": "https://ipl-stats-sports-mechanic.s3.ap-south-1.amazonaws.com/ipl/playerimages/Yashasvi%20Jaiswal.png",
         "teamShort": "RR",
         "teamName": "Rajasthan Royals",
-        "matches": 6,
-        "innings": 6,
-        "runs": 246,
-        "average": "41.00",
-        "strikeRate": "236.53",
-        "fours": 24,
-        "sixes": 20
+        "matches": 7,
+        "innings": 7,
+        "runs": 245,
+        "average": "49.00",
+        "strikeRate": "155.06",
+        "fours": 27,
+        "sixes": 12
       },
       {
         "player": "Ishan Kishan",
@@ -247,19 +260,6 @@
         "sixes": 14
       },
       {
-        "player": "Yashasvi Jaiswal",
-        "image": "https://ipl-stats-sports-mechanic.s3.ap-south-1.amazonaws.com/ipl/playerimages/Yashasvi%20Jaiswal.png",
-        "teamShort": "RR",
-        "teamName": "Rajasthan Royals",
-        "matches": 6,
-        "innings": 6,
-        "runs": 223,
-        "average": "55.75",
-        "strikeRate": "152.73",
-        "fours": 23,
-        "sixes": 12
-      },
-      {
         "player": "Priyansh Arya",
         "image": "https://ipl-stats-sports-mechanic.s3.ap-south-1.amazonaws.com/ipl/playerimages/Priyansh%20Arya.png",
         "teamShort": "PBKS",
@@ -274,6 +274,21 @@
       }
     ],
     "bowlingLeaders": [
+      {
+        "player": "Prince Yadav",
+        "image": "https://ipl-stats-sports-mechanic.s3.ap-south-1.amazonaws.com/ipl/playerimages/Prince%20Yadav.png",
+        "teamShort": "LSG",
+        "teamName": "Lucknow Super Giants",
+        "matches": 7,
+        "innings": 7,
+        "overs": "26.0",
+        "runs": 218,
+        "wickets": 13,
+        "bbi": "32/3",
+        "average": "16.76",
+        "economy": "8.38",
+        "strikeRate": "12.00"
+      },
       {
         "player": "Anshul Kamboj",
         "image": "https://ipl-stats-sports-mechanic.s3.ap-south-1.amazonaws.com/ipl/playerimages/Anshul%20Kamboj.png",
@@ -320,19 +335,34 @@
         "strikeRate": "12.00"
       },
       {
-        "player": "Prince Yadav",
-        "image": "https://ipl-stats-sports-mechanic.s3.ap-south-1.amazonaws.com/ipl/playerimages/Prince%20Yadav.png",
-        "teamShort": "LSG",
-        "teamName": "Lucknow Super Giants",
-        "matches": 6,
-        "innings": 6,
-        "overs": "22.0",
-        "runs": 189,
+        "player": "Jofra Archer",
+        "image": "https://ipl-stats-sports-mechanic.s3.ap-south-1.amazonaws.com/ipl/playerimages/Jofra%20Archer.png",
+        "teamShort": "RR",
+        "teamName": "Rajasthan Royals",
+        "matches": 7,
+        "innings": 7,
+        "overs": "25.0",
+        "runs": 199,
         "wickets": 11,
-        "bbi": "32/3",
-        "average": "17.18",
-        "economy": "8.59",
-        "strikeRate": "12.00"
+        "bbi": "20/3",
+        "average": "18.09",
+        "economy": "7.96",
+        "strikeRate": "13.63"
+      },
+      {
+        "player": "Ravi Bishnoi",
+        "image": "https://ipl-stats-sports-mechanic.s3.ap-south-1.amazonaws.com/ipl/playerimages/Ravi%20Bishnoi.png",
+        "teamShort": "RR",
+        "teamName": "Rajasthan Royals",
+        "matches": 7,
+        "innings": 7,
+        "overs": "23.0",
+        "runs": 213,
+        "wickets": 11,
+        "bbi": "41/4",
+        "average": "19.36",
+        "economy": "9.26",
+        "strikeRate": "12.54"
       },
       {
         "player": "Bhuvneshwar Kumar",
@@ -348,21 +378,6 @@
         "average": "20.00",
         "economy": "8.33",
         "strikeRate": "14.40"
-      },
-      {
-        "player": "Ravi Bishnoi",
-        "image": "https://ipl-stats-sports-mechanic.s3.ap-south-1.amazonaws.com/ipl/playerimages/Ravi%20Bishnoi.png",
-        "teamShort": "RR",
-        "teamName": "Rajasthan Royals",
-        "matches": 6,
-        "innings": 6,
-        "overs": "20.0",
-        "runs": 190,
-        "wickets": 10,
-        "bbi": "41/4",
-        "average": "19.00",
-        "economy": "9.50",
-        "strikeRate": "12.00"
       },
       {
         "player": "Kagiso Rabada",
@@ -395,34 +410,19 @@
         "strikeRate": "12.75"
       },
       {
-        "player": "Jofra Archer",
-        "image": "https://ipl-stats-sports-mechanic.s3.ap-south-1.amazonaws.com/ipl/playerimages/Jofra%20Archer.png",
+        "player": "Nandre Burger",
+        "image": "https://ipl-stats-sports-mechanic.s3.ap-south-1.amazonaws.com/ipl/playerimages/Nandre%20Burger.png",
         "teamShort": "RR",
         "teamName": "Rajasthan Royals",
-        "matches": 6,
-        "innings": 6,
-        "overs": "21.0",
-        "runs": 179,
+        "matches": 7,
+        "innings": 7,
+        "overs": "22.0",
+        "runs": 186,
         "wickets": 8,
-        "bbi": "19/2",
-        "average": "22.37",
-        "economy": "8.52",
-        "strikeRate": "15.75"
-      },
-      {
-        "player": "Krunal Pandya",
-        "image": "https://ipl-stats-sports-mechanic.s3.ap-south-1.amazonaws.com/ipl/playerimages/Krunal%20Pandya.png",
-        "teamShort": "RCB",
-        "teamName": "Royal Challengers Bengaluru",
-        "matches": 6,
-        "innings": 6,
-        "overs": "21.0",
-        "runs": 180,
-        "wickets": 8,
-        "bbi": "30/2",
-        "average": "22.50",
-        "economy": "8.57",
-        "strikeRate": "15.75"
+        "bbi": "21/2",
+        "average": "23.25",
+        "economy": "8.45",
+        "strikeRate": "16.50"
       }
     ],
     "mostRuns": [
@@ -452,6 +452,14 @@
       },
       {
         "rank": 4,
+        "player": "Vaibhav Sooryavanshi",
+        "image": "https://ipl-stats-sports-mechanic.s3.ap-south-1.amazonaws.com/ipl/playerimages/Vaibhav%20Sooryavanshi.png",
+        "teamShort": "RR",
+        "teamName": "Rajasthan Royals",
+        "value": "254"
+      },
+      {
+        "rank": 5,
         "player": "Virat Kohli",
         "image": "https://ipl-stats-sports-mechanic.s3.ap-south-1.amazonaws.com/ipl/playerimages/Virat%20Kohli.png",
         "teamShort": "RCB",
@@ -459,15 +467,15 @@
         "value": "247"
       },
       {
-        "rank": 5,
-        "player": "Vaibhav Sooryavanshi",
-        "image": "https://ipl-stats-sports-mechanic.s3.ap-south-1.amazonaws.com/ipl/playerimages/Vaibhav%20Sooryavanshi.png",
+        "rank": 6,
+        "player": "Yashasvi Jaiswal",
+        "image": "https://ipl-stats-sports-mechanic.s3.ap-south-1.amazonaws.com/ipl/playerimages/Yashasvi%20Jaiswal.png",
         "teamShort": "RR",
         "teamName": "Rajasthan Royals",
-        "value": "246"
+        "value": "245"
       },
       {
-        "rank": 6,
+        "rank": 7,
         "player": "Ishan Kishan",
         "image": "https://ipl-stats-sports-mechanic.s3.ap-south-1.amazonaws.com/ipl/playerimages/Ishan%20Kishan.png",
         "teamShort": "SRH",
@@ -475,7 +483,7 @@
         "value": "238"
       },
       {
-        "rank": 7,
+        "rank": 8,
         "player": "Rajat Patidar",
         "image": "https://ipl-stats-sports-mechanic.s3.ap-south-1.amazonaws.com/ipl/playerimages/Rajat%20Patidar.png",
         "teamShort": "RCB",
@@ -483,19 +491,11 @@
         "value": "230"
       },
       {
-        "rank": 8,
+        "rank": 9,
         "player": "Cooper Connolly",
         "image": "https://ipl-stats-sports-mechanic.s3.ap-south-1.amazonaws.com/ipl/playerimages/Cooper%20Connolly.png",
         "teamShort": "PBKS",
         "teamName": "Punjab Kings",
-        "value": "223"
-      },
-      {
-        "rank": 9,
-        "player": "Yashasvi Jaiswal",
-        "image": "https://ipl-stats-sports-mechanic.s3.ap-south-1.amazonaws.com/ipl/playerimages/Yashasvi%20Jaiswal.png",
-        "teamShort": "RR",
-        "teamName": "Rajasthan Royals",
         "value": "223"
       },
       {
@@ -510,6 +510,14 @@
     "mostWickets": [
       {
         "rank": 1,
+        "player": "Prince Yadav",
+        "image": "https://ipl-stats-sports-mechanic.s3.ap-south-1.amazonaws.com/ipl/playerimages/Prince%20Yadav.png",
+        "teamShort": "LSG",
+        "teamName": "Lucknow Super Giants",
+        "value": "13"
+      },
+      {
+        "rank": 2,
         "player": "Anshul Kamboj",
         "image": "https://ipl-stats-sports-mechanic.s3.ap-south-1.amazonaws.com/ipl/playerimages/Anshul%20Kamboj.png",
         "teamShort": "CSK",
@@ -517,7 +525,7 @@
         "value": "13"
       },
       {
-        "rank": 2,
+        "rank": 3,
         "player": "Eshan Malinga",
         "image": "https://ipl-stats-sports-mechanic.s3.ap-south-1.amazonaws.com/ipl/playerimages/Eshan%20Malinga.png",
         "teamShort": "SRH",
@@ -525,7 +533,7 @@
         "value": "12"
       },
       {
-        "rank": 3,
+        "rank": 4,
         "player": "Prasidh Krishna",
         "image": "https://ipl-stats-sports-mechanic.s3.ap-south-1.amazonaws.com/ipl/playerimages/Prasidh%20Krishna.png",
         "teamShort": "GT",
@@ -533,20 +541,12 @@
         "value": "12"
       },
       {
-        "rank": 4,
-        "player": "Prince Yadav",
-        "image": "https://ipl-stats-sports-mechanic.s3.ap-south-1.amazonaws.com/ipl/playerimages/Prince%20Yadav.png",
-        "teamShort": "LSG",
-        "teamName": "Lucknow Super Giants",
-        "value": "11"
-      },
-      {
         "rank": 5,
-        "player": "Bhuvneshwar Kumar",
-        "image": "https://ipl-stats-sports-mechanic.s3.ap-south-1.amazonaws.com/ipl/playerimages/Bhuvneshwar%20Kumar.png",
-        "teamShort": "RCB",
-        "teamName": "Royal Challengers Bengaluru",
-        "value": "10"
+        "player": "Jofra Archer",
+        "image": "https://ipl-stats-sports-mechanic.s3.ap-south-1.amazonaws.com/ipl/playerimages/Jofra%20Archer.png",
+        "teamShort": "RR",
+        "teamName": "Rajasthan Royals",
+        "value": "11"
       },
       {
         "rank": 6,
@@ -554,10 +554,18 @@
         "image": "https://ipl-stats-sports-mechanic.s3.ap-south-1.amazonaws.com/ipl/playerimages/Ravi%20Bishnoi.png",
         "teamShort": "RR",
         "teamName": "Rajasthan Royals",
-        "value": "10"
+        "value": "11"
       },
       {
         "rank": 7,
+        "player": "Bhuvneshwar Kumar",
+        "image": "https://ipl-stats-sports-mechanic.s3.ap-south-1.amazonaws.com/ipl/playerimages/Bhuvneshwar%20Kumar.png",
+        "teamShort": "RCB",
+        "teamName": "Royal Challengers Bengaluru",
+        "value": "10"
+      },
+      {
+        "rank": 8,
         "player": "Kagiso Rabada",
         "image": "https://ipl-stats-sports-mechanic.s3.ap-south-1.amazonaws.com/ipl/playerimages/Kagiso%20Rabada.png",
         "teamShort": "GT",
@@ -565,7 +573,7 @@
         "value": "10"
       },
       {
-        "rank": 8,
+        "rank": 9,
         "player": "Harsh Dubey",
         "image": "https://ipl-stats-sports-mechanic.s3.ap-south-1.amazonaws.com/ipl/playerimages/Harsh%20Dubey.png",
         "teamShort": "SRH",
@@ -573,19 +581,11 @@
         "value": "8"
       },
       {
-        "rank": 9,
-        "player": "Jofra Archer",
-        "image": "https://ipl-stats-sports-mechanic.s3.ap-south-1.amazonaws.com/ipl/playerimages/Jofra%20Archer.png",
+        "rank": 10,
+        "player": "Nandre Burger",
+        "image": "https://ipl-stats-sports-mechanic.s3.ap-south-1.amazonaws.com/ipl/playerimages/Nandre%20Burger.png",
         "teamShort": "RR",
         "teamName": "Rajasthan Royals",
-        "value": "8"
-      },
-      {
-        "rank": 10,
-        "player": "Krunal Pandya",
-        "image": "https://ipl-stats-sports-mechanic.s3.ap-south-1.amazonaws.com/ipl/playerimages/Krunal%20Pandya.png",
-        "teamShort": "RCB",
-        "teamName": "Royal Challengers Bengaluru",
         "value": "8"
       }
     ],
@@ -658,14 +658,6 @@
       },
       {
         "rank": 5,
-        "player": "Virat Kohli",
-        "image": "https://ipl-stats-sports-mechanic.s3.ap-south-1.amazonaws.com/ipl/playerimages/Virat%20Kohli.png",
-        "teamShort": "RCB",
-        "teamName": "Royal Challengers Bengaluru",
-        "value": "2"
-      },
-      {
-        "rank": 6,
         "player": "Vaibhav Sooryavanshi",
         "image": "https://ipl-stats-sports-mechanic.s3.ap-south-1.amazonaws.com/ipl/playerimages/Vaibhav%20Sooryavanshi.png",
         "teamShort": "RR",
@@ -673,7 +665,23 @@
         "value": "2"
       },
       {
+        "rank": 6,
+        "player": "Virat Kohli",
+        "image": "https://ipl-stats-sports-mechanic.s3.ap-south-1.amazonaws.com/ipl/playerimages/Virat%20Kohli.png",
+        "teamShort": "RCB",
+        "teamName": "Royal Challengers Bengaluru",
+        "value": "2"
+      },
+      {
         "rank": 7,
+        "player": "Yashasvi Jaiswal",
+        "image": "https://ipl-stats-sports-mechanic.s3.ap-south-1.amazonaws.com/ipl/playerimages/Yashasvi%20Jaiswal.png",
+        "teamShort": "RR",
+        "teamName": "Rajasthan Royals",
+        "value": "2"
+      },
+      {
+        "rank": 8,
         "player": "Ishan Kishan",
         "image": "https://ipl-stats-sports-mechanic.s3.ap-south-1.amazonaws.com/ipl/playerimages/Ishan%20Kishan.png",
         "teamShort": "SRH",
@@ -681,7 +689,7 @@
         "value": "2"
       },
       {
-        "rank": 8,
+        "rank": 9,
         "player": "Rajat Patidar",
         "image": "https://ipl-stats-sports-mechanic.s3.ap-south-1.amazonaws.com/ipl/playerimages/Rajat%20Patidar.png",
         "teamShort": "RCB",
@@ -689,19 +697,11 @@
         "value": "2"
       },
       {
-        "rank": 9,
+        "rank": 10,
         "player": "Cooper Connolly",
         "image": "https://ipl-stats-sports-mechanic.s3.ap-south-1.amazonaws.com/ipl/playerimages/Cooper%20Connolly.png",
         "teamShort": "PBKS",
         "teamName": "Punjab Kings",
-        "value": "2"
-      },
-      {
-        "rank": 10,
-        "player": "Yashasvi Jaiswal",
-        "image": "https://ipl-stats-sports-mechanic.s3.ap-south-1.amazonaws.com/ipl/playerimages/Yashasvi%20Jaiswal.png",
-        "teamShort": "RR",
-        "teamName": "Rajasthan Royals",
         "value": "2"
       }
     ],
@@ -809,6 +809,22 @@
       },
       {
         "rank": 3,
+        "player": "Yashasvi Jaiswal",
+        "image": "https://ipl-stats-sports-mechanic.s3.ap-south-1.amazonaws.com/ipl/playerimages/Yashasvi%20Jaiswal.png",
+        "teamShort": "RR",
+        "teamName": "Rajasthan Royals",
+        "value": "27"
+      },
+      {
+        "rank": 4,
+        "player": "Vaibhav Sooryavanshi",
+        "image": "https://ipl-stats-sports-mechanic.s3.ap-south-1.amazonaws.com/ipl/playerimages/Vaibhav%20Sooryavanshi.png",
+        "teamShort": "RR",
+        "teamName": "Rajasthan Royals",
+        "value": "26"
+      },
+      {
+        "rank": 5,
         "player": "Abhishek Sharma",
         "image": "https://ipl-stats-sports-mechanic.s3.ap-south-1.amazonaws.com/ipl/playerimages/Abhishek%20Sharma.png",
         "teamShort": "SRH",
@@ -816,7 +832,7 @@
         "value": "25"
       },
       {
-        "rank": 4,
+        "rank": 6,
         "player": "Jos Buttler",
         "image": "https://ipl-stats-sports-mechanic.s3.ap-south-1.amazonaws.com/ipl/playerimages/Jos%20Buttler.png",
         "teamShort": "GT",
@@ -824,28 +840,12 @@
         "value": "25"
       },
       {
-        "rank": 5,
-        "player": "Vaibhav Sooryavanshi",
-        "image": "https://ipl-stats-sports-mechanic.s3.ap-south-1.amazonaws.com/ipl/playerimages/Vaibhav%20Sooryavanshi.png",
-        "teamShort": "RR",
-        "teamName": "Rajasthan Royals",
-        "value": "24"
-      },
-      {
-        "rank": 6,
+        "rank": 7,
         "player": "Ishan Kishan",
         "image": "https://ipl-stats-sports-mechanic.s3.ap-south-1.amazonaws.com/ipl/playerimages/Ishan%20Kishan.png",
         "teamShort": "SRH",
         "teamName": "Sunrisers Hyderabad",
         "value": "24"
-      },
-      {
-        "rank": 7,
-        "player": "Yashasvi Jaiswal",
-        "image": "https://ipl-stats-sports-mechanic.s3.ap-south-1.amazonaws.com/ipl/playerimages/Yashasvi%20Jaiswal.png",
-        "teamShort": "RR",
-        "teamName": "Rajasthan Royals",
-        "value": "23"
       },
       {
         "rank": 8,

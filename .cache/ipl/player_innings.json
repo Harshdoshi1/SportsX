@@ -1,0 +1,535 @@
+{
+  "updatedAt": "2026-04-23T09:35:53.542Z",
+  "data": [
+    {
+      "nameKey": "viratkohli",
+      "crexSlug": "virat-kohli-4I",
+      "team": "RCB",
+      "role": "Batter",
+      "innings": [],
+      "opponentStats": [],
+      "favouriteTarget": null,
+      "lastScraped": "2026-04-23T09:34:14.688Z"
+    },
+    {
+      "nameKey": "philsalt",
+      "crexSlug": "phil-salt-S6s",
+      "team": "RCB",
+      "role": "WK-Batter",
+      "innings": [],
+      "opponentStats": [],
+      "favouriteTarget": null,
+      "lastScraped": "2026-04-23T09:34:16.646Z"
+    },
+    {
+      "nameKey": "rajatpatidar",
+      "crexSlug": "rajat-patidar-V5J",
+      "team": "RCB",
+      "role": "Batter",
+      "innings": [],
+      "opponentStats": [],
+      "favouriteTarget": null,
+      "lastScraped": "2026-04-23T09:34:18.993Z"
+    },
+    {
+      "nameKey": "devduttppadikkal",
+      "crexSlug": "devdutt-padikkal-SiX",
+      "team": "RCB",
+      "role": "Batter",
+      "innings": [],
+      "opponentStats": [],
+      "favouriteTarget": null,
+      "lastScraped": "2026-04-23T09:34:21.223Z"
+    },
+    {
+      "nameKey": "jiteshsharma",
+      "crexSlug": "jitesh-sharma-RbZ",
+      "team": "RCB",
+      "role": "WK-Batter",
+      "innings": [],
+      "opponentStats": [],
+      "favouriteTarget": null,
+      "lastScraped": "2026-04-23T09:34:23.271Z"
+    },
+    {
+      "nameKey": "jordancox",
+      "crexSlug": "jordan-cox-T5D",
+      "team": "RCB",
+      "role": "WK-Batter",
+      "innings": [],
+      "opponentStats": [],
+      "favouriteTarget": null,
+      "lastScraped": "2026-04-23T09:34:25.894Z"
+    },
+    {
+      "nameKey": "krunalpandya",
+      "crexSlug": "krunal-pandya-V5h",
+      "team": "RCB",
+      "role": "All-Rounder",
+      "innings": [],
+      "opponentStats": [],
+      "favouriteTarget": null,
+      "lastScraped": "2026-04-23T09:34:27.920Z"
+    },
+    {
+      "nameKey": "timdavid",
+      "crexSlug": "tim-david-T4U",
+      "team": "RCB",
+      "role": "Batter",
+      "innings": [],
+      "opponentStats": [],
+      "favouriteTarget": null,
+      "lastScraped": "2026-04-23T09:34:29.700Z"
+    },
+    {
+      "nameKey": "romarioshepherd",
+      "crexSlug": "romario-shepherd-T6c",
+      "team": "RCB",
+      "role": "All-Rounder",
+      "innings": [],
+      "opponentStats": [],
+      "favouriteTarget": null,
+      "lastScraped": "2026-04-23T09:34:31.691Z"
+    },
+    {
+      "nameKey": "jacobbethell",
+      "crexSlug": "jacob-bethell-UpY",
+      "team": "RCB",
+      "role": "All-Rounder",
+      "innings": [],
+      "opponentStats": [],
+      "favouriteTarget": null,
+      "lastScraped": "2026-04-23T09:34:33.801Z"
+    },
+    {
+      "nameKey": "joshhazlewood",
+      "crexSlug": "josh-hazlewood-P4G",
+      "team": "RCB",
+      "role": "Bowler",
+      "innings": [],
+      "opponentStats": [],
+      "favouriteTarget": null,
+      "lastScraped": "2026-04-23T09:34:35.593Z"
+    },
+    {
+      "nameKey": "bhuvneshwarkumar",
+      "crexSlug": "bhuvneshwar-kumar-4H",
+      "team": "RCB",
+      "role": "Bowler",
+      "innings": [],
+      "opponentStats": [],
+      "favouriteTarget": null,
+      "lastScraped": "2026-04-23T09:34:38.211Z"
+    },
+    {
+      "nameKey": "suyashsharma",
+      "crexSlug": "suyash-sharma-U2c",
+      "team": "RCB",
+      "role": "Bowler",
+      "innings": [],
+      "opponentStats": [],
+      "favouriteTarget": null,
+      "lastScraped": "2026-04-23T09:34:40.019Z"
+    },
+    {
+      "nameKey": "rasikhdarmir",
+      "crexSlug": "rasikh-dar-T7R",
+      "team": "RCB",
+      "role": "Bowler",
+      "innings": [],
+      "opponentStats": [],
+      "favouriteTarget": null,
+      "lastScraped": "2026-04-23T09:34:41.793Z"
+    },
+    {
+      "nameKey": "yashdasyal",
+      "crexSlug": "yash-dayal-T8c",
+      "team": "RCB",
+      "role": "Bowler",
+      "innings": [],
+      "opponentStats": [],
+      "favouriteTarget": null,
+      "lastScraped": "2026-04-23T09:34:43.567Z"
+    },
+    {
+      "nameKey": "swapnilsingh",
+      "crexSlug": "swapnil-singh-V7K",
+      "team": "RCB",
+      "role": "All-Rounder",
+      "innings": [],
+      "opponentStats": [],
+      "favouriteTarget": null,
+      "lastScraped": "2026-04-23T09:34:45.318Z"
+    },
+    {
+      "nameKey": "rohitsharma",
+      "crexSlug": "rohit-sharma-4F",
+      "team": "MI",
+      "role": "Batter",
+      "innings": [],
+      "opponentStats": [],
+      "favouriteTarget": null,
+      "lastScraped": "2026-04-23T09:34:47.199Z"
+    },
+    {
+      "nameKey": "suryakumaryadav",
+      "crexSlug": "suryakumar-yadav-RbX",
+      "team": "MI",
+      "role": "Batter",
+      "innings": [],
+      "opponentStats": [],
+      "favouriteTarget": null,
+      "lastScraped": "2026-04-23T09:34:49.057Z"
+    },
+    {
+      "nameKey": "tilakvarma",
+      "crexSlug": "tilak-varma-U1a",
+      "team": "MI",
+      "role": "Batter",
+      "innings": [],
+      "opponentStats": [],
+      "favouriteTarget": null,
+      "lastScraped": "2026-04-23T09:34:51.142Z"
+    },
+    {
+      "nameKey": "hardikpandya",
+      "crexSlug": "hardik-pandya-RcG",
+      "team": "MI",
+      "role": "All-Rounder",
+      "innings": [],
+      "opponentStats": [],
+      "favouriteTarget": null,
+      "lastScraped": "2026-04-23T09:34:52.817Z"
+    },
+    {
+      "nameKey": "jaspritbumrah",
+      "crexSlug": "jasprit-bumrah-RbV",
+      "team": "MI",
+      "role": "Bowler",
+      "innings": [],
+      "opponentStats": [],
+      "favouriteTarget": null,
+      "lastScraped": "2026-04-23T09:34:54.660Z"
+    },
+    {
+      "nameKey": "mitchellsantner",
+      "crexSlug": "mitchell-santner-Q1r",
+      "team": "MI",
+      "role": "All-Rounder",
+      "innings": [],
+      "opponentStats": [],
+      "favouriteTarget": null,
+      "lastScraped": "2026-04-23T09:34:56.405Z"
+    },
+    {
+      "nameKey": "msdhoni",
+      "crexSlug": "ms-dhoni-4A",
+      "team": "CSK",
+      "role": "WK-Batter",
+      "innings": [],
+      "opponentStats": [],
+      "favouriteTarget": null,
+      "lastScraped": "2026-04-23T09:34:58.719Z"
+    },
+    {
+      "nameKey": "ruturajgaikwad",
+      "crexSlug": "ruturaj-gaikwad-RfT",
+      "team": "CSK",
+      "role": "Batter",
+      "innings": [],
+      "opponentStats": [],
+      "favouriteTarget": null,
+      "lastScraped": "2026-04-23T09:35:00.580Z"
+    },
+    {
+      "nameKey": "sanjusamson",
+      "crexSlug": "sanju-samson-Rb2",
+      "team": "CSK",
+      "role": "WK-Batter",
+      "innings": [],
+      "opponentStats": [],
+      "favouriteTarget": null,
+      "lastScraped": "2026-04-23T09:35:02.294Z"
+    },
+    {
+      "nameKey": "shivamdubbey",
+      "crexSlug": "shivam-dube-Tng",
+      "team": "CSK",
+      "role": "All-Rounder",
+      "innings": [],
+      "opponentStats": [],
+      "favouriteTarget": null,
+      "lastScraped": "2026-04-23T09:35:03.886Z"
+    },
+    {
+      "nameKey": "deepakcharhar",
+      "crexSlug": "deepak-chahar-RdG",
+      "team": "CSK",
+      "role": "Bowler",
+      "innings": [],
+      "opponentStats": [],
+      "favouriteTarget": null,
+      "lastScraped": "2026-04-23T09:35:05.994Z"
+    },
+    {
+      "nameKey": "shreyas iyer",
+      "crexSlug": "shreyas-iyer-5cI",
+      "team": "PBKS",
+      "role": "Batter",
+      "innings": [],
+      "opponentStats": [],
+      "favouriteTarget": null,
+      "lastScraped": "2026-04-23T09:35:08.058Z"
+    },
+    {
+      "nameKey": "rinku singh",
+      "crexSlug": "rinku-singh-TAt",
+      "team": "KKR",
+      "role": "Batter",
+      "innings": [],
+      "opponentStats": [],
+      "favouriteTarget": null,
+      "lastScraped": "2026-04-23T09:35:10.065Z"
+    },
+    {
+      "nameKey": "varuncharakravarthy",
+      "crexSlug": "varun-chakaravarthy-T3j",
+      "team": "KKR",
+      "role": "Bowler",
+      "innings": [],
+      "opponentStats": [],
+      "favouriteTarget": null,
+      "lastScraped": "2026-04-23T09:35:11.820Z"
+    },
+    {
+      "nameKey": "axarpatel",
+      "crexSlug": "axar-patel-Rc5",
+      "team": "DC",
+      "role": "All-Rounder",
+      "innings": [],
+      "opponentStats": [],
+      "favouriteTarget": null,
+      "lastScraped": "2026-04-23T09:35:13.651Z"
+    },
+    {
+      "nameKey": "kuldeep yadav",
+      "crexSlug": "kuldeep-yadav-4Z",
+      "team": "DC",
+      "role": "Bowler",
+      "innings": [],
+      "opponentStats": [],
+      "favouriteTarget": null,
+      "lastScraped": "2026-04-23T09:35:15.509Z"
+    },
+    {
+      "nameKey": "kl rahul",
+      "crexSlug": "kl-rahul-Rbm",
+      "team": "DC",
+      "role": "WK-Batter",
+      "innings": [],
+      "opponentStats": [],
+      "favouriteTarget": null,
+      "lastScraped": "2026-04-23T09:35:17.231Z"
+    },
+    {
+      "nameKey": "yashasvi jaiswal",
+      "crexSlug": "yashasvi-jaiswal-U1c",
+      "team": "RR",
+      "role": "Batter",
+      "innings": [],
+      "opponentStats": [],
+      "favouriteTarget": null,
+      "lastScraped": "2026-04-23T09:35:18.882Z"
+    },
+    {
+      "nameKey": "sanjaymanjrekar",
+      "crexSlug": "sanju-samson-Rb2",
+      "team": "RR",
+      "role": "WK-Batter",
+      "innings": [],
+      "opponentStats": [],
+      "favouriteTarget": null,
+      "lastScraped": "2026-04-23T09:35:20.612Z"
+    },
+    {
+      "nameKey": "jofra archer",
+      "crexSlug": "jofra-archer-S7D",
+      "team": "RR",
+      "role": "Bowler",
+      "innings": [],
+      "opponentStats": [],
+      "favouriteTarget": null,
+      "lastScraped": "2026-04-23T09:35:22.313Z"
+    },
+    {
+      "nameKey": "yuzvendra chahal",
+      "crexSlug": "yuzvendra-chahal-Rce",
+      "team": "RR",
+      "role": "Bowler",
+      "innings": [],
+      "opponentStats": [],
+      "favouriteTarget": null,
+      "lastScraped": "2026-04-23T09:35:24.101Z"
+    },
+    {
+      "nameKey": "abhisheksharma",
+      "crexSlug": "abhishek-sharma-U1D",
+      "team": "SRH",
+      "role": "All-Rounder",
+      "innings": [],
+      "opponentStats": [],
+      "favouriteTarget": null,
+      "lastScraped": "2026-04-23T09:35:25.869Z"
+    },
+    {
+      "nameKey": "travishead",
+      "crexSlug": "travis-head-Sk6",
+      "team": "SRH",
+      "role": "Batter",
+      "innings": [],
+      "opponentStats": [],
+      "favouriteTarget": null,
+      "lastScraped": "2026-04-23T09:35:27.643Z"
+    },
+    {
+      "nameKey": "heinrichklaasen",
+      "crexSlug": "heinrich-klaasen-SaH",
+      "team": "SRH",
+      "role": "WK-Batter",
+      "innings": [],
+      "opponentStats": [],
+      "favouriteTarget": null,
+      "lastScraped": "2026-04-23T09:35:29.391Z"
+    },
+    {
+      "nameKey": "pat cummins",
+      "crexSlug": "pat-cummins-P3I",
+      "team": "SRH",
+      "role": "All-Rounder",
+      "innings": [],
+      "opponentStats": [],
+      "favouriteTarget": null,
+      "lastScraped": "2026-04-23T09:35:31.439Z"
+    },
+    {
+      "nameKey": "shubman gill",
+      "crexSlug": "shubman-gill-T5N",
+      "team": "GT",
+      "role": "Batter",
+      "innings": [],
+      "opponentStats": [],
+      "favouriteTarget": null,
+      "lastScraped": "2026-04-23T09:35:33.326Z"
+    },
+    {
+      "nameKey": "jossbuttler",
+      "crexSlug": "jos-buttler-P6X",
+      "team": "GT",
+      "role": "WK-Batter",
+      "innings": [],
+      "opponentStats": [],
+      "favouriteTarget": null,
+      "lastScraped": "2026-04-23T09:35:35.043Z"
+    },
+    {
+      "nameKey": "rashidkhan",
+      "crexSlug": "rashid-khan-Smb",
+      "team": "GT",
+      "role": "All-Rounder",
+      "innings": [],
+      "opponentStats": [],
+      "favouriteTarget": null,
+      "lastScraped": "2026-04-23T09:35:36.790Z"
+    },
+    {
+      "nameKey": "kagiso rabada",
+      "crexSlug": "kagiso-rabada-Sbz",
+      "team": "GT",
+      "role": "Bowler",
+      "innings": [],
+      "opponentStats": [],
+      "favouriteTarget": null,
+      "lastScraped": "2026-04-23T09:35:38.718Z"
+    },
+    {
+      "nameKey": "rishabh pant",
+      "crexSlug": "rishabh-pant-Rc6",
+      "team": "LSG",
+      "role": "WK-Batter",
+      "innings": [],
+      "opponentStats": [],
+      "favouriteTarget": null,
+      "lastScraped": "2026-04-23T09:35:40.515Z"
+    },
+    {
+      "nameKey": "mitchell marsh",
+      "crexSlug": "mitchell-marsh-Sk3",
+      "team": "LSG",
+      "role": "All-Rounder",
+      "innings": [],
+      "opponentStats": [],
+      "favouriteTarget": null,
+      "lastScraped": "2026-04-23T09:35:42.233Z"
+    },
+    {
+      "nameKey": "nicholas pooran",
+      "crexSlug": "nicholas-pooran-Slo",
+      "team": "LSG",
+      "role": "WK-Batter",
+      "innings": [],
+      "opponentStats": [],
+      "favouriteTarget": null,
+      "lastScraped": "2026-04-23T09:35:43.967Z"
+    },
+    {
+      "nameKey": "mohammed shami",
+      "crexSlug": "mohammed-shami-4N",
+      "team": "LSG",
+      "role": "Bowler",
+      "innings": [],
+      "opponentStats": [],
+      "favouriteTarget": null,
+      "lastScraped": "2026-04-23T09:35:46.062Z"
+    },
+    {
+      "nameKey": "aiden markram",
+      "crexSlug": "aiden-markram-SaG",
+      "team": "LSG",
+      "role": "All-Rounder",
+      "innings": [],
+      "opponentStats": [],
+      "favouriteTarget": null,
+      "lastScraped": "2026-04-23T09:35:48.010Z"
+    },
+    {
+      "nameKey": "priyansh arya",
+      "crexSlug": "priyansh-arya-Uqe",
+      "team": "PBKS",
+      "role": "Batter",
+      "innings": [],
+      "opponentStats": [],
+      "favouriteTarget": null,
+      "lastScraped": "2026-04-23T09:35:49.883Z"
+    },
+    {
+      "nameKey": "arshdeep singh",
+      "crexSlug": "arshdeep-singh-U35",
+      "team": "PBKS",
+      "role": "Bowler",
+      "innings": [],
+      "opponentStats": [],
+      "favouriteTarget": null,
+      "lastScraped": "2026-04-23T09:35:51.623Z"
+    },
+    {
+      "nameKey": "markus stoinis",
+      "crexSlug": "marcus-stoinis-P6I",
+      "team": "PBKS",
+      "role": "All-Rounder",
+      "innings": [],
+      "opponentStats": [],
+      "favouriteTarget": null,
+      "lastScraped": "2026-04-23T09:35:53.342Z"
+    }
+  ]
+}

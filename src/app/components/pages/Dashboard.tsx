@@ -82,6 +82,30 @@ const formatMatchDateSafe = (value: unknown) => {
   return raw;
 };
 
+const formatMatchStartTimeSafe = (explicitValue: unknown, fallbackIso: unknown) => {
+  const explicit = String(explicitValue || "").trim();
+  if (explicit) {
+    return explicit;
+  }
+
+  const rawIso = String(fallbackIso || "").trim();
+  if (!rawIso) {
+    return "";
+  }
+
+  const parsed = new Date(rawIso);
+  if (Number.isNaN(parsed.getTime())) {
+    return "";
+  }
+
+  return `${parsed.toLocaleTimeString("en-IN", {
+    timeZone: "Asia/Kolkata",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  })} IST`;
+};
+
 const toUiMatch = (match: any): UiMatch => ({
   id: String(match?.id || `${match?.team1 || "team1"}-${match?.team2 || "team2"}-${match?.date || "date"}`),
   league: match?.series || "Indian Premier League 2026",
@@ -96,7 +120,7 @@ const toUiMatch = (match: any): UiMatch => ({
       : "Score unavailable"),
   status: match?.status || "Status unavailable",
   date: formatMatchDateSafe(match?.date || match?.starts_at || match?.startsAt),
-  startTime: String(match?.startTime || "").trim(),
+  startTime: formatMatchStartTimeSafe(match?.startTime, match?.starts_at || match?.startsAt),
   venue: match?.venue || "Venue TBA",
   matchNo: String(match?.matchNo || "").trim(),
 });
@@ -366,11 +390,8 @@ export function Dashboard() {
         setLoading(true);
         setError(null);
 
-        const [liveRes, upcomingRes, iplRes, iplScrapedRes, teamsRes] = await Promise.all([
-          cricketApi.getLiveMatches(1, 8),
-          cricketApi.getUpcomingMatches(1, 8),
-          cricketApi.getIplMatches(1, 30),
-          cricketApi.getIplScrapedMatches(),
+        const [iplScrapedRes, teamsRes] = await Promise.all([
+          cricketApi.getIplScrapedMatches(true),
           cricketApi.getTeams({ page: 1, limit: 500 }),
         ]);
 
@@ -378,14 +399,9 @@ export function Dashboard() {
           return;
         }
 
-        const live = safeArray<any>((liveRes as any).matches).map(toUiMatch);
-        const rawUpcoming = safeArray<any>((upcomingRes as any).matches).map(toUiMatch);
-        const scrapedIpl = safeArray<any>((iplScrapedRes as any).matches).map(toUiMatch);
-        const fallbackIpl = safeArray<any>((iplRes as any).matches).map(toUiMatch);
-        const ipl = scrapedIpl.length > 0 ? scrapedIpl : fallbackIpl;
-        const upcoming = ipl.filter((match) => isUpcomingStatus(match.status)).length > 0
-          ? ipl.filter((match) => isUpcomingStatus(match.status))
-          : rawUpcoming;
+        const ipl = safeArray<any>((iplScrapedRes as any).matches).map(toUiMatch);
+        const live = ipl.filter((match) => isLiveStatus(match.status));
+        const upcoming = ipl.filter((match) => isUpcomingStatus(match.status));
         const teams = safeArray<any>((teamsRes as any).teams);
 
         setLiveMatches(live);

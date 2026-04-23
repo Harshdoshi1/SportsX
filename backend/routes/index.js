@@ -2,6 +2,7 @@ import { Router } from "express";
 import iplRoutes from "./iplRoutes.js";
 import matchRoutes from "./matchRoutes.js";
 import matchesRoutes from "./matchesRoutes.js";
+import playerRoutes from "./playerRoutes.js";
 import searchRoutes from "./searchRoutes.js";
 import seriesRoutes from "./seriesRoutes.js";
 import teamsRoutes from "./teamsRoutes.js";
@@ -46,6 +47,7 @@ router.use("/teams", teamsRoutes);
 router.get("/team/:id/players", teamsController.getPlayersByTeam);
 router.use("/series", seriesRoutes);
 router.use("/search", searchRoutes);
+router.use("/players", playerRoutes);
 router.use("/ipl", iplRoutes);
 
 export default router;

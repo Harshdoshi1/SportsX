@@ -478,7 +478,7 @@ export function TeamAnalysis() {
 
         const [playersRes, matchesRes, statsRes, pointsRes] = await Promise.all([
           cricketApi.getTeamPlayers(selection.short, { page: 1, limit: 250, teamName: getIplTeamByShort(selection.short)?.name || selection.short }),
-          cricketApi.getIplScrapedMatches(),
+          cricketApi.getIplScrapedMatches(true),
           cricketApi.getIplStats(),
           cricketApi.getIplPoints(),
         ]);
@@ -642,27 +642,33 @@ export function TeamAnalysis() {
     const completed = teamCompletedMatches;
     const teamInnings = completed
       .map((match) => {
-        const score = match?.team1 === selectedShort ? (match as any).team1Score : (match as any).team2Score;
-        const runs = parseScoreRuns(score);
-        const wickets = parseScoreWickets(score);
+        // Team's own score (for avgRuns)
+        const ownScore = match?.team1 === selectedShort ? (match as any).team1Score : (match as any).team2Score;
+        // Opponent's score (for wickets taken by this team's bowlers)
+        const oppScore = match?.team1 === selectedShort ? (match as any).team2Score : (match as any).team1Score;
+        const runs = parseScoreRuns(ownScore);
+        const wicketsLost = parseScoreWickets(ownScore);
+        const wicketsTaken = parseScoreWickets(oppScore);
         return {
           date: String(match?.date || "-").replace(/^[A-Z]{3},\s*/i, ""),
           runs: runs ?? 0,
-          wickets: wickets ?? 0,
+          wicketsLost: wicketsLost ?? 0,
+          wicketsTaken: wicketsTaken ?? 0,
         };
       })
       .filter((entry) => entry.runs > 0);
 
     const playedGames = Math.max(teamInnings.length, 1);
     const totalRuns = teamInnings.reduce((sum, entry) => sum + entry.runs, 0);
-    const totalWickets = teamInnings.reduce((sum, entry) => sum + entry.wickets, 0);
+    const totalWicketsTaken = teamInnings.reduce((sum, entry) => sum + entry.wicketsTaken, 0);
     const avgRuns = totalRuns / playedGames;
-    const avgWickets = totalWickets / playedGames;
+    const avgWickets = totalWicketsTaken / playedGames;
 
-    const xiNameSet = new Set(playingXiPlayers.map((player) => normalizeNameKey(player.name)));
+    // Use ALL squad players (not just playing XI) to match against stats leaders for 4s/6s
+    const allPlayerNameSet = new Set(players.map((player) => normalizeNameKey(player.name)));
     const boundaryTotals = statsLeaders.reduce(
       (acc, row) => {
-        if (!xiNameSet.has(normalizeNameKey(row.player))) {
+        if (!allPlayerNameSet.has(normalizeNameKey(row.player))) {
           return acc;
         }
         acc.fours += Number.isFinite(row.fours) ? Number(row.fours) : 0;
@@ -703,7 +709,7 @@ export function TeamAnalysis() {
         { name: "Sixes", value: Number(boundaryPerMatch.sixes.toFixed(1)), color: "#FF9100" },
       ],
     };
-  }, [playingXiPlayers, statsLeaders, team?.name, teamCompletedMatches]);
+  }, [players, playingXiPlayers, statsLeaders, team?.name, teamCompletedMatches]);
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.45 }} className="min-h-screen">

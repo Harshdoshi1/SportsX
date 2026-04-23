@@ -15,7 +15,7 @@ import { IPL_PLAYER_IMAGES, IPL_STATS_SECTIONS } from "../../data/ipl2026";
 import { hasUnifiedAdapter } from "../../sports/adapters";
 import { UnifiedLeague } from "../../sports/pages/UnifiedLeague";
 
-type LeagueKey = "ipl" | "f1-2026" | "epl";
+type LeagueKey = "ipl" | "f1-2026" | "epl" | "other";
 
 type IplTeamRow = {
   teamId: string;
@@ -147,7 +147,14 @@ export function League() {
   const [mostFours, setMostFours] = useState<IplSimpleStatRow[]>([]);
   const [statsCategories, setStatsCategories] = useState<{ batting: string[]; bowling: string[] }>({ batting: [], bowling: [] });
   const [iplNews, setIplNews] = useState<IplNewsItem[]>([]);
-  const leagueKey: LeagueKey = leagueId === "f1-2026" ? "f1-2026" : leagueId === "epl" ? "epl" : "ipl";
+  const leagueKey: LeagueKey =
+    !leagueId || leagueId === "ipl"
+      ? "ipl"
+      : leagueId === "f1-2026"
+        ? "f1-2026"
+        : leagueId === "epl"
+          ? "epl"
+          : "other";
 
   useEffect(() => {
     if (leagueKey !== "ipl") {
@@ -163,7 +170,7 @@ export function League() {
 
         const [teamsRes, matchesRes, statsRes, newsRes] = await Promise.all([
           cricketApi.getIplPoints(),
-          cricketApi.getIplScrapedMatches(),
+          cricketApi.getIplScrapedMatches(true),
           cricketApi.getIplStats(),
           cricketApi.getIplNews(),
         ]);
@@ -464,7 +471,15 @@ export function League() {
     }
 
     // Fallback for leagues without adapters (e.g. laliga, bundesliga, euroleague)
-    const generic = genericSnapshots[leagueKey];
+    const generic =
+      (leagueId && (genericSnapshots as any)[leagueId]) ||
+      genericSnapshots[leagueKey as keyof typeof genericSnapshots] ||
+      {
+        sportName: sportId === "f1" ? "Formula 1" : sportId === "basketball" ? "Basketball" : sportId === "football" ? "Football" : "Sport",
+        title: leagueId || "League",
+        summary: "This league is not yet supported by the unified UI adapter.",
+        bullets: ["Coming soon"],
+      };
     return (
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.4 }} className="min-h-screen">
         <Navbar />
@@ -477,7 +492,7 @@ export function League() {
             <h1 className="text-3xl font-black text-white mb-3">{generic.title}</h1>
             <p className="text-white/55 mb-5">{generic.summary}</p>
             <div className="space-y-2">
-              {generic.bullets.map((b) => (
+              {(generic.bullets as string[]).map((b: string) => (
                 <p key={b} className="text-sm text-white/65">- {b}</p>
               ))}
             </div>

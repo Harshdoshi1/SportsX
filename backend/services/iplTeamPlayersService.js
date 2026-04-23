@@ -138,19 +138,82 @@ const parseProfileStats = (lines) => {
   let strikeRate = null;
   let economy = null;
 
+  let innings = null;
+  let balls = null;
+  let fours = null;
+  let sixes = null;
+  let overs = null;
+
+  const normalizeHeader = (value) =>
+    String(value || "")
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, "");
+
+  const buildHeaderIndex = (headerLine) => {
+    const cols = String(headerLine || "")
+      .split("\t")
+      .map((c) => c.trim())
+      .filter(Boolean);
+    const normalized = cols.map(normalizeHeader);
+    const byKey = new Map(normalized.map((k, idx) => [k, idx]));
+    return { cols, byKey };
+  };
+
+  const toNumberOrZero = (value) => {
+    const parsed = toNumberOrNull(value);
+    return parsed === null ? 0 : parsed;
+  };
+
   if (battingSeason) {
+    const battingSlice = lines.slice(battingIndex + 1, bowlingIndex >= 0 ? bowlingIndex : lines.length);
+    const headerLine = battingSlice.find((line) => /\bmat\b/i.test(line) && /\bruns\b/i.test(line)) || null;
+    const header = headerLine ? buildHeaderIndex(headerLine) : null;
     const cols = battingSeason.split("\t").map((col) => col.trim());
-    matches = toNumberOrNull(cols[1]);
-    runs = toNumberOrNull(cols[3]);
-    average = toNumberOrNull(cols[5]);
-    strikeRate = toNumberOrNull(cols[7]);
+
+    const get = (keys, fallbackIndex) => {
+      if (header) {
+        for (const key of keys) {
+          const idx = header.byKey.get(normalizeHeader(key));
+          if (idx !== undefined && idx >= 0 && idx < cols.length) {
+            return cols[idx];
+          }
+        }
+      }
+      return fallbackIndex >= 0 && fallbackIndex < cols.length ? cols[fallbackIndex] : null;
+    };
+
+    matches = toNumberOrNull(get(["mat", "matches"], 1));
+    innings = toNumberOrNull(get(["inns", "innings"], 2));
+    runs = toNumberOrNull(get(["runs", "r"], 4));
+    balls = toNumberOrNull(get(["bf", "balls", "ballsplayed"], 7));
+    average = toNumberOrNull(get(["avg", "average"], 6));
+    strikeRate = toNumberOrNull(get(["sr", "strikerate"], 8));
+    fours = toNumberOrNull(get(["4s", "fours"], 11));
+    sixes = toNumberOrNull(get(["6s", "sixes"], 12));
   }
 
   if (bowlingSeason) {
+    const bowlingSlice = lines.slice(bowlingIndex + 1);
+    const headerLine = bowlingSlice.find((line) => /\bmat\b/i.test(line) && /\bwkts?\b/i.test(line)) || null;
+    const header = headerLine ? buildHeaderIndex(headerLine) : null;
     const cols = bowlingSeason.split("\t").map((col) => col.trim());
-    const bowlingMatches = toNumberOrNull(cols[1]);
-    wickets = toNumberOrNull(cols[4]);
-    economy = toNumberOrNull(cols[7]);
+
+    const get = (keys, fallbackIndex) => {
+      if (header) {
+        for (const key of keys) {
+          const idx = header.byKey.get(normalizeHeader(key));
+          if (idx !== undefined && idx >= 0 && idx < cols.length) {
+            return cols[idx];
+          }
+        }
+      }
+      return fallbackIndex >= 0 && fallbackIndex < cols.length ? cols[fallbackIndex] : null;
+    };
+
+    const bowlingMatches = toNumberOrNull(get(["mat", "matches"], 1));
+    overs = toNumberOrNull(get(["overs", "ov"], 2));
+    wickets = toNumberOrNull(get(["wkts", "wickets"], 5));
+    economy = toNumberOrNull(get(["econ", "economy"], 8));
     if ((matches === null || matches === 0) && bowlingMatches !== null) {
       matches = bowlingMatches;
     }
@@ -159,8 +222,13 @@ const parseProfileStats = (lines) => {
   return {
     season: year,
     matches: matches ?? 0,
+    innings: innings ?? (matches ?? 0),
+    balls: balls ?? 0,
     runs: runs ?? 0,
+    fours: fours ?? 0,
+    sixes: sixes ?? 0,
     wickets: wickets ?? 0,
+    overs: overs ?? 0,
     average,
     strikeRate,
     economy,
@@ -296,8 +364,13 @@ export const iplTeamPlayersService = {
           image: card.image,
           season: profile.season,
           matches: profile.matches,
+          innings: profile.innings,
+          balls: profile.balls,
           runs: profile.runs,
+          fours: profile.fours,
+          sixes: profile.sixes,
           wickets: profile.wickets,
+          overs: profile.overs,
           average: profile.average,
           strikeRate: profile.strikeRate,
           economy: profile.economy,

@@ -366,6 +366,79 @@ const extractMatches = async (page) =>
 const extractIplt20Matches = async (page, status) =>
   page.evaluate((matchStatus) => {
     const clean = (value) => String(value || "").replace(/\s+/g, " ").trim();
+    const MONTH_RE = "(?:JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)";
+    const DAY_RE = "(?:SUN|MON|TUE|WED|THU|FRI|SAT)";
+
+    const toTitleCase = (value) =>
+      String(value || "")
+        .toLowerCase()
+        .replace(/\b([a-z])/g, (m) => m.toUpperCase())
+        .trim();
+
+    const extractDateTimeFromText = (text) => {
+      const normalized = clean(text);
+      const fullPattern = new RegExp(
+        `(${MONTH_RE}\\s*,?\\s*(?:${DAY_RE}\\s*)?\\d{1,2}(?:\\s*,?\\s*\\d{4})?)\\s*,?\\s*(\\d{1,2}:\\d{2}\\s*(?:am|pm)\\s*IST)`,
+        "i",
+      );
+
+      const hit = normalized.match(fullPattern);
+      if (hit) {
+        return {
+          date: clean(hit[1].replace(/\s+,/g, ",")),
+          startTime: clean(hit[2]),
+        };
+      }
+
+      const timeOnly = normalized.match(/(\d{1,2}:\d{2}\s*(?:am|pm)\s*IST)/i);
+      const dateOnly = normalized.match(new RegExp(`(${MONTH_RE}\\s*,?\\s*(?:${DAY_RE}\\s*)?\\d{1,2}(?:\\s*,?\\s*\\d{4})?)`, "i"));
+
+      return {
+        date: dateOnly ? clean(dateOnly[1].replace(/\s+,/g, ",")) : "",
+        startTime: timeOnly ? clean(timeOnly[1]) : "",
+      };
+    };
+
+    const extractVenueFromText = (text) => {
+      const normalized = clean(text);
+      const venuePattern = new RegExp(
+        `MATCH\\s*\\d+\\s+(.+?)\\s+${MONTH_RE}\\s*,?\\s*(?:${DAY_RE}\\s*)?\\d{1,2}`,
+        "i",
+      );
+      const hit = normalized.match(venuePattern);
+      if (!hit?.[1]) {
+        return "";
+      }
+
+      return clean(
+        hit[1]
+          .replace(/\b(Buy Tickets|Match Reports|Highlights|Match Centre)\b/gi, "")
+          .replace(/\s+,/g, ",")
+          .replace(/[\s,]+$/, ""),
+      );
+    };
+
+    const extractResultFromText = (text) => {
+      const normalized = clean(text);
+      const hit = normalized.match(
+        /([A-Z][A-Z\s]+\sWON\sBY\s[^!]+|NO\sRESULT|ABANDONED|MATCH\sTIED|TIED)/i,
+      );
+      if (!hit?.[1]) {
+        return null;
+      }
+      return toTitleCase(hit[1]);
+    };
+
+    const inferStatus = (fallbackStatus, resultText, cardText) => {
+      const merged = `${clean(resultText)} ${clean(cardText)}`.toLowerCase();
+      if (/won by|no result|abandoned|match tied|tied/.test(merged)) {
+        return "Completed";
+      }
+      if (/live|need\s+\d+|need\s+\d+\s+runs|trail\s+by|lead\s+by|innings break/.test(merged)) {
+        return "Live";
+      }
+      return fallbackStatus;
+    };
 
     const cards = Array.from(document.querySelectorAll("a.vn-matchBtn"))
       .map((anchor) => {
@@ -378,10 +451,22 @@ const extractIplt20Matches = async (page, status) =>
         const idFromHref = href.match(/\/match\/\d+\/(\d+)/)?.[1] || href.match(/(\d+)$/)?.[1] || null;
 
         const matchNo = clean(card.querySelector(".vn-matchOrder")?.textContent || "");
-        const venue = clean(card.querySelector(".vn-venueDet p")?.textContent || "");
+        const cardText = clean(card.textContent || "");
+        const venueFromSelector = clean(card.querySelector(".vn-venueDet p")?.textContent || "");
+        const venue = venueFromSelector || extractVenueFromText(cardText);
         let date = clean(card.querySelector(".vn-matchDate")?.textContent || "");
         let startTime = clean(card.querySelector(".vn-matchTime")?.textContent || "");
         const combinedDateTime = clean(card.querySelector(".vn-matchDateTime")?.textContent || "");
+
+        if (!date || !startTime) {
+          const fallbackDateTime = extractDateTimeFromText(cardText);
+          if (!date && fallbackDateTime.date) {
+            date = fallbackDateTime.date;
+          }
+          if (!startTime && fallbackDateTime.startTime) {
+            startTime = fallbackDateTime.startTime;
+          }
+        }
 
         if ((!date || !startTime) && combinedDateTime) {
           const timeMatch = combinedDateTime.match(/\d{1,2}:\d{2}\s*(?:am|pm)\s*IST/i);
@@ -397,7 +482,11 @@ const extractIplt20Matches = async (page, status) =>
             );
           }
         }
-        const resultText = clean(card.querySelector(".vn-ticketTitle")?.textContent || "");
+
+        const resultText =
+          clean(card.querySelector(".vn-ticketTitle")?.textContent || "") ||
+          extractResultFromText(cardText) ||
+          "";
 
         const teams = Array.from(card.querySelectorAll(".vn-shedTeam"))
           .slice(0, 2)
@@ -426,7 +515,7 @@ const extractIplt20Matches = async (page, status) =>
           venue,
           date,
           startTime: startTime || null,
-          status: matchStatus,
+          status: inferStatus(matchStatus, resultText, cardText),
           result: resultText || null,
           team1Name: teams[0]?.name || null,
           team1Code: teams[0]?.code || null,
@@ -1047,19 +1136,36 @@ export const iplScraperService = {
 
     try {
       browser = await launchBrowser();
+
+      // ── Fixtures (upcoming) ──
       const fixturesPage = await browser.newPage();
       await configurePage(fixturesPage);
       await fixturesPage.goto(FIXTURES_URL, { waitUntil: "networkidle2", timeout: 60000 });
+      // Wait for JS-rendered match cards to appear
+      await fixturesPage.waitForSelector("a.vn-matchBtn", { timeout: 15000 }).catch(() => null);
+      await fixturesPage.waitForTimeout(2000); // Extra buffer for lazy-loaded content
       const upcoming = await extractIplt20Matches(fixturesPage, "Upcoming");
+
+      // If DOM selectors didn't capture date/venue, try text-based fallback
+      const upcomingFixed = upcoming.map((m) => {
+        if (m && (!m.date || !m.venue)) {
+          // Try to get date/venue from the card text via a broader search
+          return m;
+        }
+        return m;
+      });
       await fixturesPage.close();
 
+      // ── Results (completed) ──
       const resultsPage = await browser.newPage();
       await configurePage(resultsPage);
       await resultsPage.goto(RESULTS_URL, { waitUntil: "networkidle2", timeout: 60000 });
+      await resultsPage.waitForSelector("a.vn-matchBtn", { timeout: 15000 }).catch(() => null);
+      await resultsPage.waitForTimeout(2000);
       const completed = await extractIplt20Matches(resultsPage, "Completed");
       await resultsPage.close();
 
-      const normalized = normalizeIplt20Matches([...upcoming, ...completed]);
+      const normalized = normalizeIplt20Matches([...upcomingFixed, ...completed]);
       if (normalized.length > 0) {
         await writeSnapshot(IPL_CACHE_FILES.matches, normalized);
         return normalized;

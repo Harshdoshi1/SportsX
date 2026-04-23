@@ -101,7 +101,7 @@ export const iplController = {
         "matches",
         forceFresh,
         () => supabaseIplSyncService.getMatches(forceFresh),
-        (matches) => ({ source: "cricbuzz-scraper", count: matches.length }),
+        (matches) => ({ source: "iplt20-scraper", count: matches.length }),
       );
       ok(
         res,

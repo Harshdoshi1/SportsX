@@ -230,4 +230,13 @@ export const cricketApi = {
 
   search: (q: string, type: "all" | "team" | "player" = "all", page = 1, limit = 20) =>
     request(`/search?q=${encodeURIComponent(q)}&type=${type}&page=${page}&limit=${limit}`),
+
+  getPlayerInnings: (playerId: string) =>
+    request(`/players/innings/${encodeURIComponent(playerId)}`),
+
+  getPlayerOpponentAnalysis: (playerId: string) =>
+    request(`/players/opponent-analysis/${encodeURIComponent(playerId)}`),
+
+  getPlayerList: () =>
+    request(`/players/list`),
 };

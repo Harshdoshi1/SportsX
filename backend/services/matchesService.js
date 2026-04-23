@@ -1,4 +1,4 @@
-import { iplScraperService } from "./iplScraperService.js";
+import { supabaseIplSyncService } from "./supabaseIplSyncService.js";
 
 const CACHE_TTL_MS = 2 * 60 * 1000;
 let cacheData = null;
@@ -54,8 +54,8 @@ const loadMatches = async (forceRefresh = false) => {
   }
 
   inFlight = (async () => {
-    const scraped = await iplScraperService.scrapeMatches();
-    const normalized = Array.isArray(scraped) ? scraped.map(normalizeScrapedMatch) : [];
+    const payload = await supabaseIplSyncService.getMatches(forceRefresh);
+    const normalized = Array.isArray(payload) ? payload.map(normalizeScrapedMatch) : [];
     cacheData = normalized;
     cacheUntil = Date.now() + CACHE_TTL_MS;
     return normalized;
@@ -78,7 +78,7 @@ export const matchesService = {
     return {
       data: byStatus(loaded.matches, "live"),
       meta: {
-        provider: "cricbuzz-scraper",
+        provider: "iplt20-scraper",
         cacheHit: loaded.cacheHit,
       },
     };
@@ -89,7 +89,7 @@ export const matchesService = {
     return {
       data: byStatus(loaded.matches, "upcoming"),
       meta: {
-        provider: "cricbuzz-scraper",
+        provider: "iplt20-scraper",
         cacheHit: loaded.cacheHit,
       },
     };
@@ -100,7 +100,7 @@ export const matchesService = {
     return {
       data: byStatus(loaded.matches, "completed"),
       meta: {
-        provider: "cricbuzz-scraper",
+        provider: "iplt20-scraper",
         cacheHit: loaded.cacheHit,
       },
     };
@@ -111,7 +111,7 @@ export const matchesService = {
     return {
       data: loaded.matches,
       meta: {
-        provider: "cricbuzz-scraper",
+        provider: "iplt20-scraper",
         cacheHit: loaded.cacheHit,
       },
     };
@@ -131,7 +131,7 @@ export const matchesService = {
         },
       },
       meta: {
-        provider: "cricbuzz-scraper",
+        provider: "iplt20-scraper",
         cacheHit: loaded.cacheHit,
       },
     };

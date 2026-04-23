@@ -89,13 +89,108 @@ const assertWriteAccessConfigured = () => {
   );
 };
 
-const toIsoDateTime = (dateText, timeText) => {
-  const candidate = String(`${dateText || ""} ${timeText || ""}`.trim());
-  const parsed = new Date(candidate);
-  if (Number.isFinite(parsed.getTime())) {
-    return parsed.toISOString();
+const MONTH_INDEX = {
+  jan: 0,
+  feb: 1,
+  mar: 2,
+  apr: 3,
+  may: 4,
+  jun: 5,
+  jul: 6,
+  aug: 7,
+  sep: 8,
+  sept: 8,
+  oct: 9,
+  nov: 10,
+  dec: 11,
+};
+
+const IST_OFFSET_MINUTES = 330;
+
+const parseIplStartsAtIso = (dateText, timeText) => {
+  const dateRaw = String(dateText || "").replace(/\s+/g, " ").trim();
+  const timeRaw = String(timeText || "")
+    .replace(/\s+/g, " ")
+    .replace(/\bIST\b/i, "")
+    .trim();
+
+  if (!dateRaw) {
+    return null;
   }
-  return new Date().toISOString();
+
+  const seasonYear = Number(env.iplSeasonYear || new Date().getFullYear());
+
+  const normalizedDate = dateRaw
+    .replace(/\b(sun|mon|tue|wed|thu|fri|sat)\b[,]?/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  const tokens = normalizedDate
+    .split(/[^A-Za-z0-9]+/)
+    .map((t) => t.trim())
+    .filter(Boolean);
+
+  const monthTokenIndex = tokens.findIndex((t) => Object.prototype.hasOwnProperty.call(MONTH_INDEX, String(t).toLowerCase()));
+  if (monthTokenIndex < 0) {
+    return null;
+  }
+
+  const monthKey = String(tokens[monthTokenIndex]).toLowerCase();
+  const month = MONTH_INDEX[monthKey];
+
+  const yearToken = tokens.find((t) => /^\d{4}$/.test(t));
+  const year = Number(yearToken || seasonYear);
+
+  const numericTokens = tokens
+    .filter((t) => /^\d{1,2}$/.test(t))
+    .map((t) => Number(t))
+    .filter((n) => Number.isFinite(n));
+
+  let day = null;
+  const before = monthTokenIndex > 0 ? tokens[monthTokenIndex - 1] : null;
+  const after = monthTokenIndex + 1 < tokens.length ? tokens[monthTokenIndex + 1] : null;
+  if (before && /^\d{1,2}$/.test(before)) {
+    day = Number(before);
+  } else if (after && /^\d{1,2}$/.test(after)) {
+    day = Number(after);
+  } else if (numericTokens.length > 0) {
+    day = numericTokens[0];
+  }
+
+  if (!Number.isFinite(day) || !Number.isFinite(year) || month === null) {
+    return null;
+  }
+
+  let hour = 19;
+  let minute = 30;
+
+  if (timeRaw) {
+    const match = timeRaw.match(/\b(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\b/i);
+    if (match) {
+      const rawHour = Number(match[1]);
+      const rawMinute = Number(match[2] || "0");
+      const meridian = String(match[3] || "").toLowerCase();
+      if (Number.isFinite(rawHour) && Number.isFinite(rawMinute)) {
+        hour = rawHour;
+        minute = rawMinute;
+        if (meridian === "pm" && hour < 12) hour += 12;
+        if (meridian === "am" && hour === 12) hour = 0;
+      }
+    }
+  }
+
+  const utcMs = Date.UTC(year, month, Number(day), hour, minute) - IST_OFFSET_MINUTES * 60_000;
+  const d = new Date(utcMs);
+  if (!Number.isFinite(d.getTime())) {
+    return null;
+  }
+  return d.toISOString();
+};
+
+const toIsoDateTime = (dateText, timeText) => {
+  const parsed = parseIplStartsAtIso(dateText, timeText);
+  if (parsed) return parsed;
+  return null;
 };
 
 const parseScore = (value) => {
@@ -147,23 +242,72 @@ const formatScore = ({ runs, wickets, overs }) => {
 };
 
 const formatDateAndTime = (isoValue) => {
+  if (!isoValue) {
+    return { date: "TBA", startTime: "" };
+  }
+
   const parsed = new Date(isoValue);
   if (!Number.isFinite(parsed.getTime())) {
     return { date: "TBA", startTime: "" };
   }
 
   const date = parsed.toLocaleDateString("en-IN", {
+    timeZone: "Asia/Kolkata",
     day: "2-digit",
     month: "short",
     year: "numeric",
   });
   const startTime = `${parsed.toLocaleTimeString("en-IN", {
+    timeZone: "Asia/Kolkata",
     hour: "numeric",
     minute: "2-digit",
     hour12: true,
   })} IST`;
 
   return { date, startTime };
+};
+
+const ensureVenues = async (venueNames) => {
+  const supabase = getSupabase();
+  if (!supabase) return new Map();
+
+  const unique = Array.from(
+    new Set((venueNames || []).map((v) => String(v || "").trim()).filter(Boolean)),
+  );
+  if (unique.length === 0) return new Map();
+
+  const stored = unwrap(
+    await supabase.from("venues").select("id, name, city").in("name", unique),
+    "read venues",
+  );
+
+  const byKey = new Map(
+    (stored || []).map((row) => [String(`${row.name}::${row.city || ""}`).toLowerCase(), row]),
+  );
+
+  const inserts = [];
+  for (const name of unique) {
+    const key = String(`${name}::`).toLowerCase();
+    if (!byKey.has(key)) {
+      inserts.push({ name, city: null, timezone: "Asia/Kolkata" });
+    }
+  }
+
+  if (inserts.length > 0) {
+    const inserted = unwrap(await supabase.from("venues").insert(inserts).select("id, name, city"), "insert venues");
+    for (const row of inserted || []) {
+      byKey.set(String(`${row.name}::${row.city || ""}`).toLowerCase(), row);
+    }
+  }
+
+  const result = new Map();
+  for (const name of unique) {
+    const row = byKey.get(String(`${name}::`).toLowerCase()) || null;
+    if (row?.id) {
+      result.set(name, row.id);
+    }
+  }
+  return result;
 };
 
 const getTeamLookup = () => {
@@ -513,6 +657,8 @@ const persistMatches = async (matches) => {
   const seasonId = await ensureLeagueAndSeason();
   if (!seasonId) return;
 
+  const venueIdByName = await ensureVenues(matches.map((match) => match.venue).filter(Boolean));
+
   const teams = await ensureTeams(
     matches.flatMap((match) => [match.team1, match.team2, match.team1Name, match.team2Name]).filter(Boolean),
   );
@@ -523,6 +669,8 @@ const persistMatches = async (matches) => {
       const awayMeta = resolveTeamMeta(match.team2 || match.team2Name, getTeamLookup());
       if (!homeMeta || !awayMeta) return null;
 
+      const venueId = match?.venue ? venueIdByName.get(String(match.venue).trim()) || null : null;
+
       return {
         season_id: seasonId,
         match_no: match.matchNo || null,
@@ -530,6 +678,7 @@ const persistMatches = async (matches) => {
         status: mapStatus(match.status),
         result_text: match.result || null,
         starts_at: toIsoDateTime(match.date, match.startTime),
+        venue_id: venueId,
         source_provider: "iplt20-scraper",
         source_match_id: String(match.id),
       };
@@ -762,7 +911,7 @@ const readMatchesFromSupabase = async () => {
 
   const matchesResult = await supabase
     .from("matches")
-    .select("id, source_match_id, match_no, status, result_text, starts_at")
+    .select("id, source_match_id, match_no, status, result_text, starts_at, venue_id")
     .eq("season_id", seasonId)
     .order("starts_at", { ascending: true });
 
@@ -772,6 +921,17 @@ const readMatchesFromSupabase = async () => {
 
   const matches = matchesResult?.data || [];
   if (matches.length === 0) return [];
+
+  const venueIds = Array.from(new Set(matches.map((match) => match.venue_id).filter(Boolean)));
+  const venuesResult = venueIds.length
+    ? await supabase.from("venues").select("id, name").in("id", venueIds)
+    : { data: [], error: null };
+
+  if (venuesResult?.error) {
+    throw new Error(`[supabase-sync] read venues for matches: ${venuesResult.error.message}`);
+  }
+
+  const venueById = new Map((venuesResult?.data || []).map((venue) => [venue.id, venue]));
 
   const matchIds = matches.map((match) => match.id);
   const matchTeamsResult = await supabase
@@ -814,6 +974,7 @@ const readMatchesFromSupabase = async () => {
     const homeTeam = home ? teamsById.get(home.team_id) : null;
     const awayTeam = away ? teamsById.get(away.team_id) : null;
     const dateTime = formatDateAndTime(match.starts_at);
+    const venue = match.venue_id ? venueById.get(match.venue_id) : null;
 
     return {
       id: String(match.source_match_id || match.id),
@@ -830,7 +991,7 @@ const readMatchesFromSupabase = async () => {
         : null,
       date: dateTime.date,
       startTime: dateTime.startTime,
-      venue: null,
+      venue: venue?.name || null,
       status: toUiStatus(match.status),
       result: match.result_text || null,
     };
