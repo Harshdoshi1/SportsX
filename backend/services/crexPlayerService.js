@@ -27,6 +27,22 @@ const IPL_PLAYER_CREX_MAP = [];
 
 const normalizeNameKey = (v) => String(v || "").toLowerCase().replace(/[^a-z0-9]/g, "");
 
+const consonantKey = (v) => normalizeNameKey(v).replace(/[aeiou]/g, "");
+
+const firstToken = (v) => String(v || "").split(/[^a-z0-9]+/i).filter(Boolean)[0] || "";
+
+const parseNum = (v, fallback = 0) => {
+  const n = Number(String(v ?? "").replace(/[^0-9.\-]+/g, ""));
+  return Number.isFinite(n) ? n : fallback;
+};
+
+const parseIntNum = (v, fallback = 0) => {
+  const n = Number.parseInt(String(v ?? "").replace(/[^0-9\-]+/g, ""), 10);
+  return Number.isFinite(n) ? n : fallback;
+};
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
 const toHttps = (url) => {
   const raw = String(url || "").trim();
   if (!raw) return "";
@@ -219,7 +235,7 @@ const scrapePlayerMatchPage = async (browser, crexSlug, playerTeam) => {
 
     // Wait for match rows to appear
     await page.waitForSelector('[class*="match"], [class*="score"], table tr', { timeout: 12000 }).catch(() => null);
-    await page.waitForTimeout(2000);
+    await sleep(2000);
 
     // Extract innings data via DOM evaluation
     const inningsData = await page.evaluate((team) => {
@@ -274,7 +290,7 @@ const scrapeCrexScorecard = async (browser, matchUrl) => {
     await configurePage(page);
     await page.goto(matchUrl, { waitUntil: "networkidle2", timeout: 60000 });
     await page.waitForSelector("table tr", { timeout: 15000 }).catch(() => null);
-    await page.waitForTimeout(1500);
+    await sleep(1500);
 
     const inningsRows = await page.evaluate(() => {
       const results = [];
@@ -428,6 +444,203 @@ const parseRecentFormFromProfileText = (pageText, playerTeam) => {
   return innings;
 };
 
+const extractRecentMatchUrls = async (page) => {
+  return page.evaluate(() => {
+    const clean = (value) => String(value || "").replace(/\s+/g, " ").trim();
+    const anchors = Array.from(document.querySelectorAll("a[href*='/cricket-live-score/']"));
+    const out = [];
+
+    for (const anchor of anchors) {
+      const href = String(anchor.href || "").trim();
+      if (!href || !/indian-premier-league-2026/i.test(href)) continue;
+
+      const card = anchor.closest("article") || anchor.closest("li") || anchor.closest("div") || anchor.parentElement;
+      const cardText = clean(card?.textContent || "");
+      const dateMatch = cardText.match(/\b\d{1,2}\s+(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)(?:\s+\d{4})?/i);
+      out.push({ href, cardText, date: dateMatch ? clean(dateMatch[0]) : null });
+    }
+
+    const deduped = [];
+    const seen = new Set();
+    for (const row of out) {
+      if (seen.has(row.href)) continue;
+      seen.add(row.href);
+      deduped.push(row);
+    }
+
+    return deduped.slice(0, 15);
+  });
+};
+
+const collectWicketVictims = (battingRows, bowlerName) => {
+  const victims = [];
+  const bowlerKey = normalizeNameKey(bowlerName);
+  if (!bowlerKey) return victims;
+
+  for (const row of battingRows || []) {
+    const dismissal = String(row?.dismissal || "").toLowerCase();
+    if (!dismissal) continue;
+
+    // Examples: c Kohli b Bumrah, b Bumrah, lbw b Bumrah, st Dhoni b Jadeja
+    const match = dismissal.match(/\bb\s+([a-z .'-]+)/i);
+    if (!match?.[1]) continue;
+    const dismissedByKey = normalizeNameKey(match[1]);
+
+    if (!dismissedByKey) continue;
+    if (dismissedByKey.includes(bowlerKey) || bowlerKey.includes(dismissedByKey)) {
+      victims.push(String(row?.name || "").trim());
+    }
+  }
+
+  return Array.from(new Set(victims.filter(Boolean))).slice(0, 10);
+};
+
+const findBestPlayerRow = (rows, playerNameLike) => {
+  const targetKey = normalizeNameKey(playerNameLike);
+  const targetConsonants = consonantKey(playerNameLike);
+  const targetFirst = firstToken(targetKey);
+
+  if (!targetKey) return null;
+
+  let best = null;
+  let bestScore = -1;
+
+  for (const row of rows || []) {
+    const name = String(row?.name || "").trim();
+    if (!name) continue;
+
+    const key = normalizeNameKey(name);
+    const cons = consonantKey(name);
+    const first = firstToken(key);
+
+    let score = 0;
+    if (key === targetKey) score += 100;
+    if (key.includes(targetKey) || targetKey.includes(key)) score += 70;
+    if (cons && targetConsonants && (cons === targetConsonants || cons.includes(targetConsonants) || targetConsonants.includes(cons))) score += 55;
+    if (first && targetFirst && (first === targetFirst || first.includes(targetFirst) || targetFirst.includes(first))) score += 20;
+
+    if (score > bestScore) {
+      bestScore = score;
+      best = row;
+    }
+  }
+
+  return bestScore >= 20 ? best : null;
+};
+
+const scrapeCrexScorecardDetailed = async (browser, matchUrl) => {
+  const page = await browser.newPage();
+  try {
+    await configurePage(page);
+    await page.goto(matchUrl, { waitUntil: "networkidle2", timeout: 60000 });
+    await page.evaluate(() => {
+      const scorecardTab = Array.from(document.querySelectorAll("a,button,div,span"))
+        .find((n) => /^scorecard$/i.test(String(n?.textContent || "").trim()));
+      if (scorecardTab) {
+        scorecardTab.click();
+      }
+    });
+    await sleep(1700);
+
+    const data = await page.evaluate(() => {
+      const toLines = (text) =>
+        String(text || "")
+          .split(/\n+/)
+          .map((line) => line.trim())
+          .filter(Boolean);
+
+      const isNumberLike = (value) => /^-?\d+(?:\.\d+)?$/.test(String(value || "").trim());
+
+      const text = document.body?.innerText || "";
+      const lines = toLines(text);
+      const battingRows = [];
+      const bowlingRows = [];
+
+      const battingHeaderIndex = lines.findIndex((line) => /^batter/i.test(line));
+      const bowlingSectionIndex = lines.findIndex((line) => /^BOWLING$/i.test(line));
+
+      if (battingHeaderIndex >= 0) {
+        let i = battingHeaderIndex + 1;
+        while (i < lines.length) {
+          const line = lines[i];
+          if (/^extras:/i.test(line) || /^BOWLING$/i.test(line)) break;
+          if (/^batter/i.test(line) || /^r$/i.test(line) || /^b$/i.test(line) || /^4s$/i.test(line) || /^6s$/i.test(line) || /^sr$/i.test(line)) {
+            i += 1;
+            continue;
+          }
+
+          const name = line;
+          i += 1;
+          if (String(lines[i] || "").toUpperCase() === "IMPACT") {
+            i += 1;
+          }
+
+          let dismissal = "";
+          if (!isNumberLike(lines[i])) {
+            dismissal = lines[i] || "";
+            i += 1;
+          }
+
+          if (!isNumberLike(lines[i]) || !isNumberLike(lines[i + 1]) || !isNumberLike(lines[i + 2]) || !isNumberLike(lines[i + 3]) || !isNumberLike(lines[i + 4])) {
+            continue;
+          }
+
+          battingRows.push({
+            name,
+            runs: lines[i],
+            balls: lines[i + 1],
+            fours: lines[i + 2],
+            sixes: lines[i + 3],
+            sr: lines[i + 4],
+            dismissal,
+          });
+          i += 5;
+        }
+      }
+
+      if (bowlingSectionIndex >= 0) {
+        let i = bowlingSectionIndex + 1;
+        while (i < lines.length) {
+          const line = lines[i];
+          if (/^FALL OF WICKETS$/i.test(line) || /^PARTNERSHIP$/i.test(line) || /^Yet to bat$/i.test(line) || /^CREX$/i.test(line)) break;
+          if (/^bowler/i.test(line) || /^o$/i.test(line) || /^m$/i.test(line) || /^r$/i.test(line) || /^w$/i.test(line) || /^er$/i.test(line)) {
+            i += 1;
+            continue;
+          }
+
+          const name = line;
+          i += 1;
+          if (String(lines[i] || "").toUpperCase() === "IMPACT") {
+            i += 1;
+          }
+
+          if (!isNumberLike(lines[i]) || !isNumberLike(lines[i + 1]) || !isNumberLike(lines[i + 2]) || !isNumberLike(lines[i + 3]) || !isNumberLike(lines[i + 4])) {
+            continue;
+          }
+
+          bowlingRows.push({
+            name,
+            overs: lines[i],
+            maidens: lines[i + 1],
+            runs: lines[i + 2],
+            wickets: lines[i + 3],
+            economy: lines[i + 4],
+          });
+          i += 5;
+        }
+      }
+
+      return { battingRows, bowlingRows };
+    });
+
+    return data;
+  } catch {
+    return { battingRows: [], bowlingRows: [] };
+  } finally {
+    await page.close();
+  }
+};
+
 // ─── Compute per-opponent aggregates ─────────────────────────────────────────
 const computeOpponentStats = (innings) => {
   const byTeam = {};
@@ -465,6 +678,7 @@ const scrapePlayer = async (browser, playerMeta) => {
   const profilePage = await browser.newPage();
   let profileText = "";
   let recentMatchUrls = [];
+  let recentCards = [];
 
   try {
     await configurePage(profilePage);
@@ -472,7 +686,7 @@ const scrapePlayer = async (browser, playerMeta) => {
       waitUntil: "networkidle2",
       timeout: 60000,
     });
-    await profilePage.waitForTimeout(2000);
+    await sleep(2000);
 
     // Extract recent form links and page text
     const result = await profilePage.evaluate(() => {
@@ -483,12 +697,13 @@ const scrapePlayer = async (browser, playerMeta) => {
           text: a.textContent.trim(),
         }))
         .filter((l) => l.href.includes("indian-premier-league-2026"))
-        .slice(0, 10);
+        .slice(0, 20);
       return { text, links };
     });
 
     profileText = result.text;
     recentMatchUrls = result.links.map((l) => l.href);
+    recentCards = await extractRecentMatchUrls(profilePage);
   } catch {
     profileText = "";
   } finally {
@@ -497,17 +712,61 @@ const scrapePlayer = async (browser, playerMeta) => {
 
   // Parse innings from profile page text
   const innings = parseRecentFormFromProfileText(profileText, team);
+  const bowlingInnings = [];
+  const inningsFromScorecards = [];
 
   const normalizedPlayerNameKey = nameKey || deriveNameKeyFromCrexSlug(crexSlug);
-  const scorecardUrls = Array.from(new Set(recentMatchUrls)).slice(0, 10);
+  const scorecardUrls = Array.from(new Set(recentMatchUrls)).slice(0, 12);
   const scorecardRowsByMatchSlug = new Map();
   for (const url of scorecardUrls) {
     try {
-      const rows = await scrapeCrexScorecard(browser, url);
-      if (!rows || rows.length === 0) continue;
+      const rows = await scrapeCrexScorecardDetailed(browser, url);
+      if ((!rows?.battingRows || rows.battingRows.length === 0) && (!rows?.bowlingRows || rows.bowlingRows.length === 0)) continue;
       const slugMatch = String(url).match(/\/cricket-live-score\/([^/?#]+)/i);
       const matchSlug = slugMatch?.[1] ? String(slugMatch[1]) : url;
       scorecardRowsByMatchSlug.set(matchSlug, rows);
+
+      const bestBattingRow = findBestPlayerRow(rows.battingRows || [], nameKey);
+      if (bestBattingRow) {
+        const { team1, team2 } = extractTeamsFromMatchSlug(matchSlug);
+        const playerTeam = String(team || "").toUpperCase();
+        const opponent = team1 === playerTeam ? String(team2 || "").toUpperCase() : String(team1 || "").toUpperCase();
+        const cardMeta = (recentCards || []).find((item) => String(item.href || "").includes(matchSlug));
+
+        inningsFromScorecards.push({
+          runs: parseIntNum(bestBattingRow.runs, 0),
+          balls: parseIntNum(bestBattingRow.balls, 0),
+          sr: parseNum(bestBattingRow.sr, 0),
+          fours: parseIntNum(bestBattingRow.fours, 0),
+          sixes: parseIntNum(bestBattingRow.sixes, 0),
+          opponent: IPL_TEAMS[opponent] ? opponent : String(opponent || "TBD"),
+          date: cardMeta?.date || "Unknown",
+          matchSlug,
+          dismissal: String(bestBattingRow.dismissal || ""),
+          matchUrl: url,
+        });
+      }
+
+      const bestBowlingRow = findBestPlayerRow(rows.bowlingRows || [], nameKey);
+      if (bestBowlingRow) {
+        const { team1, team2 } = extractTeamsFromMatchSlug(matchSlug);
+        const playerTeam = String(team || "").toUpperCase();
+        const opponent = team1 === playerTeam ? String(team2 || "").toUpperCase() : String(team1 || "").toUpperCase();
+        const victims = collectWicketVictims(rows.battingRows || [], bestBowlingRow.name || "");
+
+        const cardMeta = (recentCards || []).find((item) => String(item.href || "").includes(matchSlug));
+        bowlingInnings.push({
+          opponent: IPL_TEAMS[opponent] ? opponent : String(opponent || "TBD"),
+          date: cardMeta?.date || null,
+          overs: parseNum(bestBowlingRow.overs, 0),
+          maidens: parseIntNum(bestBowlingRow.maidens, 0),
+          runsConceded: parseIntNum(bestBowlingRow.runs, 0),
+          wickets: parseIntNum(bestBowlingRow.wickets, 0),
+          economy: parseNum(bestBowlingRow.economy, 0),
+          wicketPlayers: victims,
+          matchUrl: url,
+        });
+      }
     } catch {
       // ignore
     }
@@ -518,28 +777,45 @@ const scrapePlayer = async (browser, playerMeta) => {
     if (!matchSlug) return inn;
     const rows = scorecardRowsByMatchSlug.get(matchSlug);
     if (!rows) return inn;
-    const best = rows
-      .map((row) => ({
-        row,
-        key: normalizeNameKey(row?.name),
-      }))
-      .find((item) => item.key && (item.key.includes(normalizedPlayerNameKey) || normalizedPlayerNameKey.includes(item.key)));
-    if (!best?.row) return inn;
+    const best = findBestPlayerRow(rows.battingRows || [], normalizedPlayerNameKey);
+    if (!best) return inn;
     return {
       ...inn,
-      runs: Number.isFinite(Number(best.row.runs)) ? Number(best.row.runs) : inn.runs,
-      balls: Number.isFinite(Number(best.row.balls)) ? Number(best.row.balls) : inn.balls,
-      fours: Number.isFinite(Number(best.row.fours)) ? Number(best.row.fours) : inn.fours,
-      sixes: Number.isFinite(Number(best.row.sixes)) ? Number(best.row.sixes) : inn.sixes,
-      sr: Number.isFinite(Number(best.row.sr)) ? Number(best.row.sr) : inn.sr,
+      runs: Number.isFinite(Number(best.runs)) ? Number(best.runs) : inn.runs,
+      balls: Number.isFinite(Number(best.balls)) ? Number(best.balls) : inn.balls,
+      fours: Number.isFinite(Number(best.fours)) ? Number(best.fours) : inn.fours,
+      sixes: Number.isFinite(Number(best.sixes)) ? Number(best.sixes) : inn.sixes,
+      sr: Number.isFinite(Number(best.sr)) ? Number(best.sr) : inn.sr,
+      dismissal: String(best.dismissal || ""),
       matchUrl: inn.matchUrl || null,
     };
   };
 
   const inningsEnriched = innings.map(enrichInnings);
+  const inningsMerged = [];
+  const seenPrimary = new Set();
+  const seenSecondary = new Set();
+  for (const row of [...inningsFromScorecards, ...inningsEnriched]) {
+    const primaryKey = String(row?.matchSlug || row?.matchUrl || "").trim();
+    const secondaryKey = `${String(row?.opponent || "UNK").toUpperCase()}-${Number(row?.runs || 0)}-${Number(row?.balls || 0)}`;
+
+    if (primaryKey) {
+      if (seenPrimary.has(primaryKey)) continue;
+      seenPrimary.add(primaryKey);
+      seenSecondary.add(secondaryKey);
+      inningsMerged.push(row);
+      continue;
+    }
+
+    if (seenSecondary.has(secondaryKey)) {
+      continue;
+    }
+    seenSecondary.add(secondaryKey);
+    inningsMerged.push(row);
+  }
 
   // Compute stats
-  const opponentStats = computeOpponentStats(inningsEnriched);
+  const opponentStats = computeOpponentStats(inningsMerged);
   const favouriteTarget = opponentStats.length > 0
     ? opponentStats.reduce((best, curr) => (curr.avgRuns > best.avgRuns ? curr : best), opponentStats[0])
     : null;
@@ -549,7 +825,8 @@ const scrapePlayer = async (browser, playerMeta) => {
     crexSlug,
     team,
     role,
-    innings: inningsEnriched.slice(0, 10),
+    innings: inningsMerged.slice(0, 12),
+    bowlingInnings: bowlingInnings.slice(0, 12),
     opponentStats,
     favouriteTarget: favouriteTarget ? {
       opponent: favouriteTarget.opponent,
@@ -573,11 +850,35 @@ export const crexPlayerService = {
 
   findPlayerMeta(playerName) {
     const key = normalizeNameKey(playerName);
+    const keyCon = consonantKey(playerName);
+    const keyFirst = firstToken(key);
     return (
       IPL_PLAYER_CREX_MAP.find((p) => p.nameKey === key) ||
       IPL_PLAYER_CREX_MAP.find((p) => key.includes(p.nameKey) || p.nameKey.includes(key)) ||
+      IPL_PLAYER_CREX_MAP.find((p) => {
+        const c = consonantKey(p.nameKey);
+        return Boolean(c && keyCon && (c === keyCon || c.includes(keyCon) || keyCon.includes(c)));
+      }) ||
+      IPL_PLAYER_CREX_MAP.find((p) => {
+        const pFirst = firstToken(p.nameKey);
+        return Boolean(pFirst && keyFirst && (pFirst === keyFirst || pFirst.includes(keyFirst) || keyFirst.includes(pFirst)));
+      }) ||
       null
     );
+  },
+
+  async scrapeSinglePlayer(playerInput) {
+    await ensurePlayerMapLoaded();
+    const meta = this.findPlayerMeta(playerInput);
+    if (!meta) return null;
+
+    let browser;
+    try {
+      browser = await launchBrowser();
+      return await scrapePlayer(browser, meta);
+    } finally {
+      if (browser) await browser.close();
+    }
   },
 
   async getAllPlayerData(forceRefresh = false) {
@@ -657,31 +958,56 @@ export const crexPlayerService = {
     return all.find((p) => p.nameKey === meta.nameKey) || null;
   },
 
-  async getPlayerInnings(crexSlug) {
+  async getPlayerInnings(crexSlug, options = {}) {
     await ensurePlayerMapLoaded();
+    const forceRefresh = Boolean(options?.forceRefresh);
     // Try from cache first
     const fileCache = await readCache(PLAYER_INNINGS_CACHE);
-    if (fileCache?.data) {
-      const input = String(crexSlug || "").trim();
-      const inputKey = normalizeNameKey(input);
-      const found =
-        fileCache.data.find((p) => String(p.crexSlug) === input) ||
-        fileCache.data.find((p) => String(p.nameKey) === inputKey) ||
-        null;
-      if (found) return found;
+    const input = String(crexSlug || "").trim();
+    const inputKey = normalizeNameKey(input);
+
+    const findFromArray = (arr) =>
+      Array.isArray(arr)
+        ? arr.find((p) => String(p.crexSlug) === input || String(p.nameKey) === inputKey) || null
+        : null;
+
+    let found = findFromArray(fileCache?.data);
+    if (!forceRefresh && found && ((found?.innings || []).length > 0 || (found?.bowlingInnings || []).length > 0)) {
+      return found;
     }
 
     const supabasePayload = await readFromSupabaseFeed();
-    if (Array.isArray(supabasePayload)) {
-      const input = String(crexSlug || "").trim();
-      const inputKey = normalizeNameKey(input);
-      const found =
-        supabasePayload.find((p) => String(p.crexSlug) === input) ||
-        supabasePayload.find((p) => String(p.nameKey) === inputKey) ||
-        null;
-      if (found) return found;
+    if (!forceRefresh) {
+      found = findFromArray(supabasePayload);
+      if (found && ((found?.innings || []).length > 0 || (found?.bowlingInnings || []).length > 0)) {
+        return found;
+      }
     }
 
-    return null;
+    // If cached data is empty/stale for this player, scrape on-demand and persist.
+    const scraped = await this.scrapeSinglePlayer(input);
+    if (!scraped) {
+      return found || null;
+    }
+
+    const mergeList = (arr) => {
+      const rows = Array.isArray(arr) ? [...arr] : [];
+      const idx = rows.findIndex((row) => String(row?.nameKey) === String(scraped.nameKey));
+      if (idx >= 0) {
+        rows[idx] = { ...rows[idx], ...scraped };
+      } else {
+        rows.push(scraped);
+      }
+      return rows;
+    };
+
+    const merged = mergeList(fileCache?.data || supabasePayload || []);
+    await writeCache(PLAYER_INNINGS_CACHE, merged);
+    await writeToSupabaseFeed(merged);
+
+    _cachedData = merged;
+    _cacheExpiry = Date.now() + CACHE_TTL_MS;
+
+    return scraped;
   },
 };

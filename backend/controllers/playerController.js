@@ -11,12 +11,13 @@ export const playerController = {
     try {
       const { playerId } = req.params;
       const slug = String(playerId || "").trim();
+      const forceRefresh = ["1", "true", "yes"].includes(String(req.query?.fresh || "").toLowerCase());
 
       // Try by crex slug first, then by name key
-      let data = await crexPlayerService.getPlayerInnings(slug);
+      let data = await crexPlayerService.getPlayerInnings(slug, { forceRefresh });
 
       if (!data) {
-        data = await crexPlayerService.getPlayerData(slug);
+        data = await crexPlayerService.getPlayerData(slug, forceRefresh);
       }
 
       if (!data) {
@@ -30,6 +31,7 @@ export const playerController = {
 
       ok(res, {
         innings: data.innings || [],
+        bowlingInnings: data.bowlingInnings || [],
         opponentStats: data.opponentStats || [],
         favouriteTarget: data.favouriteTarget || null,
         team: data.team,

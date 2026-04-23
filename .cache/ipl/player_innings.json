@@ -1,15 +1,141 @@
 {
-  "updatedAt": "2026-04-23T09:35:53.542Z",
+  "updatedAt": "2026-04-23T12:49:42.501Z",
   "data": [
     {
       "nameKey": "viratkohli",
       "crexSlug": "virat-kohli-4I",
       "team": "RCB",
-      "role": "Batter",
-      "innings": [],
-      "opponentStats": [],
-      "favouriteTarget": null,
-      "lastScraped": "2026-04-23T09:34:14.688Z"
+      "role": null,
+      "innings": [
+        {
+          "runs": 49,
+          "balls": 34,
+          "sr": 144.12,
+          "fours": 6,
+          "sixes": 1,
+          "opponent": "LSG",
+          "date": "Unknown",
+          "matchSlug": "lsg-vs-rcb-23rd-match-indian-premier-league-2026-match-updates-1184",
+          "dismissal": "c undefined b Khan",
+          "matchUrl": "https://crex.com/cricket-live-score/lsg-vs-rcb-23rd-match-indian-premier-league-2026-match-updates-1184"
+        },
+        {
+          "runs": 69,
+          "balls": 38,
+          "sr": 181.58,
+          "fours": 5,
+          "sixes": 5,
+          "opponent": "SRH",
+          "date": "Unknown",
+          "matchSlug": "rcb-vs-srh-1st-match-indian-premier-league-2026-match-updates-10XZ",
+          "dismissal": "NOT OUT",
+          "matchUrl": "https://crex.com/cricket-live-score/rcb-vs-srh-1st-match-indian-premier-league-2026-match-updates-10XZ"
+        },
+        {
+          "runs": 19,
+          "balls": 13,
+          "sr": 146.15,
+          "fours": 0,
+          "sixes": 0,
+          "opponent": "LSG",
+          "matchSlug": null
+        },
+        {
+          "runs": 49,
+          "balls": 34,
+          "sr": 144.12,
+          "fours": 0,
+          "sixes": 0,
+          "opponent": "MI",
+          "matchSlug": null
+        },
+        {
+          "runs": 50,
+          "balls": 38,
+          "sr": 131.58,
+          "fours": 0,
+          "sixes": 0,
+          "opponent": "RR",
+          "matchSlug": null
+        },
+        {
+          "runs": 32,
+          "balls": 16,
+          "sr": 200,
+          "fours": 0,
+          "sixes": 0,
+          "opponent": "CSK",
+          "matchSlug": null
+        },
+        {
+          "runs": 28,
+          "balls": 18,
+          "sr": 155.56,
+          "fours": 0,
+          "sixes": 0,
+          "opponent": "SRH",
+          "matchSlug": null
+        }
+      ],
+      "opponentStats": [
+        {
+          "opponent": "LSG",
+          "opponentName": "Lucknow Super Giants",
+          "innings": 2,
+          "avgRuns": 34,
+          "avgSR": 144.68,
+          "totalFours": 6,
+          "totalSixes": 1,
+          "totalRuns": 68
+        },
+        {
+          "opponent": "SRH",
+          "opponentName": "Sunrisers Hyderabad",
+          "innings": 2,
+          "avgRuns": 48.5,
+          "avgSR": 173.21,
+          "totalFours": 5,
+          "totalSixes": 5,
+          "totalRuns": 97
+        },
+        {
+          "opponent": "MI",
+          "opponentName": "Mumbai Indians",
+          "innings": 1,
+          "avgRuns": 49,
+          "avgSR": 144.12,
+          "totalFours": 0,
+          "totalSixes": 0,
+          "totalRuns": 49
+        },
+        {
+          "opponent": "RR",
+          "opponentName": "Rajasthan Royals",
+          "innings": 1,
+          "avgRuns": 50,
+          "avgSR": 131.58,
+          "totalFours": 0,
+          "totalSixes": 0,
+          "totalRuns": 50
+        },
+        {
+          "opponent": "CSK",
+          "opponentName": "Chennai Super Kings",
+          "innings": 1,
+          "avgRuns": 32,
+          "avgSR": 200,
+          "totalFours": 0,
+          "totalSixes": 0,
+          "totalRuns": 32
+        }
+      ],
+      "favouriteTarget": {
+        "opponent": "RR",
+        "opponentName": "Rajasthan Royals",
+        "avgRuns": 50
+      },
+      "lastScraped": "2026-04-23T12:33:42.692Z",
+      "bowlingInnings": []
     },
     {
       "nameKey": "philsalt",
@@ -203,13 +329,78 @@
     },
     {
       "nameKey": "jaspritbumrah",
-      "crexSlug": "jasprit-bumrah-RbV",
+      "crexSlug": "jasprit-bumrah-AJ",
       "team": "MI",
-      "role": "Bowler",
-      "innings": [],
-      "opponentStats": [],
-      "favouriteTarget": null,
-      "lastScraped": "2026-04-23T09:34:54.660Z"
+      "role": null,
+      "innings": [
+        {
+          "runs": 5,
+          "balls": 2,
+          "sr": 250,
+          "fours": 1,
+          "sixes": 0,
+          "opponent": "RR",
+          "date": "Unknown",
+          "matchSlug": "mi-vs-rr-13th-match-indian-premier-league-2026-match-updates-10YB",
+          "dismissal": "NOT OUT",
+          "matchUrl": "https://crex.com/cricket-live-score/mi-vs-rr-13th-match-indian-premier-league-2026-match-updates-10YB"
+        }
+      ],
+      "opponentStats": [
+        {
+          "opponent": "RR",
+          "opponentName": "Rajasthan Royals",
+          "innings": 1,
+          "avgRuns": 5,
+          "avgSR": 250,
+          "totalFours": 1,
+          "totalSixes": 0,
+          "totalRuns": 5
+        }
+      ],
+      "favouriteTarget": {
+        "opponent": "RR",
+        "opponentName": "Rajasthan Royals",
+        "avgRuns": 5
+      },
+      "lastScraped": "2026-04-23T12:23:44.686Z",
+      "bowlingInnings": [
+        {
+          "opponent": "GT",
+          "date": null,
+          "overs": 3,
+          "maidens": 0,
+          "runsConceded": 15,
+          "wickets": 1,
+          "economy": 5,
+          "wicketPlayers": [
+            "B Sai Sudharsan"
+          ],
+          "matchUrl": "https://crex.com/cricket-live-score/gt-vs-mi-30th-match-indian-premier-league-2026-match-updates-118B"
+        },
+        {
+          "opponent": "PBKS",
+          "date": null,
+          "overs": 4,
+          "maidens": 0,
+          "runsConceded": 41,
+          "wickets": 0,
+          "economy": 10.25,
+          "wicketPlayers": [],
+          "matchUrl": "https://crex.com/cricket-live-score/mi-vs-pbks-24th-match-indian-premier-league-2026-match-updates-1185"
+        },
+        {
+          "opponent": "DC",
+          "date": null,
+          "overs": 4,
+          "maidens": 0,
+          "runsConceded": 21,
+          "wickets": 0,
+          "economy": 5.25,
+          "wicketPlayers": [],
+          "matchUrl": "https://crex.com/cricket-live-score/dc-vs-mi-8th-match-indian-premier-league-2026-match-updates-10Y6"
+        }
+      ]
     },
     {
       "nameKey": "mitchellsantner",
@@ -373,13 +564,149 @@
     },
     {
       "nameKey": "abhisheksharma",
-      "crexSlug": "abhishek-sharma-U1D",
+      "crexSlug": "abhishek-sharma-1DH",
       "team": "SRH",
-      "role": "All-Rounder",
-      "innings": [],
-      "opponentStats": [],
-      "favouriteTarget": null,
-      "lastScraped": "2026-04-23T09:35:25.869Z"
+      "role": null,
+      "innings": [
+        {
+          "runs": 59,
+          "balls": 22,
+          "sr": 268.18,
+          "fours": 0,
+          "sixes": 0,
+          "opponent": "RR",
+          "matchSlug": null
+        },
+        {
+          "runs": 0,
+          "balls": 1,
+          "sr": 0,
+          "fours": 0,
+          "sixes": 0,
+          "opponent": "PBKS",
+          "matchSlug": null
+        },
+        {
+          "runs": 74,
+          "balls": 28,
+          "sr": 264.29,
+          "fours": 0,
+          "sixes": 0,
+          "opponent": "LSG",
+          "matchSlug": null
+        },
+        {
+          "runs": 0,
+          "balls": 2,
+          "sr": 0,
+          "fours": 0,
+          "sixes": 0,
+          "opponent": "KKR",
+          "matchSlug": null
+        },
+        {
+          "runs": 48,
+          "balls": 21,
+          "sr": 228.57,
+          "fours": 0,
+          "sixes": 0,
+          "opponent": "RCB",
+          "matchSlug": null
+        }
+      ],
+      "opponentStats": [
+        {
+          "opponent": "RR",
+          "opponentName": "Rajasthan Royals",
+          "innings": 1,
+          "avgRuns": 59,
+          "avgSR": 268.18,
+          "totalFours": 0,
+          "totalSixes": 0,
+          "totalRuns": 59
+        },
+        {
+          "opponent": "PBKS",
+          "opponentName": "Punjab Kings",
+          "innings": 1,
+          "avgRuns": 0,
+          "avgSR": 0,
+          "totalFours": 0,
+          "totalSixes": 0,
+          "totalRuns": 0
+        },
+        {
+          "opponent": "LSG",
+          "opponentName": "Lucknow Super Giants",
+          "innings": 1,
+          "avgRuns": 74,
+          "avgSR": 264.29,
+          "totalFours": 0,
+          "totalSixes": 0,
+          "totalRuns": 74
+        },
+        {
+          "opponent": "KKR",
+          "opponentName": "Kolkata Knight Riders",
+          "innings": 1,
+          "avgRuns": 0,
+          "avgSR": 0,
+          "totalFours": 0,
+          "totalSixes": 0,
+          "totalRuns": 0
+        },
+        {
+          "opponent": "RCB",
+          "opponentName": "Royal Challengers Bengaluru",
+          "innings": 1,
+          "avgRuns": 48,
+          "avgSR": 228.57,
+          "totalFours": 0,
+          "totalSixes": 0,
+          "totalRuns": 48
+        }
+      ],
+      "favouriteTarget": {
+        "opponent": "LSG",
+        "opponentName": "Lucknow Super Giants",
+        "avgRuns": 74
+      },
+      "lastScraped": "2026-04-23T12:44:29.909Z",
+      "bowlingInnings": [
+        {
+          "opponent": "CSK",
+          "date": null,
+          "overs": 1,
+          "maidens": 0,
+          "runsConceded": 13,
+          "wickets": 0,
+          "economy": 13,
+          "wicketPlayers": [],
+          "matchUrl": "https://crex.com/cricket-live-score/csk-vs-srh-27th-match-indian-premier-league-2026-match-updates-1188"
+        },
+        {
+          "opponent": "PBKS",
+          "date": null,
+          "overs": 0.5,
+          "maidens": 0,
+          "runsConceded": 7,
+          "wickets": 0,
+          "economy": 8.4,
+          "wicketPlayers": [],
+          "matchUrl": "https://crex.com/cricket-live-score/pbks-vs-srh-17th-match-indian-premier-league-2026-match-updates-10YF"
+        },
+        {
+          "opponent": "KKR",
+          "date": null,
+          "overs": 1,
+          "maidens": 0,
+          "runsConceded": 15,
+          "wickets": 0,
+          "economy": 15,
+          "wicketPlayers": [],
+          "matchUrl": "https://crex.com/cricket-live-score/kkr-vs-srh-6th-match-indian-premier-league-2026-match-updates-10Y4"
+        }
+      ]
     },
     {
       "nameKey": "travishead",
@@ -393,13 +720,115 @@
     },
     {
       "nameKey": "heinrichklaasen",
-      "crexSlug": "heinrich-klaasen-SaH",
+      "crexSlug": "heinrich-klaasen-K0",
       "team": "SRH",
-      "role": "WK-Batter",
-      "innings": [],
-      "opponentStats": [],
-      "favouriteTarget": null,
-      "lastScraped": "2026-04-23T09:35:29.391Z"
+      "role": null,
+      "innings": [
+        {
+          "runs": 59,
+          "balls": 39,
+          "sr": 151.28,
+          "fours": 0,
+          "sixes": 0,
+          "opponent": "RR",
+          "matchSlug": null
+        },
+        {
+          "runs": 40,
+          "balls": 26,
+          "sr": 153.85,
+          "fours": 0,
+          "sixes": 0,
+          "opponent": "PBKS",
+          "matchSlug": null
+        },
+        {
+          "runs": 39,
+          "balls": 33,
+          "sr": 118.18,
+          "fours": 0,
+          "sixes": 0,
+          "opponent": "LSG",
+          "matchSlug": null
+        },
+        {
+          "runs": 62,
+          "balls": 41,
+          "sr": 151.22,
+          "fours": 0,
+          "sixes": 0,
+          "opponent": "KKR",
+          "matchSlug": null
+        },
+        {
+          "runs": 52,
+          "balls": 35,
+          "sr": 148.57,
+          "fours": 0,
+          "sixes": 0,
+          "opponent": "RCB",
+          "matchSlug": null
+        }
+      ],
+      "opponentStats": [
+        {
+          "opponent": "RR",
+          "opponentName": "Rajasthan Royals",
+          "innings": 1,
+          "avgRuns": 59,
+          "avgSR": 151.28,
+          "totalFours": 0,
+          "totalSixes": 0,
+          "totalRuns": 59
+        },
+        {
+          "opponent": "PBKS",
+          "opponentName": "Punjab Kings",
+          "innings": 1,
+          "avgRuns": 40,
+          "avgSR": 153.85,
+          "totalFours": 0,
+          "totalSixes": 0,
+          "totalRuns": 40
+        },
+        {
+          "opponent": "LSG",
+          "opponentName": "Lucknow Super Giants",
+          "innings": 1,
+          "avgRuns": 39,
+          "avgSR": 118.18,
+          "totalFours": 0,
+          "totalSixes": 0,
+          "totalRuns": 39
+        },
+        {
+          "opponent": "KKR",
+          "opponentName": "Kolkata Knight Riders",
+          "innings": 1,
+          "avgRuns": 62,
+          "avgSR": 151.22,
+          "totalFours": 0,
+          "totalSixes": 0,
+          "totalRuns": 62
+        },
+        {
+          "opponent": "RCB",
+          "opponentName": "Royal Challengers Bengaluru",
+          "innings": 1,
+          "avgRuns": 52,
+          "avgSR": 148.57,
+          "totalFours": 0,
+          "totalSixes": 0,
+          "totalRuns": 52
+        }
+      ],
+      "favouriteTarget": {
+        "opponent": "KKR",
+        "opponentName": "Kolkata Knight Riders",
+        "avgRuns": 62
+      },
+      "lastScraped": "2026-04-23T12:47:03.987Z",
+      "bowlingInnings": []
     },
     {
       "nameKey": "pat cummins",
@@ -433,13 +862,121 @@
     },
     {
       "nameKey": "rashidkhan",
-      "crexSlug": "rashid-khan-Smb",
+      "crexSlug": "rashid-khan-CE",
       "team": "GT",
-      "role": "All-Rounder",
-      "innings": [],
-      "opponentStats": [],
-      "favouriteTarget": null,
-      "lastScraped": "2026-04-23T09:35:36.790Z"
+      "role": null,
+      "innings": [
+        {
+          "runs": 4,
+          "balls": 6,
+          "sr": 66.67,
+          "fours": 0,
+          "sixes": 0,
+          "opponent": "MI",
+          "date": "Unknown",
+          "matchSlug": "gt-vs-mi-30th-match-indian-premier-league-2026-match-updates-118B",
+          "dismissal": "c Bawa b Kumar",
+          "matchUrl": "https://crex.com/cricket-live-score/gt-vs-mi-30th-match-indian-premier-league-2026-match-updates-118B"
+        },
+        {
+          "runs": 24,
+          "balls": 16,
+          "sr": 150,
+          "fours": 3,
+          "sixes": 0,
+          "opponent": "RR",
+          "date": "Unknown",
+          "matchSlug": "gt-vs-rr-9th-match-indian-premier-league-2026-match-updates-10Y7",
+          "dismissal": "c Archer b Deshpande",
+          "matchUrl": "https://crex.com/cricket-live-score/gt-vs-rr-9th-match-indian-premier-league-2026-match-updates-10Y7"
+        },
+        {
+          "runs": 4,
+          "balls": 6,
+          "sr": 66.67,
+          "fours": 0,
+          "sixes": 0,
+          "opponent": "RR",
+          "matchSlug": null
+        },
+        {
+          "runs": 24,
+          "balls": 16,
+          "sr": 150,
+          "fours": 0,
+          "sixes": 0,
+          "opponent": "PBKS",
+          "matchSlug": null
+        }
+      ],
+      "opponentStats": [
+        {
+          "opponent": "MI",
+          "opponentName": "Mumbai Indians",
+          "innings": 1,
+          "avgRuns": 4,
+          "avgSR": 66.67,
+          "totalFours": 0,
+          "totalSixes": 0,
+          "totalRuns": 4
+        },
+        {
+          "opponent": "RR",
+          "opponentName": "Rajasthan Royals",
+          "innings": 2,
+          "avgRuns": 14,
+          "avgSR": 127.27,
+          "totalFours": 3,
+          "totalSixes": 0,
+          "totalRuns": 28
+        },
+        {
+          "opponent": "PBKS",
+          "opponentName": "Punjab Kings",
+          "innings": 1,
+          "avgRuns": 24,
+          "avgSR": 150,
+          "totalFours": 0,
+          "totalSixes": 0,
+          "totalRuns": 24
+        }
+      ],
+      "favouriteTarget": {
+        "opponent": "PBKS",
+        "opponentName": "Punjab Kings",
+        "avgRuns": 24
+      },
+      "lastScraped": "2026-04-23T12:38:12.761Z",
+      "bowlingInnings": [
+        {
+          "opponent": "PBKS",
+          "date": null,
+          "overs": 4,
+          "maidens": 0,
+          "runsConceded": 29,
+          "wickets": 1,
+          "economy": 7.25,
+          "wicketPlayers": [
+            "Prabhsimran Singh(WK)"
+          ],
+          "matchUrl": "https://crex.com/cricket-live-score/gt-vs-pbks-4th-match-indian-premier-league-2026-match-updates-10Y2"
+        },
+        {
+          "opponent": "DC",
+          "date": null,
+          "overs": 4,
+          "maidens": 0,
+          "runsConceded": 17,
+          "wickets": 3,
+          "economy": 4.25,
+          "wicketPlayers": [
+            "Nitish Rana",
+            "Sameer Rizvi",
+            "Axar Patel(C)"
+          ],
+          "matchUrl": "https://crex.com/cricket-live-score/dc-vs-gt-14th-match-indian-premier-league-2026-match-updates-10YC"
+        }
+      ]
     },
     {
       "nameKey": "kagiso rabada",
@@ -530,6 +1067,200 @@
       "opponentStats": [],
       "favouriteTarget": null,
       "lastScraped": "2026-04-23T09:35:53.342Z"
+    },
+    {
+      "nameKey": "klrahul",
+      "crexSlug": "kl-rahul-AK",
+      "team": "DC",
+      "role": null,
+      "innings": [
+        {
+          "runs": 37,
+          "balls": 23,
+          "sr": 160.87,
+          "fours": 1,
+          "sixes": 3,
+          "opponent": "SRH",
+          "date": "Unknown",
+          "matchSlug": "dc-vs-srh-31st-match-indian-premier-league-2026-match-updates-118C",
+          "dismissal": "c Sharma b Hussain",
+          "matchUrl": "https://crex.com/cricket-live-score/dc-vs-srh-31st-match-indian-premier-league-2026-match-updates-118C"
+        },
+        {
+          "runs": 57,
+          "balls": 34,
+          "sr": 167.65,
+          "fours": 6,
+          "sixes": 2,
+          "opponent": "RCB",
+          "date": "Unknown",
+          "matchSlug": "dc-vs-rcb-26th-match-indian-premier-league-2026-match-updates-1187",
+          "dismissal": "c Kohli b Pandya",
+          "matchUrl": "https://crex.com/cricket-live-score/dc-vs-rcb-26th-match-indian-premier-league-2026-match-updates-1187"
+        },
+        {
+          "runs": 18,
+          "balls": 10,
+          "sr": 180,
+          "fours": 2,
+          "sixes": 1,
+          "opponent": "CSK",
+          "date": "Unknown",
+          "matchSlug": "csk-vs-dc-18th-match-indian-premier-league-2026-match-updates-10YG",
+          "dismissal": "c Overton b Ahmed",
+          "matchUrl": "https://crex.com/cricket-live-score/csk-vs-dc-18th-match-indian-premier-league-2026-match-updates-10YG"
+        },
+        {
+          "runs": 92,
+          "balls": 52,
+          "sr": 176.92,
+          "fours": 11,
+          "sixes": 4,
+          "opponent": "GT",
+          "date": "Unknown",
+          "matchSlug": "dc-vs-gt-14th-match-indian-premier-league-2026-match-updates-10YC",
+          "dismissal": "c Buttler b Siraj",
+          "matchUrl": "https://crex.com/cricket-live-score/dc-vs-gt-14th-match-indian-premier-league-2026-match-updates-10YC"
+        },
+        {
+          "runs": 1,
+          "balls": 3,
+          "sr": 33.33,
+          "fours": 0,
+          "sixes": 0,
+          "opponent": "MI",
+          "date": "Unknown",
+          "matchSlug": "dc-vs-mi-8th-match-indian-premier-league-2026-match-updates-10Y6",
+          "dismissal": "c Rickelton b Chahar",
+          "matchUrl": "https://crex.com/cricket-live-score/dc-vs-mi-8th-match-indian-premier-league-2026-match-updates-10Y6"
+        },
+        {
+          "runs": 0,
+          "balls": 1,
+          "sr": 0,
+          "fours": 0,
+          "sixes": 0,
+          "opponent": "LSG",
+          "date": "Unknown",
+          "matchSlug": "dc-vs-lsg-5th-match-indian-premier-league-2026-match-updates-10Y3",
+          "dismissal": "c Khan b Shami",
+          "matchUrl": "https://crex.com/cricket-live-score/dc-vs-lsg-5th-match-indian-premier-league-2026-match-updates-10Y3"
+        },
+        {
+          "runs": 37,
+          "balls": 23,
+          "sr": 160.87,
+          "fours": 0,
+          "sixes": 0,
+          "opponent": "RCB",
+          "matchSlug": null
+        },
+        {
+          "runs": 57,
+          "balls": 34,
+          "sr": 167.65,
+          "fours": 0,
+          "sixes": 0,
+          "opponent": "CSK",
+          "matchSlug": null
+        },
+        {
+          "runs": 18,
+          "balls": 10,
+          "sr": 180,
+          "fours": 0,
+          "sixes": 0,
+          "opponent": "GT",
+          "matchSlug": null
+        },
+        {
+          "runs": 92,
+          "balls": 52,
+          "sr": 176.92,
+          "fours": 0,
+          "sixes": 0,
+          "opponent": "MI",
+          "matchSlug": null
+        },
+        {
+          "runs": 1,
+          "balls": 3,
+          "sr": 33.33,
+          "fours": 0,
+          "sixes": 0,
+          "opponent": "LSG",
+          "matchSlug": null
+        }
+      ],
+      "bowlingInnings": [],
+      "opponentStats": [
+        {
+          "opponent": "SRH",
+          "opponentName": "Sunrisers Hyderabad",
+          "innings": 1,
+          "avgRuns": 37,
+          "avgSR": 160.87,
+          "totalFours": 1,
+          "totalSixes": 3,
+          "totalRuns": 37
+        },
+        {
+          "opponent": "RCB",
+          "opponentName": "Royal Challengers Bengaluru",
+          "innings": 2,
+          "avgRuns": 47,
+          "avgSR": 164.91,
+          "totalFours": 6,
+          "totalSixes": 2,
+          "totalRuns": 94
+        },
+        {
+          "opponent": "CSK",
+          "opponentName": "Chennai Super Kings",
+          "innings": 2,
+          "avgRuns": 37.5,
+          "avgSR": 170.45,
+          "totalFours": 2,
+          "totalSixes": 1,
+          "totalRuns": 75
+        },
+        {
+          "opponent": "GT",
+          "opponentName": "Gujarat Titans",
+          "innings": 2,
+          "avgRuns": 55,
+          "avgSR": 177.42,
+          "totalFours": 11,
+          "totalSixes": 4,
+          "totalRuns": 110
+        },
+        {
+          "opponent": "MI",
+          "opponentName": "Mumbai Indians",
+          "innings": 2,
+          "avgRuns": 46.5,
+          "avgSR": 169.09,
+          "totalFours": 0,
+          "totalSixes": 0,
+          "totalRuns": 93
+        },
+        {
+          "opponent": "LSG",
+          "opponentName": "Lucknow Super Giants",
+          "innings": 2,
+          "avgRuns": 0.5,
+          "avgSR": 25,
+          "totalFours": 0,
+          "totalSixes": 0,
+          "totalRuns": 1
+        }
+      ],
+      "favouriteTarget": {
+        "opponent": "GT",
+        "opponentName": "Gujarat Titans",
+        "avgRuns": 55
+      },
+      "lastScraped": "2026-04-23T12:49:42.118Z"
     }
   ]
 }

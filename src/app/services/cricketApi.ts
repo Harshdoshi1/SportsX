@@ -231,8 +231,13 @@ export const cricketApi = {
   search: (q: string, type: "all" | "team" | "player" = "all", page = 1, limit = 20) =>
     request(`/search?q=${encodeURIComponent(q)}&type=${type}&page=${page}&limit=${limit}`),
 
-  getPlayerInnings: (playerId: string) =>
-    request(`/players/innings/${encodeURIComponent(playerId)}`),
+  getPlayerInnings: (playerId: string, fresh = false) =>
+    request(
+      fresh
+        ? withFreshQuery(`/players/innings/${encodeURIComponent(playerId)}`)
+        : `/players/innings/${encodeURIComponent(playerId)}`,
+      { bypassCache: fresh },
+    ),
 
   getPlayerOpponentAnalysis: (playerId: string) =>
     request(`/players/opponent-analysis/${encodeURIComponent(playerId)}`),

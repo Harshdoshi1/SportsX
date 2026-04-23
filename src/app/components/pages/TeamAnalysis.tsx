@@ -196,8 +196,20 @@ const parseScoreRuns = (value?: string | null) => {
 };
 
 const parseScoreWickets = (value?: string | null) => {
-  const match = String(value || "").match(/^\d{1,3}-(\d{1,2})/);
-  return match ? Number(match[1]) : null;
+  const raw = String(value || "").trim();
+  if (!raw) return null;
+
+  const slashMatch = raw.match(/^\d{1,3}[\/-](\d{1,2})/);
+  if (slashMatch) {
+    return Number(slashMatch[1]);
+  }
+
+  // If score is shown as only runs (example: 167), completed innings implies all out.
+  if (/^\d{1,3}(?:\s*\(|$)/.test(raw)) {
+    return 10;
+  }
+
+  return null;
 };
 
 const isCompletedStatus = (status?: string | null) => /completed|won|result|stumps|abandoned|no result|tied/i.test(String(status || ""));
@@ -530,7 +542,7 @@ export function TeamAnalysis() {
 
         const lastCompletedIndex = (() => {
           for (let index = teamMatches.length - 1; index >= 0; index -= 1) {
-            if (teamMatches[index]?.status === "Completed") {
+            if (isCompletedStatus(teamMatches[index]?.status)) {
               return index;
             }
           }
@@ -655,10 +667,9 @@ export function TeamAnalysis() {
           wicketsLost: wicketsLost ?? 0,
           wicketsTaken: wicketsTaken ?? 0,
         };
-      })
-      .filter((entry) => entry.runs > 0);
+      });
 
-    const playedGames = Math.max(teamInnings.length, 1);
+    const playedGames = Math.max(completed.length, 1);
     const totalRuns = teamInnings.reduce((sum, entry) => sum + entry.runs, 0);
     const totalWicketsTaken = teamInnings.reduce((sum, entry) => sum + entry.wicketsTaken, 0);
     const avgRuns = totalRuns / playedGames;

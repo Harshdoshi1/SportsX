@@ -67,6 +67,20 @@ type InningsEntry = {
   sixes: number;
   opponent: string;
   date?: string;
+  dismissal?: string;
+  matchUrl?: string | null;
+};
+
+type BowlingInningsEntry = {
+  opponent: string;
+  date?: string;
+  overs: number;
+  maidens: number;
+  runsConceded: number;
+  wickets: number;
+  economy: number;
+  wicketPlayers?: string[];
+  matchUrl?: string | null;
 };
 
 type OpponentStat = {
@@ -82,6 +96,7 @@ type OpponentStat = {
 
 type PlayerCrexData = {
   innings: InningsEntry[];
+  bowlingInnings: BowlingInningsEntry[];
   opponentStats: OpponentStat[];
   favouriteTarget: { opponent: string; opponentName: string; avgRuns: number } | null;
   team?: string;
@@ -182,13 +197,14 @@ export function PlayerAnalysis() {
       try {
         setCrexLoading(true);
         const nameKey = String(player.name || "").toLowerCase().replace(/[^a-z0-9]/g, "");
-        const res = await cricketApi.getPlayerInnings(nameKey) as any;
+        const res = await cricketApi.getPlayerInnings(nameKey, true) as any;
 
         if (!active) return;
 
         if (res?.innings || res?.opponentStats) {
           setCrexData({
             innings: res.innings || [],
+            bowlingInnings: res.bowlingInnings || [],
             opponentStats: res.opponentStats || [],
             favouriteTarget: res.favouriteTarget || null,
             team: res.team,
@@ -237,41 +253,29 @@ export function PlayerAnalysis() {
         sr: inn.sr,
       }));
     }
-    // Fallback: generate from season average (will be replaced once crex data loads)
-    const runs = Number(player?.runs || 0);
-    const matches = Math.max(Number(player?.matches || 0), 1);
-    const base = Math.max(8, Math.round(runs / matches));
-    return [
-      { match: "M1", value: Math.max(0, base - 7), balls: 0, sr: 0 },
-      { match: "M2", value: Math.max(0, base - 2), balls: 0, sr: 0 },
-      { match: "M3", value: Math.max(0, base + 4), balls: 0, sr: 0 },
-      { match: "M4", value: Math.max(0, base - 1), balls: 0, sr: 0 },
-      { match: "M5", value: Math.max(0, base + 6), balls: 0, sr: 0 },
-    ];
-  }, [crexData, player]);
+    return [];
+  }, [crexData]);
 
   /* ── Boundary mix from real data or estimated ──────────────────────────── */
   const boundaryMix = useMemo(() => {
     if (crexData?.innings && crexData.innings.length > 0) {
       const totalFours = crexData.innings.reduce((s, i) => s + (i.fours || 0), 0);
       const totalSixes = crexData.innings.reduce((s, i) => s + (i.sixes || 0), 0);
-      if (totalFours > 0 || totalSixes > 0) {
+      const totalRuns = crexData.innings.reduce((s, i) => s + Math.max(0, Number(i.runs || 0)), 0);
+      const sixesRuns = totalSixes * 6;
+      const foursRuns = totalFours * 4;
+      const oneTwoRuns = Math.max(0, totalRuns - sixesRuns - foursRuns);
+
+      if (totalRuns > 0) {
         return [
-          { name: "4s", value: totalFours, color: "#3BD4E7" },
-          { name: "6s", value: totalSixes, color: "#FF9100" },
+          { name: "1s&2s", value: Number(((oneTwoRuns / totalRuns) * 100).toFixed(2)), color: "#00E676" },
+          { name: "4s", value: Number(((foursRuns / totalRuns) * 100).toFixed(2)), color: "#3BD4E7" },
+          { name: "6s", value: Number(((sixesRuns / totalRuns) * 100).toFixed(2)), color: "#FF9100" },
         ];
       }
     }
-    const runs = Number(player?.runs || 0);
-    const sr = Number(player?.strikeRate || 100);
-    const est = Math.max(2, Math.round((runs / Math.max(sr, 80)) * 12));
-    const fours = Math.max(1, Math.round(est * 0.68));
-    const sixes = Math.max(1, est - fours);
-    return [
-      { name: "4s", value: fours, color: "#3BD4E7" },
-      { name: "6s", value: sixes, color: "#FF9100" },
-    ];
-  }, [crexData, player]);
+    return [];
+  }, [crexData]);
 
   /* ── vs Each Team data ─────────────────────────────────────────────────── */
   const opponentChartData = useMemo(() => {
@@ -291,6 +295,45 @@ export function PlayerAnalysis() {
 
   const favouriteTarget = crexData?.favouriteTarget || null;
 
+  const battingSummary = useMemo(() => {
+    const innings = crexData?.innings || [];
+    if (innings.length === 0) {
+      return null;
+    }
+
+    const totalRuns = innings.reduce((sum, inn) => sum + Number(inn.runs || 0), 0);
+    const totalBalls = innings.reduce((sum, inn) => sum + Number(inn.balls || 0), 0);
+    const totalFours = innings.reduce((sum, inn) => sum + Number(inn.fours || 0), 0);
+    const totalSixes = innings.reduce((sum, inn) => sum + Number(inn.sixes || 0), 0);
+
+    return {
+      innings: innings.length,
+      totalRuns,
+      avgRuns: Number((totalRuns / Math.max(innings.length, 1)).toFixed(2)),
+      strikeRate: totalBalls > 0 ? Number(((totalRuns / totalBalls) * 100).toFixed(2)) : 0,
+      totalFours,
+      totalSixes,
+    };
+  }, [crexData]);
+
+  const bowlingSummary = useMemo(() => {
+    const innings = crexData?.bowlingInnings || [];
+    if (innings.length === 0) {
+      return null;
+    }
+
+    const wickets = innings.reduce((sum, inn) => sum + Number(inn.wickets || 0), 0);
+    const runsConceded = innings.reduce((sum, inn) => sum + Number(inn.runsConceded || 0), 0);
+    const totalOvers = innings.reduce((sum, inn) => sum + Number(inn.overs || 0), 0);
+
+    return {
+      innings: innings.length,
+      wickets,
+      runsConceded,
+      economy: totalOvers > 0 ? Number((runsConceded / totalOvers).toFixed(2)) : 0,
+    };
+  }, [crexData]);
+
   /* ── Insight text ──────────────────────────────────────────────────────── */
   const insight = useMemo(() => {
     const name = player?.name || "This player";
@@ -308,7 +351,7 @@ export function PlayerAnalysis() {
     return `${name} is carrying a ${sr ? sr.toFixed(1) : "steady"} strike-rate profile this IPL season.`;
   }, [player, favouriteTarget, showBatting, showBowling]);
 
-  const hasCrexData = crexData && (crexData.innings.length > 0 || crexData.opponentStats.length > 0);
+  const hasCrexData = crexData && (crexData.innings.length > 0 || crexData.bowlingInnings.length > 0 || crexData.opponentStats.length > 0);
   const momentum = formTrend.length >= 2
     ? (formTrend[formTrend.length - 1].value >= formTrend[0].value ? "Upward" : "Volatile")
     : "Steady";
@@ -419,12 +462,12 @@ export function PlayerAnalysis() {
         </div>
 
         {/* ─── Last Played Innings Table ──────────────────────────────────── */}
-        {crexData && crexData.innings.length > 0 && (
+        {showBatting && crexData && crexData.innings.length > 0 && (
           <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }} className="mb-8">
             <GlassCard className="p-6">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-white font-bold text-base uppercase tracking-wide flex items-center gap-2">
-                  <Zap size={16} style={{ color: "#FF9100" }} /> Last Played Innings
+                  <Zap size={16} style={{ color: "#FF9100" }} /> Current Form (IPL Innings)
                 </h3>
                 <span className="text-[10px] px-2 py-1 rounded-full" style={{ background: "rgba(59,212,231,0.14)", border: "1px solid rgba(59,212,231,0.35)", color: "#7ad6ff" }}>
                   IPL 2026
@@ -440,6 +483,7 @@ export function PlayerAnalysis() {
                       <th className="text-right text-white/40 text-xs py-2 px-3 font-medium">SR</th>
                       <th className="text-right text-white/40 text-xs py-2 px-3 font-medium">4s</th>
                       <th className="text-right text-white/40 text-xs py-2 px-3 font-medium">6s</th>
+                      <th className="text-left text-white/40 text-xs py-2 pl-3 font-medium">Dismissal</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -474,6 +518,7 @@ export function PlayerAnalysis() {
                           </td>
                           <td className="text-right py-3 px-3 text-[#3BD4E7]">{inn.fours || "-"}</td>
                           <td className="text-right py-3 px-3 text-[#FF9100]">{inn.sixes || "-"}</td>
+                          <td className="py-3 pl-3 text-white/55 text-xs max-w-[220px] truncate">{inn.dismissal || "-"}</td>
                         </motion.tr>
                       );
                     })}
@@ -506,61 +551,68 @@ export function PlayerAnalysis() {
             <div className="grid grid-cols-1 lg:grid-cols-[1.6fr_1fr] gap-6">
               {/* Form Trend — Real innings data */}
               <div>
-                <p className="text-white/45 text-xs mb-2 uppercase tracking-wider">
-                  {hasCrexData ? "Recent Innings (Real Data)" : "Estimated Form Trend"}
-                </p>
-                <ChartContainer
-                  className="h-64 w-full"
-                  config={{ value: { label: "Runs", color: "#3BD4E7" } }}
-                >
-                  <LineChart data={formTrend}>
-                    <XAxis dataKey="match" stroke="rgba(255,255,255,0.45)" tickLine={false} axisLine={false} fontSize={11} />
-                    <YAxis stroke="rgba(255,255,255,0.45)" tickLine={false} axisLine={false} />
-                    <ChartTooltip content={<ChartTooltipContent />} />
-                    <Line type="monotone" dataKey="value" stroke="var(--color-value)" strokeWidth={3} dot={{ r: 4, fill: "#3BD4E7" }} />
-                  </LineChart>
-                </ChartContainer>
+                <p className="text-white/45 text-xs mb-2 uppercase tracking-wider">Current Form (IPL Innings)</p>
+                {formTrend.length > 0 ? (
+                  <ChartContainer
+                    className="h-64 w-full"
+                    config={{ value: { label: "Runs", color: "#3BD4E7" } }}
+                  >
+                    <LineChart data={formTrend}>
+                      <XAxis dataKey="match" stroke="rgba(255,255,255,0.45)" tickLine={false} axisLine={false} fontSize={11} />
+                      <YAxis stroke="rgba(255,255,255,0.45)" tickLine={false} axisLine={false} />
+                      <ChartTooltip content={<ChartTooltipContent />} />
+                      <Line type="monotone" dataKey="value" stroke="var(--color-value)" strokeWidth={3} dot={{ r: 4, fill: "#3BD4E7" }} />
+                    </LineChart>
+                  </ChartContainer>
+                ) : (
+                  <div className="h-64 rounded-xl flex items-center justify-center text-sm text-white/45" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)" }}>
+                    No real innings data found yet for this player.
+                  </div>
+                )}
               </div>
 
               {/* Boundary Mix */}
               <div className="grid grid-rows-2 gap-4">
                 <div>
-                  <p className="text-white/45 text-xs mb-2 uppercase tracking-wider">
-                    {hasCrexData ? "Boundary Count (Real)" : "Estimated Boundaries"}
-                  </p>
-                  <ChartContainer
-                    className="h-28 w-full"
-                    config={{ value: { label: "Boundaries", color: "#FF9100" } }}
-                  >
-                    <PieChart>
-                      <Pie data={boundaryMix} dataKey="value" nameKey="name" innerRadius={20} outerRadius={44} paddingAngle={3}>
-                        {boundaryMix.map((slice) => (
-                          <Cell key={slice.name} fill={slice.color} />
-                        ))}
-                      </Pie>
-                      <ChartTooltip content={<ChartTooltipContent />} />
-                    </PieChart>
-                  </ChartContainer>
+                  <p className="text-white/45 text-xs mb-2 uppercase tracking-wider">Run Composition % (1s&2s / 4s / 6s)</p>
+                  {boundaryMix.length > 0 ? (
+                    <ChartContainer
+                      className="h-28 w-full"
+                      config={{ value: { label: "Run Share %", color: "#FF9100" } }}
+                    >
+                      <PieChart>
+                        <Pie data={boundaryMix} dataKey="value" nameKey="name" innerRadius={20} outerRadius={44} paddingAngle={3}>
+                          {boundaryMix.map((slice) => (
+                            <Cell key={slice.name} fill={slice.color} />
+                          ))}
+                        </Pie>
+                        <ChartTooltip content={<ChartTooltipContent />} />
+                      </PieChart>
+                    </ChartContainer>
+                  ) : (
+                    <div className="h-28 rounded-xl flex items-center justify-center text-xs text-white/45" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)" }}>
+                      Boundary percentages will appear once innings are loaded.
+                    </div>
+                  )}
                 </div>
 
-                {/* Phase SR */}
+                {/* Real batting summary */}
                 <div>
-                  <p className="text-white/45 text-xs mb-2 uppercase tracking-wider">Phase Strike Rate</p>
-                  <ChartContainer
-                    className="h-28 w-full"
-                    config={{ rate: { label: "Phase SR", color: "#7C4DFF" } }}
-                  >
-                    <BarChart data={[
-                      { phase: "PP", rate: Number(((player?.strikeRate || 100) * 0.92).toFixed(1)) },
-                      { phase: "Mid", rate: Number(((player?.strikeRate || 100) * 0.81).toFixed(1)) },
-                      { phase: "Death", rate: Number(((player?.strikeRate || 100) * 1.16).toFixed(1)) },
-                    ]}>
-                      <XAxis dataKey="phase" stroke="rgba(255,255,255,0.45)" tickLine={false} axisLine={false} />
-                      <YAxis hide />
-                      <ChartTooltip content={<ChartTooltipContent />} />
-                      <Bar dataKey="rate" fill="var(--color-rate)" radius={[6, 6, 0, 0]} />
-                    </BarChart>
-                  </ChartContainer>
+                  <p className="text-white/45 text-xs mb-2 uppercase tracking-wider">Batting Snapshot (Real)</p>
+                  <div className="h-28 rounded-xl grid grid-cols-3 gap-2 p-2" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)" }}>
+                    <div className="rounded-lg p-2 text-center" style={{ background: "rgba(59,212,231,0.08)" }}>
+                      <div className="text-sm font-black text-[#3BD4E7]">{battingSummary?.avgRuns ?? "-"}</div>
+                      <div className="text-[10px] text-white/40">Avg Runs</div>
+                    </div>
+                    <div className="rounded-lg p-2 text-center" style={{ background: "rgba(255,145,0,0.08)" }}>
+                      <div className="text-sm font-black text-[#FF9100]">{battingSummary?.strikeRate ?? "-"}</div>
+                      <div className="text-[10px] text-white/40">SR</div>
+                    </div>
+                    <div className="rounded-lg p-2 text-center" style={{ background: "rgba(0,230,118,0.08)" }}>
+                      <div className="text-sm font-black text-[#00E676]">{battingSummary?.innings ?? "-"}</div>
+                      <div className="text-[10px] text-white/40">Innings</div>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -666,24 +718,69 @@ export function PlayerAnalysis() {
                 </span>
               </div>
 
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <div className="rounded-xl p-4 text-center" style={{ background: "rgba(124,77,255,0.08)", border: "1px solid rgba(124,77,255,0.2)" }}>
-                  <div className="text-2xl font-black text-[#7C4DFF]">{v(player?.wickets, 0)}</div>
-                  <div className="text-white/30 text-xs mt-1">Wickets</div>
+              {crexData?.bowlingInnings?.length ? (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-white/10">
+                        <th className="text-left text-white/40 text-xs py-2 pr-3 font-medium">Opponent</th>
+                        <th className="text-right text-white/40 text-xs py-2 px-3 font-medium">Overs</th>
+                        <th className="text-right text-white/40 text-xs py-2 px-3 font-medium">Runs</th>
+                        <th className="text-right text-white/40 text-xs py-2 px-3 font-medium">Wkts</th>
+                        <th className="text-right text-white/40 text-xs py-2 px-3 font-medium">Econ</th>
+                        <th className="text-left text-white/40 text-xs py-2 pl-3 font-medium">Wickets Taken</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {crexData.bowlingInnings.map((inn, idx) => {
+                        const oppMeta = getIplTeamByShort(inn.opponent);
+                        const oppLogo = getTeamLogoProps(oppMeta?.name || inn.opponent);
+                        return (
+                          <tr key={`${inn.opponent}-${idx}`} className="border-b border-white/5 hover:bg-white/[0.03] transition-colors">
+                            <td className="py-3 pr-3">
+                              <div className="flex items-center gap-2">
+                                <TeamLogo teamId={oppLogo.teamId} short={oppLogo.short} size={20} />
+                                <span className="text-white font-semibold">{inn.opponent}</span>
+                                {inn.date && <span className="text-white/30 text-xs ml-1">{inn.date}</span>}
+                              </div>
+                            </td>
+                            <td className="text-right py-3 px-3 text-white/75">{inn.overs}</td>
+                            <td className="text-right py-3 px-3 text-white/75">{inn.runsConceded}</td>
+                            <td className="text-right py-3 px-3 text-[#00E676] font-bold">{inn.wickets}</td>
+                            <td className="text-right py-3 px-3 text-[#B388FF]">{Number(inn.economy || 0).toFixed(2)}</td>
+                            <td className="py-3 pl-3 text-white/60 text-xs">{(inn.wicketPlayers || []).length ? inn.wicketPlayers.join(", ") : "-"}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+
+                  {bowlingSummary && (
+                    <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-3">
+                      <div className="rounded-xl p-3 text-center" style={{ background: "rgba(124,77,255,0.08)", border: "1px solid rgba(124,77,255,0.2)" }}>
+                        <div className="text-xl font-black text-[#7C4DFF]">{bowlingSummary.innings}</div>
+                        <div className="text-white/30 text-xs mt-1">Spells</div>
+                      </div>
+                      <div className="rounded-xl p-3 text-center" style={{ background: "rgba(0,230,118,0.08)", border: "1px solid rgba(0,230,118,0.2)" }}>
+                        <div className="text-xl font-black text-[#00E676]">{bowlingSummary.wickets}</div>
+                        <div className="text-white/30 text-xs mt-1">Wickets</div>
+                      </div>
+                      <div className="rounded-xl p-3 text-center" style={{ background: "rgba(255,77,141,0.08)", border: "1px solid rgba(255,77,141,0.2)" }}>
+                        <div className="text-xl font-black text-[#FF4D8D]">{bowlingSummary.runsConceded}</div>
+                        <div className="text-white/30 text-xs mt-1">Runs Conceded</div>
+                      </div>
+                      <div className="rounded-xl p-3 text-center" style={{ background: "rgba(59,212,231,0.08)", border: "1px solid rgba(59,212,231,0.2)" }}>
+                        <div className="text-xl font-black text-[#3BD4E7]">{bowlingSummary.economy}</div>
+                        <div className="text-white/30 text-xs mt-1">Economy</div>
+                      </div>
+                    </div>
+                  )}
                 </div>
-                <div className="rounded-xl p-4 text-center" style={{ background: "rgba(255,77,141,0.08)", border: "1px solid rgba(255,77,141,0.2)" }}>
-                  <div className="text-2xl font-black text-[#FF4D8D]">{v(player?.economy)}</div>
-                  <div className="text-white/30 text-xs mt-1">Economy</div>
+              ) : (
+                <div className="rounded-xl p-5 text-sm text-white/45" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)" }}>
+                  No real bowling innings found yet for this player.
                 </div>
-                <div className="rounded-xl p-4 text-center" style={{ background: "rgba(0,230,118,0.08)", border: "1px solid rgba(0,230,118,0.2)" }}>
-                  <div className="text-2xl font-black text-[#00E676]">{v(player?.average)}</div>
-                  <div className="text-white/30 text-xs mt-1">Bowling Avg</div>
-                </div>
-                <div className="rounded-xl p-4 text-center" style={{ background: "rgba(59,212,231,0.08)", border: "1px solid rgba(59,212,231,0.2)" }}>
-                  <div className="text-2xl font-black text-[#3BD4E7]">{v(player?.strikeRate)}</div>
-                  <div className="text-white/30 text-xs mt-1">Strike Rate</div>
-                </div>
-              </div>
+              )}
             </GlassCard>
           </motion.div>
         )}
