@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-04-23T13:08:50.133Z",
+  "updatedAt": "2026-04-23T13:39:08.915Z",
   "data": {
     "teams": [
       "Chennai Super Kings",
@@ -132,6 +132,11 @@
       },
       {
         "name": "Spencer Johnson",
+        "roleGroup": "BOWLERS",
+        "role": "Bowler"
+      },
+      {
+        "name": "Akash Madhwal",
         "roleGroup": "BOWLERS",
         "role": "Bowler"
       }
