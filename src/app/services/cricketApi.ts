@@ -232,6 +232,22 @@ export const cricketApi = {
     return request(fresh ? withFreshQuery(path) : path, { bypassCache: fresh, signal });
   },
 
+  setMatchLiveSource: async (input: { matchId: string; sourceUrl: string; tournamentId?: string; series?: string }) => {
+    const res = await fetch(`${API_BASE_URL}/matches/live-source`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(input),
+    });
+
+    const data = await res.json().catch(() => null);
+    if (!res.ok || !data?.success) {
+      const message = data?.message || `Request failed (${res.status})`;
+      throw new Error(message);
+    }
+
+    return data;
+  },
+
   getTeams: (params?: { page?: number; limit?: number; q?: string }) => {
     const page = params?.page ?? 1;
     const limit = params?.limit ?? 20;

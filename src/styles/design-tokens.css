@@ -1,0 +1,61 @@
+:root {
+  --sx-bg-primary: #0a0e1a;
+  --sx-bg-card: #111827;
+  --sx-bg-elevated: #1a2236;
+  --sx-accent-live: #ef4444;
+  --sx-accent-primary: #6366f1;
+  --sx-accent-gold: #f59e0b;
+  --sx-accent-green: #10b981;
+  --sx-accent-blue: #3b82f6;
+  --sx-accent-purple: #8b5cf6;
+  --sx-text-primary: #f1f5f9;
+  --sx-text-secondary: #94a3b8;
+  --sx-text-muted: #475569;
+  --sx-border-subtle: #1e293b;
+  --sx-grad-live: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+  --sx-grad-win: linear-gradient(135deg, #065f46 0%, #10b981 100%);
+  --sx-grad-card: linear-gradient(145deg, #111827 0%, #1a2236 100%);
+}
+
+body {
+  background: radial-gradient(circle at 20% -10%, rgba(99, 102, 241, 0.15), transparent 36%),
+    radial-gradient(circle at 80% -20%, rgba(59, 130, 246, 0.12), transparent 34%),
+    var(--sx-bg-primary);
+  color: var(--sx-text-primary);
+}
+
+.sx-card {
+  background: var(--sx-grad-card);
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.sx-card-hover:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 32px rgba(99, 102, 241, 0.15);
+  border-color: rgba(99, 102, 241, 0.45);
+}
+
+.sx-glass {
+  backdrop-filter: blur(12px);
+  background: rgba(17, 24, 39, 0.85);
+}
+
+.sx-score {
+  font-family: "JetBrains Mono", monospace;
+  letter-spacing: -1px;
+  font-weight: 800;
+}
+
+.sx-shimmer {
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.03) 25%, rgba(255, 255, 255, 0.12) 50%, rgba(255, 255, 255, 0.03) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s linear infinite;
+}
+
+@media (max-width: 640px) {
+  ::-webkit-scrollbar {
+    display: none;
+  }
+}

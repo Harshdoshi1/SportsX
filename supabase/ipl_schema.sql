@@ -12,6 +12,33 @@ create extension if not exists pgcrypto;
 create extension if not exists citext;
 
 -- -----------------------------------------------------------------------------
+-- Live match snapshot cache (fast UI reads for dashboard/match pages)
+-- -----------------------------------------------------------------------------
+create table if not exists public.live_match_snapshots (
+  id uuid primary key default gen_random_uuid(),
+  match_id text not null unique,
+  source_url text,
+  tournament_id text not null default 'admin',
+  series text,
+  team1 text,
+  team2 text,
+  team1_score text,
+  team2_score text,
+  team1_overs text,
+  team2_overs text,
+  status text,
+  equation text,
+  fetched_at timestamptz not null default now(),
+  payload jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists idx_live_match_snapshots_tournament on public.live_match_snapshots (tournament_id, updated_at desc);
+create index if not exists idx_live_match_snapshots_source_url on public.live_match_snapshots (source_url);
+create index if not exists idx_live_match_snapshots_fetched on public.live_match_snapshots (fetched_at desc);
+
+-- -----------------------------------------------------------------------------
 -- Helpers
 -- -----------------------------------------------------------------------------
 create or replace function public.set_updated_at()
@@ -550,6 +577,10 @@ drop trigger if exists trg_set_updated_at_sync_job_state on public.sync_job_stat
 create trigger trg_set_updated_at_sync_job_state before update on public.sync_job_state
 for each row execute function public.set_updated_at();
 
+drop trigger if exists trg_set_updated_at_live_match_snapshots on public.live_match_snapshots;
+create trigger trg_set_updated_at_live_match_snapshots before update on public.live_match_snapshots
+for each row execute function public.set_updated_at();
+
 -- -----------------------------------------------------------------------------
 -- Supabase RLS (read open, writes only for authenticated by default)
 -- -----------------------------------------------------------------------------
@@ -572,6 +603,7 @@ alter table public.player_season_stats enable row level security;
 alter table public.home_upcoming_games enable row level security;
 alter table public.ipl_feed_cache enable row level security;
 alter table public.sync_job_state enable row level security;
+alter table public.live_match_snapshots enable row level security;
 
 -- Public read policies
 drop policy if exists "public read leagues" on public.leagues;
@@ -612,6 +644,8 @@ drop policy if exists "public read ipl feed cache" on public.ipl_feed_cache;
 create policy "public read ipl feed cache" on public.ipl_feed_cache for select to anon, authenticated using (true);
 drop policy if exists "public read sync job state" on public.sync_job_state;
 create policy "public read sync job state" on public.sync_job_state for select to anon, authenticated using (true);
+drop policy if exists "public read live match snapshots" on public.live_match_snapshots;
+create policy "public read live match snapshots" on public.live_match_snapshots for select to anon, authenticated using (true);
 
 -- Authenticated write policies (tighten to service role in production if needed)
 drop policy if exists "auth write leagues" on public.leagues;
@@ -652,6 +686,8 @@ drop policy if exists "auth write ipl feed cache" on public.ipl_feed_cache;
 create policy "auth write ipl feed cache" on public.ipl_feed_cache for all to anon, authenticated using (true) with check (true);
 drop policy if exists "auth write sync job state" on public.sync_job_state;
 create policy "auth write sync job state" on public.sync_job_state for all to anon, authenticated using (true) with check (true);
+drop policy if exists "auth write live match snapshots" on public.live_match_snapshots;
+create policy "auth write live match snapshots" on public.live_match_snapshots for all to anon, authenticated using (true) with check (true);
 
 commit;
 

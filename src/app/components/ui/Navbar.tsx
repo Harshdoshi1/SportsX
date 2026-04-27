@@ -130,10 +130,16 @@ export function Navbar() {
   };
 
   const openPlayer = (player: SearchPlayer) => {
-    const teamShort = deriveTeamShort(player.team || "RCB");
+    const teamShort = deriveTeamShort(player.team || "");
     const playerId = String(player.id || slugify(player.name || "player"));
     setSearchOpen(false);
     setSearchValue("");
+
+    if (teamShort === "TBD") {
+      navigate(`/player/${encodeURIComponent(playerId)}`);
+      return;
+    }
+
     navigate(`/sport/cricket/league/ipl/team/${teamShort}/player/${encodeURIComponent(playerId)}`);
   };
 

@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from "motion/react";
 import { Navbar } from "../ui/Navbar";
 import { GlassCard } from "../ui/GlassCard";
 import { useNavigate } from "react-router";
-import { TrendingUp, Users, Activity, Trophy, ChevronRight, Star, Flame, Clock, MapPin, Zap, Timer } from "lucide-react";
+import { TrendingUp, Users, Activity, Trophy, ChevronRight, Star, Flame, Clock, MapPin, Zap, Timer, Plus } from "lucide-react";
 import { ImageWithFallback } from "../figma/ImageWithFallback";
 import { TeamLogo } from "../ui/TeamLogo";
 import { cricketApi } from "../../services/cricketApi";
@@ -270,7 +270,17 @@ function CountdownTimer({ startTime, date }: { startTime: string; date: string }
 }
 
 /* ─── Premium Match Card ─── */
-function PremiumMatchCard({ match, index }: { match: UiMatch; index: number }) {
+function PremiumMatchCard({
+  match,
+  index,
+  adminMode,
+  onAddLiveUrl,
+}: {
+  match: UiMatch;
+  index: number;
+  adminMode?: boolean;
+  onAddLiveUrl?: (match: UiMatch) => void;
+}) {
   const navigate = useNavigate();
   const teamA = getTeamLogoProps(match.teamA);
   const teamB = getTeamLogoProps(match.teamB);
@@ -297,6 +307,25 @@ function PremiumMatchCard({ match, index }: { match: UiMatch; index: number }) {
         <div className="h-1" style={{ background: "linear-gradient(90deg, #FF4D8D, #7C4DFF, #3BD4E7)" }} />
 
         <div className="p-5 md:p-6">
+          {adminMode && onAddLiveUrl && (
+            <div className="flex justify-end mb-3">
+              <motion.button
+                whileHover={{ scale: 1.03 }}
+                whileTap={{ scale: 0.97 }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onAddLiveUrl(match);
+                }}
+                className="px-3 py-2 rounded-lg text-xs font-semibold flex items-center gap-1.5"
+                style={{ background: "rgba(255,77,141,0.14)", border: "1px solid rgba(255,77,141,0.35)", color: "#FF4D8D" }}
+                title="Add Live Match URL"
+              >
+                <Plus size={13} />
+                Add Live Match URL
+              </motion.button>
+            </div>
+          )}
+
           {/* League Header */}
           <div className="flex items-center justify-between mb-5">
             <div className="flex items-center gap-2.5">
@@ -521,6 +550,38 @@ export function Dashboard({ adminMode = false }: { adminMode?: boolean }) {
   const adminUpcoming = useMemo(() => adminMatches.filter((m) => m.type === "upcoming"), [adminMatches]);
   const adminLive = useMemo(() => adminMatches.filter((m) => m.type === "live"), [adminMatches]);
   const adminEnded = useMemo(() => adminMatches.filter((m) => m.type === "ended"), [adminMatches]);
+
+  const askAndSetLiveUrl = useCallback(async (params: { matchId: string; currentUrl?: string; series?: string; tournamentId?: string; alsoStoreUpcoming?: boolean }) => {
+    const current = String(params.currentUrl || "").trim();
+    const next = window.prompt(
+      "Enter Crex match URL (or live URL). Example: https://crex.com/cricket-live-score/oma-vs-uae-...-match-updates-11HC",
+      current,
+    );
+    if (!next) return;
+
+    let validated = "";
+    try {
+      validated = new URL(next).toString();
+    } catch {
+      window.alert("Invalid URL. Please paste a full Crex match URL.");
+      return;
+    }
+
+    try {
+      await cricketApi.setMatchLiveSource({
+        matchId: params.matchId,
+        sourceUrl: validated,
+        tournamentId: params.tournamentId || "admin",
+        series: params.series || "Admin Live Feed",
+      });
+
+      if (params.alsoStoreUpcoming) {
+        setUpcomingLiveUrl(params.matchId, validated);
+      }
+    } catch (e: any) {
+      window.alert(e?.message || "Failed to save live URL");
+    }
+  }, [setUpcomingLiveUrl]);
 
   const parseTeamsFromTitle = (title: string) => {
     const raw = String(title || "");
@@ -930,16 +991,13 @@ export function Dashboard({ adminMode = false }: { adminMode?: boolean }) {
                         whileTap={{ scale: 0.95 }}
                         onClick={(e) => {
                           e.stopPropagation();
-                          const current = String((m as AdminUpcomingMatch).liveSourceUrl || m.sourceUrl || "");
-                          const next = window.prompt("Paste Live Match URL (Crex). Leave blank to cancel.", current);
-                          if (!next) return;
-                          try {
-                            // eslint-disable-next-line no-new
-                            new URL(next);
-                          } catch {
-                            return;
-                          }
-                          setUpcomingLiveUrl(m.id, next);
+                          askAndSetLiveUrl({
+                            matchId: m.id,
+                            currentUrl: String((m as AdminUpcomingMatch).liveSourceUrl || m.sourceUrl || ""),
+                            series: m.sectionLabel,
+                            tournamentId: "admin",
+                            alsoStoreUpcoming: true,
+                          });
                         }}
                         className="absolute top-4 right-4 w-10 h-10 rounded-full flex items-center justify-center"
                         style={{
@@ -959,7 +1017,20 @@ export function Dashboard({ adminMode = false }: { adminMode?: boolean }) {
               );
             })}
             {upcomingMatchCards.map((match, i) => (
-              <PremiumMatchCard key={match.id} match={match} index={i} />
+              <PremiumMatchCard
+                key={match.id}
+                match={match}
+                index={i}
+                adminMode={adminMode}
+                onAddLiveUrl={(uiMatch) => {
+                  askAndSetLiveUrl({
+                    matchId: uiMatch.id,
+                    currentUrl: "",
+                    series: uiMatch.league || "IPL Live Feed",
+                    tournamentId: uiMatch.tournamentId || "ipl",
+                  });
+                }}
+              />
             ))}
           </div>
         </div>

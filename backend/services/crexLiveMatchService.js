@@ -20,6 +20,7 @@ const LIVE_MATCH_SOURCES = [
 const CACHE_TTL_MS = 1500;
 const cacheByMatchId = new Map();
 const inFlightByMatchId = new Map();
+const customSourceByMatchId = new Map();
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -515,6 +516,28 @@ const parseStatus = (text) => {
   return "Live";
 };
 
+const toScorecardUrl = (sourceUrl) => {
+  const raw = String(sourceUrl || "").trim();
+  if (!raw) return "";
+  if (/\/match-scorecard\/?$/i.test(raw)) {
+    return raw;
+  }
+  return `${raw.replace(/\/+$/, "")}/match-scorecard`;
+};
+
+const parseEquationFromText = (text) => {
+  const raw = String(text || "").replace(/\s+/g, " ").trim();
+  if (!raw) return null;
+
+  const needLine = raw.match(/\b([A-Z]{2,}(?:-[A-Z])?)\s+need\s+\d+\s+runs\s+in\s+\d+\s+balls\b/i)?.[0];
+  if (needLine) return needLine;
+
+  const altLine = raw.match(/\b\d+\s+runs\s+needed\s+in\s+\d+\s+balls\b/i)?.[0];
+  if (altLine) return altLine;
+
+  return null;
+};
+
 const launchBrowser = async () =>
   puppeteer.launch({
     headless: true,
@@ -556,15 +579,12 @@ const scrapeCrexMatch = async (source) => {
 
     let scorecardText = "";
     try {
-      await page.evaluate(() => {
-        const candidates = Array.from(document.querySelectorAll("button, a, [role='tab'], div"));
-        const tab = candidates.find((node) => /scorecard/i.test(String(node?.innerText || "")));
-        if (tab && typeof tab.click === "function") {
-          tab.click();
-        }
-      });
+      const scorecardPage = await browser.newPage();
+      await configurePage(scorecardPage);
+      await scorecardPage.goto(toScorecardUrl(source.sourceUrl), { waitUntil: "networkidle2", timeout: 60000 });
       await sleep(900);
-      scorecardText = await page.evaluate(() => String(document.body?.innerText || ""));
+      scorecardText = await scorecardPage.evaluate(() => String(document.body?.innerText || ""));
+      await scorecardPage.close();
     } catch {
       scorecardText = "";
     }
@@ -614,6 +634,7 @@ const scrapeCrexMatch = async (source) => {
 
     const matchId = buildMatchId(source);
 
+    const equationFromScorecard = parseEquationFromText(scorecardText);
     const currentRunRate =
       structured?.liveStats?.currentRunRate || pageText.match(/CRR\s*:\s*([0-9.]+)/i)?.[1] || null;
     const tossInfo = pageText.match(/([A-Z]{2,}(?:-[A-Z])?\s+opt\s+to\s+(?:Bat|Bowl))/i)?.[1] || null;
@@ -693,7 +714,7 @@ const scrapeCrexMatch = async (source) => {
           tossInfo,
           partnership,
           lastWicket,
-          equation: structured?.liveStats?.equation || null,
+          equation: equationFromScorecard || structured?.liveStats?.equation || null,
         },
       },
     };
@@ -705,7 +726,8 @@ const scrapeCrexMatch = async (source) => {
 };
 
 const readMatchFromSource = async (source, options = {}) => {
-  const matchId = buildMatchId(source);
+  const derivedMatchId = buildMatchId(source);
+  const matchId = String(options?.cacheKey || derivedMatchId);
   const forceFresh = Boolean(options?.forceFresh);
   const now = Date.now();
   const cached = cacheByMatchId.get(matchId);
@@ -819,6 +841,42 @@ export const crexLiveMatchService = {
     };
 
     return readMatchFromSource(source, options);
+  },
+
+  setCustomLiveSource(matchId, sourceUrl, options = {}) {
+    const id = String(matchId || "").trim();
+    const url = String(sourceUrl || "").trim();
+    if (!id || !url) {
+      return null;
+    }
+
+    const source = {
+      sourceId: `custom-${extractCrexCode(url)}`,
+      tournamentId: String(options?.tournamentId || "admin").toLowerCase(),
+      series: String(options?.series || "Admin Live Feed"),
+      sourceUrl: url,
+    };
+
+    customSourceByMatchId.set(id, source);
+    return { matchId: id, ...source };
+  },
+
+  getCustomLiveSource(matchId) {
+    const id = String(matchId || "").trim();
+    return customSourceByMatchId.get(id) || null;
+  },
+
+  async getCustomLiveMatchById(matchId, options = {}) {
+    const id = String(matchId || "").trim();
+    const source = customSourceByMatchId.get(id);
+    if (!source) {
+      return null;
+    }
+
+    return readMatchFromSource(source, {
+      ...options,
+      cacheKey: `custom-${id}`,
+    });
   },
 
   async getIccLiveMatch(options = {}) {

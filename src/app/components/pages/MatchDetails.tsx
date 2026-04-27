@@ -6,10 +6,11 @@ import { GlassCard } from "../ui/GlassCard";
 import { BackButton } from "../ui/BackButton";
 import { Breadcrumbs } from "../ui/Breadcrumbs";
 import { TeamLogo } from "../ui/TeamLogo";
-import { MessageCircle, Radio, Users, MapPin, Activity, Flame, BarChart3 } from "lucide-react";
+import { MessageCircle, Radio, Users, MapPin, Activity, Flame, BarChart3, ChevronDown, ChevronUp, Star } from "lucide-react";
 import { cricketApi } from "../../services/cricketApi";
 import { formatApiDate, getTeamLogoProps, safeArray } from "../../services/cricketUi";
 import { useMatchStore } from "../../../contexts/MatchContext";
+import { BallEventOverlay, type BallEventOverlayState } from "../ui/BallEventOverlay";
 
 type TabKey = "Scorecard" | "Commentary" | "Analysis";
 
@@ -127,6 +128,30 @@ const extractBallTrail = (commentary: CommentaryEntry[]) => {
   return feed;
 };
 
+const getTopCommentary = (scoreboard: any) => {
+  const rows = safeArray<any>(scoreboard?.commentary || scoreboard?.liveCommentary);
+  const first = rows[0] || null;
+  if (!first) return { key: "", text: "" };
+  const over = String(first?.over || first?.ball || "-").trim();
+  const text = String(first?.text || first?.commentary || "").replace(/\s+/g, " ").trim();
+  return { key: `${over}|${text}`, text };
+};
+
+const detectMomentFromCommentary = (text: string): BallEventOverlayState | null => {
+  const line = String(text || "").toLowerCase();
+  if (!line) return null;
+  if (/\b(out|wicket|bowled|caught|lbw|run out|stumped)\b/.test(line)) {
+    return { id: Date.now(), type: "wicket", label: "💥 WICKET!" };
+  }
+  if (/\b(six|6 runs|maximum)\b/.test(line)) {
+    return { id: Date.now(), type: "six", label: "6️⃣ SIX!" };
+  }
+  if (/\b(four|4 runs|boundary)\b/.test(line)) {
+    return { id: Date.now(), type: "four", label: "4️⃣ FOUR!" };
+  }
+  return null;
+};
+
 export function MatchDetails() {
   const { matchId } = useParams<{ matchId: string }>();
   const navigate = useNavigate();
@@ -135,8 +160,11 @@ export function MatchDetails() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [matchPayload, setMatchPayload] = useState<any>(null);
+  const [showFullScoreboard, setShowFullScoreboard] = useState(false);
+  const [liveMoment, setLiveMoment] = useState<BallEventOverlayState | null>(null);
   const inFlightRef = useRef(false);
   const previousSnapshotRef = useRef("");
+  const lastCommentaryKeyRef = useRef("");
   const abortRef = useRef<AbortController | null>(null);
   const endedRef = useRef(false);
 
@@ -225,6 +253,22 @@ export function MatchDetails() {
   const commentary = useMemo(() => extractCommentary(scoreboard), [scoreboard]);
   const batters = useMemo(() => extractBatters(scoreboard), [scoreboard]);
   const bowlers = useMemo(() => extractBowlers(scoreboard), [scoreboard]);
+  const fullBatters = useMemo(
+    () => safeArray<any>(scoreboard?.batters).map((row) => ({
+      name: String(row?.name || ""),
+      runs: Number(row?.runs ?? 0),
+      balls: Number(row?.balls ?? 0),
+    })).filter((row) => row.name),
+    [scoreboard],
+  );
+  const fullBowlers = useMemo(
+    () => safeArray<any>(scoreboard?.bowlers).map((row) => ({
+      name: String(row?.name || ""),
+      figures: String(row?.figures || "-"),
+      overs: String(row?.overs || "-"),
+    })).filter((row) => row.name),
+    [scoreboard],
+  );
   const liveStats = scoreboard?.liveStats || {};
   const team1Runs = parseRuns(match?.team1Score);
   const team2Runs = parseRuns(match?.team2Score);
@@ -257,6 +301,25 @@ export function MatchDetails() {
     !matchEnded &&
     /(upcoming|scheduled|starts|toss pending)/.test(matchStatusLower) &&
     inningsCount === 0;
+
+  useEffect(() => {
+    const { key, text } = getTopCommentary(scoreboard);
+    if (!key || key === lastCommentaryKeyRef.current) {
+      return;
+    }
+
+    lastCommentaryKeyRef.current = key;
+    const moment = detectMomentFromCommentary(text);
+    if (!moment) return;
+
+    const id = Date.now();
+    setLiveMoment({ ...moment, id });
+    const timeout = setTimeout(() => {
+      setLiveMoment((current) => (current?.id === id ? null : current));
+    }, 1800);
+
+    return () => clearTimeout(timeout);
+  }, [scoreboard]);
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.5 }} className="min-h-screen">
@@ -421,7 +484,8 @@ export function MatchDetails() {
           {activeTab === "Scorecard" && (
             <motion.div key="scorecard" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
               <div className="grid grid-cols-1 xl:grid-cols-[1.75fr_1fr] gap-5">
-                <GlassCard className="p-5 md:p-6 overflow-hidden">
+                <GlassCard className="p-5 md:p-6 overflow-hidden relative">
+                  <BallEventOverlay event={liveMoment} />
                   <div className="flex items-center justify-between mb-5">
                     <h3 className="text-white font-black text-lg flex items-center gap-2">
                       <Flame size={16} className="text-[#ff9b4a]" />
@@ -447,7 +511,10 @@ export function MatchDetails() {
                       <>
                         <div className="rounded-xl p-3" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)" }}>
                           <p className="text-white/40 text-[11px] uppercase mb-1">Striker</p>
-                          <p className="text-white text-sm font-bold truncate">{striker?.name || "-"}</p>
+                          <p className="text-white text-sm font-bold truncate flex items-center gap-1.5">
+                            <Star size={12} className="text-[#ffd56f]" fill="currentColor" />
+                            {striker?.name || "-"}
+                          </p>
                           <p className="text-[#7ce8ff] text-lg font-black">{striker ? `${striker.runs}` : "-"}<span className="text-xs text-white/35"> ({striker?.balls ?? "-"})</span></p>
                           <p className="text-white/40 text-[10px] mt-1">SR: {strikerSR}</p>
                         </div>
@@ -586,7 +653,10 @@ export function MatchDetails() {
                   {batters.length === 0 && <div className="px-6 py-5 text-sm text-white/45">Live batter stats are not available yet.</div>}
                   {batters.map((batter, index) => (
                     <div key={`${batter.name}-${index}`} className="px-6 py-4 flex items-center justify-between" style={{ borderBottom: index < batters.length - 1 ? "1px solid rgba(255,255,255,0.04)" : "none" }}>
-                      <p className="text-white/90 text-sm font-semibold truncate pr-3">{batter.name}</p>
+                      <p className="text-white/90 text-sm font-semibold truncate pr-3 flex items-center gap-1.5">
+                        {index === 0 && <Star size={11} className="text-[#ffd56f] flex-shrink-0" fill="currentColor" />}
+                        {batter.name}
+                      </p>
                       <p className="text-[#7ce8ff] font-bold text-sm whitespace-nowrap">{batter.runs} ({batter.balls})</p>
                     </div>
                   ))}
@@ -604,6 +674,75 @@ export function MatchDetails() {
                     </div>
                   ))}
                 </GlassCard>
+              </div>
+
+              <div className="mt-5">
+                <button
+                  onClick={() => setShowFullScoreboard((prev) => !prev)}
+                  className="w-full flex items-center justify-between px-4 py-3 rounded-xl text-sm font-semibold"
+                  style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.86)" }}
+                >
+                  <span>Full Scoreboard</span>
+                  {showFullScoreboard ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                </button>
+
+                <AnimatePresence>
+                  {showFullScoreboard && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 8, height: 0 }}
+                      animate={{ opacity: 1, y: 0, height: "auto" }}
+                      exit={{ opacity: 0, y: 8, height: 0 }}
+                      className="overflow-hidden"
+                    >
+                      <GlassCard className="mt-3 p-5">
+                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+                          <div>
+                            <h4 className="text-white font-bold mb-3">Innings Scores</h4>
+                            <div className="space-y-2">
+                              {innings.length === 0 && <div className="text-xs text-white/45">No innings data available.</div>}
+                              {innings.map((inn, idx) => (
+                                <div key={`${inn.title}-full-${idx}`} className="rounded-lg p-3" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)" }}>
+                                  <p className="text-white/80 text-xs">{inn.title}</p>
+                                  <p className="text-white font-black text-lg">{inn.score}</p>
+                                  <p className="text-white/35 text-xs">Overs {inn.overs}</p>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+
+                          <div>
+                            <h4 className="text-white font-bold mb-3">All Batters</h4>
+                            <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+                              {fullBatters.length === 0 && <div className="text-xs text-white/45">No batter rows available.</div>}
+                              {fullBatters.map((b, idx) => (
+                                <div key={`${b.name}-full-bat-${idx}`} className="rounded-lg p-3 flex items-center justify-between" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)" }}>
+                                  <span className="text-white/90 text-sm font-semibold truncate pr-3 flex items-center gap-1.5">
+                                    {idx === 0 && <Star size={11} className="text-[#ffd56f] flex-shrink-0" fill="currentColor" />}
+                                    {b.name}
+                                  </span>
+                                  <span className="text-[#7ce8ff] text-sm font-bold whitespace-nowrap">{b.runs} ({b.balls})</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+
+                          <div>
+                            <h4 className="text-white font-bold mb-3">All Bowlers</h4>
+                            <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+                              {fullBowlers.length === 0 && <div className="text-xs text-white/45">No bowler rows available.</div>}
+                              {fullBowlers.map((b, idx) => (
+                                <div key={`${b.name}-full-bowl-${idx}`} className="rounded-lg p-3 flex items-center justify-between" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)" }}>
+                                  <span className="text-white/90 text-sm font-semibold truncate pr-3">{b.name}</span>
+                                  <span className="text-[#ffbf73] text-sm font-bold whitespace-nowrap">{b.figures} ({b.overs})</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      </GlassCard>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
             </motion.div>
           )}

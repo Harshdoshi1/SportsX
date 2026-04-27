@@ -10,6 +10,28 @@ const parseFresh = (query) => {
 };
 
 export const matchesController = {
+  async setLiveSource(req, res, next) {
+    try {
+      const matchId = String(req.body?.matchId || "").trim();
+      const sourceUrl = String(req.body?.sourceUrl || "").trim();
+      const tournamentId = String(req.body?.tournamentId || "admin").toLowerCase();
+      const series = String(req.body?.series || "Admin Live Feed");
+
+      if (!matchId || !sourceUrl) {
+        res.status(400).json({
+          success: false,
+          message: "matchId and sourceUrl are required",
+        });
+        return;
+      }
+
+      const result = matchesService.setMatchLiveSource(matchId, sourceUrl, { tournamentId, series });
+      ok(res, { linked: result.data }, result.meta);
+    } catch (error) {
+      next(error);
+    }
+  },
+
   async getLive(req, res, next) {
     try {
       const result = await matchesService.getLiveMatches();

@@ -8,7 +8,7 @@ import { Breadcrumbs } from "../ui/Breadcrumbs";
 import { TeamLogo } from "../ui/TeamLogo";
 import {
   Send, Mic, MicOff, Users, Volume2, LogOut, Heart, Laugh, Flame,
-  ThumbsUp, Copy, Check, Radio,
+  ThumbsUp, Copy, Check, Radio, Star,
 } from "lucide-react";
 import { getTeamLogoProps } from "../../services/cricketUi";
 import { IPL_PLAYER_IMAGES } from "../../data/ipl2026";
@@ -16,6 +16,7 @@ import { ImageWithFallback } from "../figma/ImageWithFallback";
 import { cricketApi } from "../../services/cricketApi";
 import { useMatchStore } from "../../../contexts/MatchContext";
 import { resolvePlayerImageUrl } from "../../../utils/playerImageResolver";
+import { BallEventOverlay, type BallEventOverlayState } from "../ui/BallEventOverlay";
 
 /* ─── Types ─── */
 interface Message {
@@ -136,6 +137,32 @@ const parseRunsFromScore = (score: string | null | undefined) => {
   return hit?.[1] ? Number(hit[1]) : null;
 };
 
+const topCommentaryKeyAndText = (scoreboard: any) => {
+  const rows = Array.isArray(scoreboard?.commentary || scoreboard?.liveCommentary)
+    ? (scoreboard?.commentary || scoreboard?.liveCommentary)
+    : [];
+  const first = rows[0] || null;
+  if (!first) return { key: "", text: "" };
+  const over = String(first?.over || first?.ball || "-").trim();
+  const text = String(first?.text || first?.commentary || "").replace(/\s+/g, " ").trim();
+  return { key: `${over}|${text}`, text };
+};
+
+const detectMomentFromCommentary = (text: string): BallEventOverlayState | null => {
+  const line = String(text || "").toLowerCase();
+  if (!line) return null;
+  if (/\b(out|wicket|bowled|caught|lbw|run out|stumped)\b/.test(line)) {
+    return { id: Date.now(), type: "wicket", label: "💥 WICKET!" };
+  }
+  if (/\b(six|6 runs|maximum)\b/.test(line)) {
+    return { id: Date.now(), type: "six", label: "🚀 SIX!" };
+  }
+  if (/\b(four|4 runs|boundary)\b/.test(line)) {
+    return { id: Date.now(), type: "four", label: "4️⃣ FOUR!" };
+  }
+  return null;
+};
+
 /* ─── Batsman/Bowler data from IPL Player Images ─── */
 const getPlayerImage = (name: string) => {
   const slug = name.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
@@ -213,9 +240,11 @@ export function LoungeRoom() {
   const [livePayload, setLivePayload] = useState<any>(null);
   const [scorecardError, setScorecardError] = useState<string | null>(null);
   const [scorecardLoading, setScorecardLoading] = useState(true);
+  const [liveMoment, setLiveMoment] = useState<BallEventOverlayState | null>(null);
   const inFlightRef = useRef(false);
   const abortRef = useRef<AbortController | null>(null);
   const endedRef = useRef(false);
+  const lastCommentaryKeyRef = useRef("");
   const playerImageCacheRef = useRef<Record<string, string | null>>({});
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -379,6 +408,25 @@ export function LoungeRoom() {
   };
 
   useEffect(() => {
+    const { key, text } = topCommentaryKeyAndText(liveScoreboard);
+    if (!key || key === lastCommentaryKeyRef.current) {
+      return;
+    }
+
+    lastCommentaryKeyRef.current = key;
+    const moment = detectMomentFromCommentary(text);
+    if (!moment) return;
+
+    const id = Date.now();
+    setLiveMoment({ ...moment, id });
+    const timeout = setTimeout(() => {
+      setLiveMoment((current) => (current?.id === id ? null : current));
+    }, 1700);
+
+    return () => clearTimeout(timeout);
+  }, [liveScoreboard]);
+
+  useEffect(() => {
     const names = Array.from(
       new Set(
         [...batters.map((b) => String(b?.name || "").trim()), ...bowlers.map((b) => String(b?.name || "").trim())]
@@ -436,6 +484,9 @@ export function LoungeRoom() {
             border: "1px solid rgba(255,255,255,0.08)",
           }}
         >
+          <div className="relative">
+            <BallEventOverlay event={liveMoment} fullCover />
+
           {/* Score Header */}
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-3">
@@ -486,6 +537,26 @@ export function LoungeRoom() {
             <div className="mb-3 text-xs text-[#ff8ca8]">{scorecardError}</div>
           )}
 
+          <AnimatePresence>
+            {liveMoment && (
+              <motion.div
+                key={liveMoment.id}
+                initial={{ opacity: 0, y: -8, scale: 0.92 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: -8, scale: 0.94 }}
+                className="mb-3 inline-flex items-center px-3 py-1.5 rounded-lg text-xs font-black"
+                style={{
+                  background: "rgba(17,24,39,0.8)",
+                  color: liveMoment.type === "wicket" ? "#ff9c9c" : liveMoment.type === "six" ? "#bca9ff" : "#85d6ff",
+                  border: "1px solid rgba(255,255,255,0.16)",
+                  boxShadow: "0 0 24px rgba(0,0,0,0.25)",
+                }}
+              >
+                {liveMoment.label}
+              </motion.div>
+            )}
+          </AnimatePresence>
+
           {/* Batsmen + Bowler with player images */}
           <div className="flex items-center justify-between gap-4 py-3 px-4 rounded-xl" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.05)" }}>
             {/* Batsmen */}
@@ -516,7 +587,10 @@ export function LoungeRoom() {
                     )}
                   </div>
                   <div>
-                    <p className="text-white text-xs font-semibold">{bat.name.split(" ").pop()}</p>
+                    <p className="text-white text-xs font-semibold flex items-center gap-1">
+                      {i === 0 && <Star size={10} className="text-[#ffd56f]" fill="currentColor" />}
+                      {bat.name.split(" ").pop()}
+                    </p>
                     <p className="text-[#3BD4E7] text-xs font-mono font-bold">{bat.runs}<span className="text-white/30">({bat.balls})</span></p>
                   </div>
                   {i === 0 && <span className="text-white/20 text-xs mx-1">+</span>}
@@ -565,6 +639,7 @@ export function LoungeRoom() {
               />
             </div>
             <span className="text-xs font-bold" style={{ color: "#3BD4E7" }}>{team2} {100 - team1Prob}%</span>
+          </div>
           </div>
         </motion.div>
 
