@@ -1,4 +1,4 @@
-const API_BASE_URL = import.meta.env.VITE_BACKEND_API_URL || "/api";
+const API_BASE_URL = (import.meta as any).env?.VITE_BACKEND_API_URL || "/api";
 
 const REQUEST_CACHE_TTL_MS = 60_000;
 
@@ -90,6 +90,7 @@ export interface ApiResponse<T> {
 
 type RequestOptions = {
   bypassCache?: boolean;
+  signal?: AbortSignal;
 };
 
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
@@ -122,6 +123,7 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
   try {
     res = await fetch(`${API_BASE_URL}${path}`, {
       cache: options.bypassCache ? "no-store" : "default",
+      signal: options.signal,
     });
   } catch {
     const networkError: ApiError = new Error(
@@ -205,7 +207,22 @@ export const cricketApi = {
   getIplMatches: (page = 1, limit = 20) =>
     request(`/matches/ipl?page=${page}&limit=${limit}`),
 
-  getMatchDetails: (id: string | number) => request(`/match/${id}`),
+  getIccLiveMatches: (page = 1, limit = 20) =>
+    request(`/matches/icc-live?page=${page}&limit=${limit}`),
+
+  getIplLiveMatches: (page = 1, limit = 20, fresh = false) =>
+    request(
+      fresh
+        ? withFreshQuery(`/matches/ipl-live?page=${page}&limit=${limit}`)
+        : `/matches/ipl-live?page=${page}&limit=${limit}`,
+      { bypassCache: fresh },
+    ),
+
+  getMatchDetails: (id: string | number, fresh = false, signal?: AbortSignal) =>
+    request(
+      fresh ? withFreshQuery(`/match/${id}`) : `/match/${id}`,
+      { bypassCache: fresh, signal },
+    ),
 
   getTeams: (params?: { page?: number; limit?: number; q?: string }) => {
     const page = params?.page ?? 1;

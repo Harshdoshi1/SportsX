@@ -3,11 +3,12 @@ import { Navbar } from "../ui/Navbar";
 import { GlassCard } from "../ui/GlassCard";
 import { BackButton } from "../ui/BackButton";
 import { Breadcrumbs } from "../ui/Breadcrumbs";
+import { useSearchParams } from "react-router";
 import {
   AreaChart, Area, BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, RadarChart, Radar, PolarGrid, PolarAngleAxis,
 } from "recharts";
-import { TrendingUp, Award, Target, Activity, Zap, BarChart2 } from "lucide-react";
+import { TrendingUp, Award, Target, Activity, Zap, BarChart2, UserRound, Sparkles } from "lucide-react";
 
 const runProgressData = [
   { over: "1-5", rcb: 52, mi: 48, csk: 45, avg: 46 },
@@ -90,6 +91,12 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 };
 
 export function Analytics() {
+  const [searchParams] = useSearchParams();
+  const selectedPlayerName = String(searchParams.get("player") || "").trim();
+  const selectedPlayerTeam = String(searchParams.get("team") || "").trim();
+  const selectedPlayerRole = String(searchParams.get("role") || "").trim();
+  const selectedPlayerImage = String(searchParams.get("image") || "").trim();
+
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -111,6 +118,45 @@ export function Analytics() {
           <h1 className="text-4xl font-black text-white mb-2">Analytics Dashboard</h1>
           <p className="text-white/40">Deep insights across IPL 2026 — interactive charts, live stats & trend analysis</p>
         </motion.div>
+
+        {selectedPlayerName && (
+          <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.14 }} className="mb-8">
+            <GlassCard className="p-5 md:p-6">
+              <div className="flex items-center justify-between gap-4 flex-wrap">
+                <div className="flex items-center gap-3 min-w-0">
+                  {selectedPlayerImage ? (
+                    <img
+                      src={selectedPlayerImage}
+                      alt={selectedPlayerName}
+                      className="w-14 h-14 rounded-2xl object-cover"
+                      style={{ border: "1px solid rgba(255,255,255,0.2)" }}
+                    />
+                  ) : (
+                    <div
+                      className="w-14 h-14 rounded-2xl flex items-center justify-center"
+                      style={{ background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.16)" }}
+                    >
+                      <UserRound size={24} className="text-white/70" />
+                    </div>
+                  )}
+
+                  <div className="min-w-0">
+                    <p className="text-white/35 text-xs uppercase tracking-wider">Selected Player</p>
+                    <h2 className="text-white text-xl md:text-2xl font-black truncate">{selectedPlayerName}</h2>
+                    <p className="text-white/45 text-sm truncate">
+                      {selectedPlayerTeam || "IPL"}
+                      {selectedPlayerRole ? ` • ${selectedPlayerRole}` : ""}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="px-3 py-1.5 rounded-full text-xs font-semibold flex items-center gap-1.5" style={{ background: "rgba(59,212,231,0.16)", border: "1px solid rgba(59,212,231,0.35)", color: "#7ad6ff" }}>
+                  <Sparkles size={12} /> Search Spotlight
+                </div>
+              </div>
+            </GlassCard>
+          </motion.div>
+        )}
 
         {/* KPI Cards */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">

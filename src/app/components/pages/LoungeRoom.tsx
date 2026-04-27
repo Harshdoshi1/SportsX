@@ -11,8 +11,9 @@ import {
   ThumbsUp, Copy, Check, Radio,
 } from "lucide-react";
 import { getTeamLogoProps } from "../../services/cricketUi";
-import { IPL_PLAYER_IMAGES, IPL_STANDINGS } from "../../data/ipl2026";
+import { IPL_PLAYER_IMAGES } from "../../data/ipl2026";
 import { ImageWithFallback } from "../figma/ImageWithFallback";
+import { cricketApi } from "../../services/cricketApi";
 
 /* ─── Types ─── */
 interface Message {
@@ -31,6 +32,34 @@ interface VoiceUser {
   emoji: string;
   isSpeaking: boolean;
   isMuted: boolean;
+}
+
+interface LoungePlayer {
+  id?: string | number;
+  name: string;
+  role?: string;
+  image?: string | null;
+  runs?: number | null;
+  wickets?: number | null;
+}
+
+interface InningEntry {
+  title: string;
+  team?: string;
+  score: string;
+  overs: string;
+}
+
+interface BatterEntry {
+  name: string;
+  runs: number;
+  balls: number;
+}
+
+interface BowlerEntry {
+  name: string;
+  figures: string;
+  overs: string;
 }
 
 /* ─── Mock Data ─── */
@@ -61,7 +90,48 @@ const parseMatchId = (matchId: string) => {
   if (parts.length === 2) {
     return { team1: parts[0].toUpperCase(), team2: parts[1].toUpperCase() };
   }
-  return { team1: "RCB", team2: "MI" };
+  return { team1: "TEAM A", team2: "TEAM B" };
+};
+
+const extractInnings = (scoreboard: any): InningEntry[] => {
+  const innings = Array.isArray(scoreboard?.innings) ? scoreboard.innings : [];
+  return innings
+    .map((inning: any, index: number) => ({
+      title: String(inning?.title || inning?.team || `Innings ${index + 1}`),
+      team: String(inning?.team || "").toUpperCase(),
+      score: String(inning?.score || `${inning?.runs ?? "-"}/${inning?.wickets ?? "-"}`),
+      overs: String(inning?.overs ?? "-"),
+    }))
+    .filter((inning: InningEntry) => Boolean(inning.score));
+};
+
+const extractBatters = (scoreboard: any): BatterEntry[] => {
+  const rows = Array.isArray(scoreboard?.batters) ? scoreboard.batters : [];
+  return rows
+    .map((row: any) => ({
+      name: String(row?.name || "").trim(),
+      runs: Number(row?.runs ?? 0),
+      balls: Number(row?.balls ?? 0),
+    }))
+    .filter((row: BatterEntry) => Boolean(row.name))
+    .slice(0, 6);
+};
+
+const extractBowlers = (scoreboard: any): BowlerEntry[] => {
+  const rows = Array.isArray(scoreboard?.bowlers) ? scoreboard.bowlers : [];
+  return rows
+    .map((row: any) => ({
+      name: String(row?.name || "").trim(),
+      figures: String(row?.figures || "-"),
+      overs: String(row?.overs || "-"),
+    }))
+    .filter((row: BowlerEntry) => Boolean(row.name))
+    .slice(0, 6);
+};
+
+const parseRunsFromScore = (score: string | null | undefined) => {
+  const hit = String(score || "").match(/(\d{1,3})\s*[/-]\s*\d{1,2}/);
+  return hit?.[1] ? Number(hit[1]) : null;
 };
 
 /* ─── Batsman/Bowler data from IPL Player Images ─── */
@@ -123,14 +193,12 @@ export function LoungeRoom() {
   const { matchId, roomId } = useParams<{ matchId: string; roomId: string }>();
   const navigate = useNavigate();
 
-  const { team1, team2 } = parseMatchId(matchId || "");
+  const parsedTeams = parseMatchId(matchId || "");
+  const [resolvedTeams, setResolvedTeams] = useState(parsedTeams);
+  const team1 = resolvedTeams.team1;
+  const team2 = resolvedTeams.team2;
   const teamALogo = getTeamLogoProps(team1);
   const teamBLogo = getTeamLogoProps(team2);
-
-  // Sample batsman/bowler for mini scorecard
-  const team1Standing = IPL_STANDINGS.find(s => s.short === team1);
-  const team2Standing = IPL_STANDINGS.find(s => s.short === team2);
-  const team1Prob = team1Standing ? Math.round((team1Standing.won / Math.max(team1Standing.played, 1)) * 100) : 50;
 
   const [messages, setMessages] = useState<Message[]>(mockMessages);
   const [message, setMessage] = useState("");
@@ -139,10 +207,80 @@ export function LoungeRoom() {
   const [showReactions, setShowReactions] = useState(false);
   const [codeCopied, setCodeCopied] = useState(false);
   const [voiceUsers, setVoiceUsers] = useState<VoiceUser[]>(createVoiceUsers(team1, team2));
+  const [livePayload, setLivePayload] = useState<any>(null);
+  const [scorecardError, setScorecardError] = useState<string | null>(null);
+  const [scorecardLoading, setScorecardLoading] = useState(true);
+  const inFlightRef = useRef(false);
+  const abortRef = useRef<AbortController | null>(null);
+  const endedRef = useRef(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const speakingCount = voiceUsers.filter((u) => u.isSpeaking).length;
   const roomCode = roomId?.startsWith("private-") ? roomId.replace("private-", "") : roomId?.toUpperCase() || "IPL001";
+
+  useEffect(() => {
+    if (!matchId) {
+      setScorecardLoading(false);
+      return;
+    }
+
+    let active = true;
+
+    const loadLiveScore = async () => {
+      if (!active || inFlightRef.current) {
+        return;
+      }
+
+      inFlightRef.current = true;
+      abortRef.current?.abort();
+      const controller = new AbortController();
+      abortRef.current = controller;
+
+      try {
+        setScorecardError(null);
+        const detail: any = await cricketApi.getMatchDetails(matchId, true, controller.signal);
+        if (!active) {
+          return;
+        }
+
+        const teamA = String(detail?.match?.team1 || parsedTeams.team1 || "TEAM A").toUpperCase();
+        const teamB = String(detail?.match?.team2 || parsedTeams.team2 || "TEAM B").toUpperCase();
+
+        setResolvedTeams({ team1: teamA, team2: teamB });
+        setLivePayload(detail || null);
+
+        const status = String(detail?.match?.status || "").toLowerCase();
+        endedRef.current = Boolean(detail?.match?.matchEnded) || status === "completed";
+      } catch (fetchError: any) {
+        if (fetchError?.name === "AbortError") {
+          return;
+        }
+        if (active) {
+          setScorecardError(fetchError?.message || "Live score update failed");
+          setResolvedTeams(parsedTeams);
+        }
+      } finally {
+        inFlightRef.current = false;
+        if (active) {
+          setScorecardLoading(false);
+        }
+      }
+    };
+
+    setScorecardLoading(true);
+    loadLiveScore();
+    const interval = setInterval(() => {
+      if (!endedRef.current) {
+        loadLiveScore();
+      }
+    }, 2000);
+
+    return () => {
+      active = false;
+      abortRef.current?.abort();
+      clearInterval(interval);
+    };
+  }, [matchId]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -188,12 +326,53 @@ export function LoungeRoom() {
     setTimeout(() => setCodeCopied(false), 2000);
   };
 
-  // Sample batsman data for mini scorecard
-  const batsmanData = [
-    { name: "Virat Kohli", runs: 45, balls: 28, image: getPlayerImage("virat-kohli") },
-    { name: "Phil Salt", runs: 23, balls: 14, image: getPlayerImage("phil-salt") },
-  ];
-  const bowlerData = { name: "Jasprit Bumrah", overs: "3.2", runs: 18, wickets: 2, image: getPlayerImage("jasprit-bumrah") };
+  const liveMatch = livePayload?.match || {};
+  const liveScoreboard = livePayload?.scoreboard || {};
+  const liveStats = liveScoreboard?.liveStats || {};
+  const innings = extractInnings(liveScoreboard);
+  const batters = extractBatters(liveScoreboard);
+  const bowlers = extractBowlers(liveScoreboard);
+
+  const team1Inning = innings.find((inn) => {
+    const token = String(team1 || "").toUpperCase();
+    const title = String(inn?.title || inn?.team || "").toUpperCase();
+    return token && title.includes(token);
+  }) || innings[0];
+
+  const team2Inning = innings.find((inn) => {
+    const token = String(team2 || "").toUpperCase();
+    const title = String(inn?.title || inn?.team || "").toUpperCase();
+    return token && title.includes(token);
+  }) || innings[1];
+
+  const team1ScoreText = String(liveMatch?.team1Score || team1Inning?.score || "-");
+  const team2ScoreText = String(liveMatch?.team2Score || team2Inning?.score || "-");
+  const team1OversText = String(liveMatch?.team1Overs || team1Inning?.overs || "-");
+  const team2OversText = String(liveMatch?.team2Overs || team2Inning?.overs || "-");
+
+  const batsmanData = batters.slice(0, 2).map((bat) => ({
+    name: String(bat?.name || "Not available"),
+    runs: Number(bat?.runs || 0),
+    balls: Number(bat?.balls || 0),
+    image: getPlayerImage(String(bat?.name || "")),
+  }));
+
+  const leadBowler = bowlers[0];
+  const figureTokens = String(leadBowler?.figures || "0-0").split("-");
+  const bowlerData = {
+    name: String(leadBowler?.name || "Not available"),
+    overs: String(leadBowler?.overs || "-"),
+    runs: Number(figureTokens[1] || 0),
+    wickets: Number(figureTokens[0] || 0),
+    image: getPlayerImage(String(leadBowler?.name || "")),
+  };
+
+  const team1Runs = parseRunsFromScore(team1ScoreText);
+  const team2Runs = parseRunsFromScore(team2ScoreText);
+  const totalRuns = Number(team1Runs || 0) + Number(team2Runs || 0);
+  const team1Prob = totalRuns > 0
+    ? Math.max(5, Math.min(95, Math.round((Number(team1Runs || 0) / totalRuns) * 100)))
+    : 50;
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.5 }} className="min-h-screen">
@@ -226,7 +405,9 @@ export function LoungeRoom() {
               <TeamLogo teamId={teamALogo.teamId} short={teamALogo.short} size={36} />
               <div>
                 <p className="text-white font-black text-lg">{team1}</p>
-                <p className="text-[#3BD4E7] text-sm font-mono font-bold">167/4 <span className="text-white/30 text-xs font-normal">18.2 ov</span></p>
+                <p className="text-[#3BD4E7] text-sm font-mono font-bold">
+                  {team1ScoreText} <span className="text-white/30 text-xs font-normal">{team1OversText} ov</span>
+                </p>
               </div>
             </div>
             <div className="flex items-center gap-2">
@@ -236,24 +417,36 @@ export function LoungeRoom() {
                 className="flex items-center gap-1 px-2 py-1 rounded-md text-xs font-bold"
                 style={{ background: "rgba(255,77,141,0.15)", color: "#FF4D8D" }}
               >
-                <Radio size={10} /> LIVE
+                <Radio size={10} /> {scorecardLoading ? "UPDATING" : (liveMatch?.status || "LIVE")}
               </motion.div>
-              <span className="text-white/30 text-xs">CRR: 9.10</span>
+              <span className="text-white/30 text-xs">CRR: {liveStats?.currentRunRate || "-"}</span>
             </div>
             <div className="flex items-center gap-3">
               <div className="text-right">
                 <p className="text-white font-black text-lg">{team2}</p>
-                <p className="text-white/40 text-sm">Yet to bat</p>
+                <p className="text-white/40 text-sm">
+                  {team2ScoreText !== "-" ? `${team2ScoreText} (${team2OversText} ov)` : "Yet to bat"}
+                </p>
               </div>
               <TeamLogo teamId={teamBLogo.teamId} short={teamBLogo.short} size={36} />
             </div>
           </div>
 
+          {scorecardError && (
+            <div className="mb-3 text-xs text-[#ff8ca8]">{scorecardError}</div>
+          )}
+
           {/* Batsmen + Bowler with player images */}
           <div className="flex items-center justify-between gap-4 py-3 px-4 rounded-xl" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.05)" }}>
             {/* Batsmen */}
             <div className="flex items-center gap-4">
-              {batsmanData.map((bat, i) => (
+              {scorecardLoading && (
+                <div className="text-white/40 text-xs">Updating live scorecard...</div>
+              )}
+              {!scorecardLoading && batsmanData.length === 0 && (
+                <div className="text-white/40 text-xs">Live batting data not available</div>
+              )}
+              {!scorecardLoading && batsmanData.map((bat, i) => (
                 <div key={bat.name} className="flex items-center gap-2">
                   <div className="w-10 h-10 rounded-full overflow-hidden" style={{ border: "2px solid rgba(59,212,231,0.3)", background: "rgba(255,255,255,0.06)" }}>
                     {bat.image ? (

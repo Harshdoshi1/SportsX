@@ -48,6 +48,7 @@ const cricketTournaments: TournamentFilter[] = [
 type UiMatch = {
   id: string;
   league: string;
+  tournamentId: string;
   teamA: string;
   teamB: string;
   teamADisplay: string;
@@ -58,6 +59,13 @@ type UiMatch = {
   startTime: string;
   venue: string;
   matchNo: string;
+};
+
+type TrendingNewsItem = {
+  title: string;
+  summary: string | null;
+  publishedAt: string;
+  tag: string;
 };
 
 const formatMatchDateSafe = (value: unknown) => {
@@ -109,6 +117,7 @@ const formatMatchStartTimeSafe = (explicitValue: unknown, fallbackIso: unknown) 
 const toUiMatch = (match: any): UiMatch => ({
   id: String(match?.id || `${match?.team1 || "team1"}-${match?.team2 || "team2"}-${match?.date || "date"}`),
   league: match?.series || "Indian Premier League 2026",
+  tournamentId: String(match?.tournamentId || "ipl").toLowerCase(),
   teamA: match?.team1 || match?.teamA || "Team A",
   teamB: match?.team2 || match?.teamB || "Team B",
   teamADisplay: match?.team1Name || match?.team1Display || match?.team1 || "Team A",
@@ -124,6 +133,31 @@ const toUiMatch = (match: any): UiMatch => ({
   venue: match?.venue || "Venue TBA",
   matchNo: String(match?.matchNo || "").trim(),
 });
+
+const buildMatchIdentity = (match: UiMatch) => {
+  const teamA = String(match?.teamA || "").toLowerCase().trim();
+  const teamB = String(match?.teamB || "").toLowerCase().trim();
+  const date = String(match?.date || "").toLowerCase().trim();
+  const tournament = String(match?.tournamentId || "").toLowerCase().trim();
+  return `${tournament}:${teamA}:${teamB}:${date}`;
+};
+
+const dedupeMatches = (matches: UiMatch[]) => {
+  const seen = new Set<string>();
+  const result: UiMatch[] = [];
+
+  for (const match of matches) {
+    const key = buildMatchIdentity(match);
+    if (seen.has(key)) {
+      continue;
+    }
+
+    seen.add(key);
+    result.push(match);
+  }
+
+  return result;
+};
 
 /* ─── Countdown Timer Hook ─── */
 function useCountdown(targetTimeString: string, dateString: string) {
@@ -249,7 +283,7 @@ function PremiumMatchCard({ match, index }: { match: UiMatch; index: number }) {
   const team1Prob = Math.round((team1WinRate / totalRate) * 100);
   const team2Prob = 100 - team1Prob;
 
-  const matchRouteId = `${match.teamA.toLowerCase()}-vs-${match.teamB.toLowerCase()}`;
+  const matchRouteId = match.id;
 
   return (
     <motion.div
@@ -357,12 +391,14 @@ function PremiumMatchCard({ match, index }: { match: UiMatch; index: number }) {
 export function Dashboard() {
   const navigate = useNavigate();
   const [liveMatches, setLiveMatches] = useState<UiMatch[]>([]);
+  const [iccLiveMatches, setIccLiveMatches] = useState<UiMatch[]>([]);
   const [upcomingMatches, setUpcomingMatches] = useState<UiMatch[]>([]);
   const [iplMatches, setIplMatches] = useState<UiMatch[]>([]);
   const [teamsCount, setTeamsCount] = useState(0);
+  const [trendingNews, setTrendingNews] = useState<TrendingNewsItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
+ 
   // Tournament favorites
   const [favTournaments, setFavTournaments] = useState<string[]>(() => {
     try {
@@ -390,24 +426,40 @@ export function Dashboard() {
         setLoading(true);
         setError(null);
 
-        const [iplScrapedRes, teamsRes] = await Promise.all([
-          cricketApi.getIplScrapedMatches(true),
+        const [iplScrapedRes, iplLiveRes, iccLiveRes, teamsRes, newsRes] = await Promise.all([
+          cricketApi.getIplScrapedMatches(),
+          cricketApi.getIplLiveMatches(1, 20, true),
+          cricketApi.getIccLiveMatches(),
           cricketApi.getTeams({ page: 1, limit: 500 }),
+          cricketApi.getIplNews(),
         ]);
 
         if (!active) {
           return;
         }
 
-        const ipl = safeArray<any>((iplScrapedRes as any).matches).map(toUiMatch);
+        const iplScraped = safeArray<any>((iplScrapedRes as any).matches).map(toUiMatch);
+        const iplFromLiveLinks = safeArray<any>((iplLiveRes as any).matches).map(toUiMatch);
+        const ipl = dedupeMatches([...iplFromLiveLinks, ...iplScraped]);
+        const iccLive = safeArray<any>((iccLiveRes as any).matches).map(toUiMatch);
         const live = ipl.filter((match) => isLiveStatus(match.status));
         const upcoming = ipl.filter((match) => isUpcomingStatus(match.status));
         const teams = safeArray<any>((teamsRes as any).teams);
+        const topTrendingNews = safeArray<any>((newsRes as any)?.news)
+          .map((item) => ({
+            title: String(item?.title || "Untitled"),
+            summary: item?.summary ? String(item.summary) : null,
+            publishedAt: String(item?.publishedAt || ""),
+            tag: String(item?.tag || "IPL 2026"),
+          }))
+          .slice(0, 3);
 
         setLiveMatches(live);
+        setIccLiveMatches(iccLive.filter((match) => isLiveStatus(match.status)));
         setUpcomingMatches(upcoming);
         setIplMatches(ipl);
         setTeamsCount(teams.length);
+        setTrendingNews(topTrendingNews);
       } catch (fetchError: any) {
         if (!active) {
           return;
@@ -437,7 +489,31 @@ export function Dashboard() {
     [iplMatches.length, liveMatches.length, upcomingMatches.length, teamsCount]
   );
 
-  const liveMatchCards = liveMatches.filter((match) => isLiveStatus(match.status)).slice(0, 3);
+  const filteredLivePool = useMemo(() => {
+    const includeIpl = favTournaments.includes("ipl");
+    const includeIcc = favTournaments.includes("icc");
+    const pool: UiMatch[] = [];
+
+    if (includeIpl) {
+      pool.push(...liveMatches.filter((match) => isLiveStatus(match.status)));
+    }
+
+    if (includeIcc) {
+      pool.push(...iccLiveMatches.filter((match) => isLiveStatus(match.status)));
+    }
+
+    // Keep ordering deterministic: ICC first, then stable by match id.
+    return pool.sort((a, b) => {
+      const aIccRank = a.tournamentId === "icc" ? 0 : 1;
+      const bIccRank = b.tournamentId === "icc" ? 0 : 1;
+      if (aIccRank !== bIccRank) {
+        return aIccRank - bIccRank;
+      }
+      return String(a.id).localeCompare(String(b.id));
+    });
+  }, [favTournaments, liveMatches, iccLiveMatches]);
+
+  const liveMatchCards = filteredLivePool.slice(0, 3);
   const upcomingMatchCards = upcomingMatches.slice(0, 6);
 
   return (
@@ -620,7 +696,7 @@ export function Dashboard() {
             {liveMatchCards.map((match, i) => {
               const teamA = getTeamLogoProps(match.teamA);
               const teamB = getTeamLogoProps(match.teamB);
-              const matchRouteId = `${match.teamA.toLowerCase()}-vs-${match.teamB.toLowerCase()}`;
+              const matchRouteId = match.id;
 
               return (
               <motion.div
@@ -699,11 +775,7 @@ export function Dashboard() {
           <h2 className="text-xl font-bold text-white mb-4">🔥 Trending</h2>
           <GlassCard className="p-5">
             <div className="space-y-4">
-              {(iplMatches.slice(0, 3).map((m, index) => ({
-                name: `${m.teamA} vs ${m.teamB}`,
-                detail: `${m.status} · ${m.score}`,
-                badge: index === 0 ? "#1" : index === 1 ? "HOT" : "#3",
-              })) ).map((item, i) => (
+              {trendingNews.map((item, i) => (
                 <div key={i} className="flex items-center gap-3">
                   <div
                     className="w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold flex-shrink-0"
@@ -713,15 +785,18 @@ export function Dashboard() {
                       color: i === 0 ? "#FF9100" : "rgba(255,255,255,0.4)",
                     }}
                   >
-                    {item.badge}
+                    #{i + 1}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-white text-sm font-semibold truncate">{item.name}</p>
-                    <p className="text-white/30 text-xs truncate">{item.detail}</p>
+                    <p className="text-white text-sm font-semibold truncate">{item.title}</p>
+                    <p className="text-white/30 text-xs truncate">{item.summary || `${item.tag}${item.publishedAt ? ` · ${item.publishedAt}` : ""}`}</p>
                   </div>
                   <Star size={14} className="text-white/20 flex-shrink-0" />
                 </div>
               ))}
+              {trendingNews.length === 0 && (
+                <p className="text-white/40 text-sm">No trending IPL news available right now.</p>
+              )}
             </div>
           </GlassCard>
         </div>

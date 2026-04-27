@@ -490,7 +490,7 @@ export function TeamAnalysis() {
 
         const [playersRes, matchesRes, statsRes, pointsRes] = await Promise.all([
           cricketApi.getTeamPlayers(selection.short, { page: 1, limit: 250, teamName: getIplTeamByShort(selection.short)?.name || selection.short }),
-          cricketApi.getIplScrapedMatches(true),
+          cricketApi.getIplScrapedMatches(),
           cricketApi.getIplStats(),
           cricketApi.getIplPoints(),
         ]);

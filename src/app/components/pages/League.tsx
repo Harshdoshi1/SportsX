@@ -170,7 +170,7 @@ export function League() {
 
         const [teamsRes, matchesRes, statsRes, newsRes] = await Promise.all([
           cricketApi.getIplPoints(),
-          cricketApi.getIplScrapedMatches(true),
+          cricketApi.getIplScrapedMatches(),
           cricketApi.getIplStats(),
           cricketApi.getIplNews(),
         ]);

@@ -197,7 +197,7 @@ export function PlayerAnalysis() {
       try {
         setCrexLoading(true);
         const nameKey = String(player.name || "").toLowerCase().replace(/[^a-z0-9]/g, "");
-        const res = await cricketApi.getPlayerInnings(nameKey, true) as any;
+        const res = await cricketApi.getPlayerInnings(nameKey) as any;
 
         if (!active) return;
 
@@ -569,7 +569,7 @@ export function PlayerAnalysis() {
                     No real innings data found yet for this player.
                   </div>
                 )}
-              </div>
+              </div> 
 
               {/* Boundary Mix */}
               <div className="grid grid-rows-2 gap-4">
@@ -748,7 +748,7 @@ export function PlayerAnalysis() {
                             <td className="text-right py-3 px-3 text-white/75">{inn.runsConceded}</td>
                             <td className="text-right py-3 px-3 text-[#00E676] font-bold">{inn.wickets}</td>
                             <td className="text-right py-3 px-3 text-[#B388FF]">{Number(inn.economy || 0).toFixed(2)}</td>
-                            <td className="py-3 pl-3 text-white/60 text-xs">{(inn.wicketPlayers || []).length ? inn.wicketPlayers.join(", ") : "-"}</td>
+                            <td className="py-3 pl-3 text-white/60 text-xs">{(inn.wicketPlayers ?? []).length ? (inn.wicketPlayers ?? []).join(", ") : "-"}</td>
                           </tr>
                         );
                       })}

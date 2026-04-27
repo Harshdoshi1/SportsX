@@ -41,6 +41,7 @@ create table if not exists public.sync_job_state (
   job_key text primary key,
   payload_hash text,
   last_run_at timestamptz not null default now(),
+  created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   notes jsonb not null default '{}'::jsonb
 );
@@ -148,6 +149,19 @@ create table if not exists public.players (
 create index if not exists idx_players_full_name on public.players using gin (to_tsvector('simple', full_name));
 create index if not exists idx_players_role on public.players (primary_role);
 
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'team_seasons_captain_fk'
+  ) then
+    alter table public.team_seasons
+      add constraint team_seasons_captain_fk
+      foreign key (captain_player_id) references public.players(id) on delete set null;
+  end if;
+end $$;
+
 create table if not exists public.player_external_ids (
   id uuid primary key default gen_random_uuid(),
   player_id uuid not null references public.players(id) on delete cascade,
@@ -179,6 +193,7 @@ create table if not exists public.team_rosters (
 
 create index if not exists idx_team_rosters_lookup on public.team_rosters (season_id, team_id);
 create index if not exists idx_team_rosters_player on public.team_rosters (player_id, season_id);
+create index if not exists idx_team_rosters_season_player on public.team_rosters (season_id, player_id);
 
 -- -----------------------------------------------------------------------------
 -- Match model
@@ -209,6 +224,7 @@ create table if not exists public.matches (
 create index if not exists idx_matches_season_status_start on public.matches (season_id, status, starts_at);
 create index if not exists idx_matches_start_time on public.matches (starts_at);
 create index if not exists idx_matches_winner on public.matches (winner_team_id);
+create index if not exists idx_matches_season_start on public.matches (season_id, starts_at);
 
 create table if not exists public.match_teams (
   id uuid primary key default gen_random_uuid(),
@@ -357,6 +373,7 @@ create table if not exists public.player_season_stats (
 create index if not exists idx_player_season_runs on public.player_season_stats (season_id, runs desc);
 create index if not exists idx_player_season_wickets on public.player_season_stats (season_id, wickets desc);
 create index if not exists idx_player_season_team on public.player_season_stats (season_id, team_id);
+create index if not exists idx_player_season_player on public.player_season_stats (season_id, player_id);
 
 -- -----------------------------------------------------------------------------
 -- Home feed table (requested): upcoming games for dashboard/home cards

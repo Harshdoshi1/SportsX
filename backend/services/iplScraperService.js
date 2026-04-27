@@ -131,6 +131,8 @@ const launchBrowser = async () =>
     args: ["--no-sandbox", "--disable-setuid-sandbox"],
   });
 
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
 const fetchIplStatsJsonp = async (endpoint) => {
   const cb = "on" + endpoint.replace(/-/g, "").replace("284", "");
   const url = `${IPL_STATS_S3_BASE}/${endpoint}.js?callback=${cb}&_=${Date.now()}`;
@@ -1143,7 +1145,7 @@ export const iplScraperService = {
       await fixturesPage.goto(FIXTURES_URL, { waitUntil: "networkidle2", timeout: 60000 });
       // Wait for JS-rendered match cards to appear
       await fixturesPage.waitForSelector("a.vn-matchBtn", { timeout: 15000 }).catch(() => null);
-      await fixturesPage.waitForTimeout(2000); // Extra buffer for lazy-loaded content
+      await sleep(2000); // Extra buffer for lazy-loaded content
       const upcoming = await extractIplt20Matches(fixturesPage, "Upcoming");
 
       // If DOM selectors didn't capture date/venue, try text-based fallback
@@ -1161,7 +1163,7 @@ export const iplScraperService = {
       await configurePage(resultsPage);
       await resultsPage.goto(RESULTS_URL, { waitUntil: "networkidle2", timeout: 60000 });
       await resultsPage.waitForSelector("a.vn-matchBtn", { timeout: 15000 }).catch(() => null);
-      await resultsPage.waitForTimeout(2000);
+      await sleep(2000);
       const completed = await extractIplt20Matches(resultsPage, "Completed");
       await resultsPage.close();
 

@@ -2,6 +2,49 @@ import { teamsService } from "../services/teamsService.js";
 import { paginate } from "../utils/pagination.js";
 import { ok } from "../utils/response.js";
 
+const SEARCH_CACHE_TTL_MS = 90 * 1000;
+
+let searchCatalogCache = {
+  teams: [],
+  players: [],
+  expiresAt: 0,
+};
+
+const normalize = (value) => String(value || "").trim().toLowerCase();
+
+const buildSearchCatalog = async () => {
+  if (Date.now() < searchCatalogCache.expiresAt) {
+    return searchCatalogCache;
+  }
+
+  const teamsResult = await teamsService.getTeams();
+  const allTeams = Array.isArray(teamsResult?.data) ? teamsResult.data : [];
+
+  const playerFetches = allTeams.map((team) => teamsService.getPlayersByTeam(team.id, team.name));
+  const playerResults = await Promise.allSettled(playerFetches);
+
+  const players = playerResults
+    .filter((result) => result.status === "fulfilled")
+    .flatMap((result) => result.value.data || []);
+
+  const dedupedPlayers = Array.from(
+    new Map(
+      players.map((player) => {
+        const key = `${normalize(player?.name)}::${normalize(player?.team)}`;
+        return [key, player];
+      }),
+    ).values(),
+  );
+
+  searchCatalogCache = {
+    teams: allTeams,
+    players: dedupedPlayers,
+    expiresAt: Date.now() + SEARCH_CACHE_TTL_MS,
+  };
+
+  return searchCatalogCache;
+};
+
 export const searchController = {
   async search(req, res, next) {
     try {
@@ -30,21 +73,21 @@ export const searchController = {
         return;
       }
 
-      const teamsResult = await teamsService.getTeams();
-      const teams = teamsResult.data.filter((team) =>
-        [team.name, team.shortName].filter(Boolean).join(" ").toLowerCase().includes(query)
-      );
+      const catalog = await buildSearchCatalog();
+      const allTeams = catalog.teams;
+
+      const teams = allTeams.filter((team) => {
+        const name = normalize(team?.name);
+        const short = normalize(team?.shortName);
+        return name.startsWith(query) || short.startsWith(query);
+      });
 
       let players = [];
       if (type !== "team") {
-        const playerFetches = teams.slice(0, 6).map((team) => teamsService.getPlayersByTeam(team.id, team.name));
-        const playerResults = await Promise.allSettled(playerFetches);
-        players = playerResults
-          .filter((result) => result.status === "fulfilled")
-          .flatMap((result) => result.value.data)
-          .filter((player) =>
-            [player.name, player.team, player.role].filter(Boolean).join(" ").toLowerCase().includes(query)
-          );
+        players = catalog.players.filter((player) => {
+          const name = normalize(player?.name);
+          return name.startsWith(query);
+        });
       }
 
       if (type === "team") {
@@ -56,7 +99,7 @@ export const searchController = {
             players: [],
             pagination: paginatedTeams.pagination,
           },
-          teamsResult.meta
+          { source: "search-catalog", cacheHit: Date.now() < searchCatalogCache.expiresAt }
         );
         return;
       }
@@ -70,7 +113,7 @@ export const searchController = {
             players: paginatedPlayers.data,
             pagination: paginatedPlayers.pagination,
           },
-          teamsResult.meta
+          { source: "search-catalog", cacheHit: Date.now() < searchCatalogCache.expiresAt }
         );
         return;
       }
@@ -89,7 +132,7 @@ export const searchController = {
           players,
           pagination: paginated.pagination,
         },
-        teamsResult.meta
+        { source: "search-catalog", cacheHit: Date.now() < searchCatalogCache.expiresAt }
       );
     } catch (error) {
       next(error);

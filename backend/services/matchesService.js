@@ -1,9 +1,37 @@
 import { supabaseIplSyncService } from "./supabaseIplSyncService.js";
+import { crexLiveMatchService } from "./crexLiveMatchService.js";
 
 const CACHE_TTL_MS = 2 * 60 * 1000;
 let cacheData = null;
 let cacheUntil = 0;
 let inFlight = null;
+
+const normalizeCrexLiveMatch = (match) => ({
+  id: String(match?.id || "live-match"),
+  name: `${match?.team1 || "Team A"} vs ${match?.team2 || "Team B"}`,
+  series: match?.series || "Cricket",
+  sport: "cricket",
+  team1: match?.team1 || null,
+  team2: match?.team2 || null,
+  score: match?.score || null,
+  status: match?.status || "Live",
+  venue: match?.venue || null,
+  date: match?.date || null,
+  startTime: match?.startTime || null,
+  result: match?.result || null,
+  team1Name: match?.team1Name || match?.team1 || null,
+  team2Name: match?.team2Name || match?.team2 || null,
+  team1Score: match?.team1Score || null,
+  team2Score: match?.team2Score || null,
+  team1Overs: match?.team1Overs || null,
+  team2Overs: match?.team2Overs || null,
+  sourceUrl: match?.sourceUrl || null,
+  tournamentId: match?.tournamentId || "icc",
+  matchStarted: String(match?.status || "").toLowerCase() === "live",
+  matchEnded: String(match?.status || "").toLowerCase() === "completed",
+  fetchedAt: match?.fetchedAt || new Date().toISOString(),
+  raw: match,
+});
 
 const normalizeStatus = (value) => String(value || "Upcoming");
 
@@ -117,9 +145,76 @@ export const matchesService = {
     };
   },
 
-  async getMatchDetails(matchId) {
-    const loaded = await loadMatches();
+  async getIccLiveMatches(options = {}) {
+    const forceFresh = Boolean(options?.forceFresh);
+    const matches = await crexLiveMatchService.getConfiguredLiveMatches({
+      tournamentId: "icc",
+      forceFresh,
+    });
+    const normalized = matches.map(normalizeCrexLiveMatch);
+
+    return {
+      data: normalized,
+      meta: {
+        provider: "crex-live-scraper",
+        cacheHit: normalized.every((item) => Boolean(item?.raw?._meta?.cacheHit)),
+        fetchedAt: new Date().toISOString(),
+        stale: normalized.some((item) => Boolean(item?.raw?._meta?.stale)),
+      },
+    };
+  },
+
+  async getIplLiveMatches(options = {}) {
+    const forceFresh = Boolean(options?.forceFresh);
+    const matches = await crexLiveMatchService.getConfiguredLiveMatches({
+      tournamentId: "ipl",
+      forceFresh,
+    });
+    const normalized = matches.map(normalizeCrexLiveMatch);
+
+    return {
+      data: normalized,
+      meta: {
+        provider: "crex-live-scraper",
+        cacheHit: normalized.every((item) => Boolean(item?.raw?._meta?.cacheHit)),
+        fetchedAt: new Date().toISOString(),
+        stale: normalized.some((item) => Boolean(item?.raw?._meta?.stale)),
+      },
+    };
+  },
+
+  async getMatchDetails(matchId, options = {}) {
     const id = String(matchId || "");
+    const forceFresh = Boolean(options?.forceFresh);
+
+    const crexLiveMatch = await crexLiveMatchService.getLiveMatchById(id, { forceFresh });
+    if (crexLiveMatch) {
+      const normalizedMatch = normalizeCrexLiveMatch(crexLiveMatch);
+      return {
+        data: {
+          match: {
+            ...normalizedMatch,
+            raw: normalizedMatch?.raw || crexLiveMatch,
+          },
+          scoreboard: {
+            innings: crexLiveMatch?.scoreboard?.innings || [],
+            events: crexLiveMatch?.scoreboard?.events || crexLiveMatch?.scoreboard?.commentary || [],
+            commentary: crexLiveMatch?.scoreboard?.commentary || [],
+            batters: crexLiveMatch?.scoreboard?.batters || [],
+            bowlers: crexLiveMatch?.scoreboard?.bowlers || [],
+            liveStats: crexLiveMatch?.scoreboard?.liveStats || {},
+          },
+        },
+        meta: {
+          provider: "crex-live-scraper",
+          cacheHit: Boolean(crexLiveMatch?._meta?.cacheHit),
+          fetchedAt: new Date().toISOString(),
+          stale: Boolean(crexLiveMatch?._meta?.stale),
+        },
+      };
+    }
+
+    const loaded = await loadMatches();
     const match = loaded.matches.find((item) => String(item.id) === id) || null;
 
     return {
@@ -133,6 +228,7 @@ export const matchesService = {
       meta: {
         provider: "iplt20-scraper",
         cacheHit: loaded.cacheHit,
+        fetchedAt: new Date().toISOString(),
       },
     };
   },

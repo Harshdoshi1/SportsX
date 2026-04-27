@@ -48,7 +48,7 @@ const parseMatchId = (matchId: string) => {
   if (parts.length === 2) {
     return { team1: parts[0].toUpperCase(), team2: parts[1].toUpperCase() };
   }
-  return { team1: "RCB", team2: "MI" };
+  return { team1: "TEAM A", team2: "TEAM B" };
 };
 
 export function MatchLounge() {
@@ -64,7 +64,9 @@ export function MatchLounge() {
   const [codeCopied, setCodeCopied] = useState(false);
   const [matchData, setMatchData] = useState<any>(null);
 
-  const { team1, team2 } = parseMatchId(matchId || "");
+  const parsedTeams = parseMatchId(matchId || "");
+  const team1 = String(matchData?.team1 || parsedTeams.team1 || "TEAM A").toUpperCase();
+  const team2 = String(matchData?.team2 || parsedTeams.team2 || "TEAM B").toUpperCase();
   const matchName = `${team1} vs ${team2}`;
   const publicRooms = generatePublicRooms(matchName);
   const privateRooms = generatePrivateRooms(matchName);
@@ -83,20 +85,24 @@ export function MatchLounge() {
   const team2Prob = 100 - team1Prob;
 
   useEffect(() => {
+    let active = true;
+
     const loadMatch = async () => {
       try {
-        const res = await cricketApi.getIplScrapedMatches();
-        const matches = safeArray<any>((res as any).matches);
-        const found = matches.find((m: any) => {
-          const t1 = String(m?.team1 || "").toUpperCase();
-          const t2 = String(m?.team2 || "").toUpperCase();
-          return (t1 === team1 && t2 === team2) || (t1 === team2 && t2 === team1);
-        });
-        if (found) setMatchData(found);
+        const detail: any = await cricketApi.getMatchDetails(matchId || "", true);
+        const found = detail?.match || null;
+        if (active && found) {
+          setMatchData(found);
+        }
       } catch {}
     };
+
     loadMatch();
-  }, [team1, team2]);
+
+    return () => {
+      active = false;
+    };
+  }, [matchId]);
 
   const handleSearch = () => {
     const code = searchCode.trim().toUpperCase();
