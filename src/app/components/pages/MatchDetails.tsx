@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState, memo } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { useNavigate, useParams } from "react-router";
 import { Navbar } from "../ui/Navbar";
@@ -9,6 +9,7 @@ import { TeamLogo } from "../ui/TeamLogo";
 import { MessageCircle, Radio, Users, MapPin, Activity, Flame, BarChart3 } from "lucide-react";
 import { cricketApi } from "../../services/cricketApi";
 import { formatApiDate, getTeamLogoProps, safeArray } from "../../services/cricketUi";
+import { useMatchStore } from "../../../contexts/MatchContext";
 
 type TabKey = "Scorecard" | "Commentary" | "Analysis";
 
@@ -82,7 +83,7 @@ const extractBatters = (scoreboard: any): BatterEntry[] =>
       balls: Number(row?.balls ?? 0),
     }))
     .filter((row) => row.name)
-    .slice(0, 4);
+    .slice(0, 2);
 
 const extractBowlers = (scoreboard: any): BowlerEntry[] =>
   safeArray<any>(scoreboard?.bowlers)
@@ -92,7 +93,7 @@ const extractBowlers = (scoreboard: any): BowlerEntry[] =>
       overs: String(row?.overs || "-"),
     }))
     .filter((row) => row.name)
-    .slice(0, 4);
+    .slice(0, 1);
 
 const parseRuns = (score?: string | null) => {
   const hit = String(score || "").match(/(\d{1,3})\s*[/-]\s*\d{1,2}/);
@@ -129,6 +130,7 @@ const extractBallTrail = (commentary: CommentaryEntry[]) => {
 export function MatchDetails() {
   const { matchId } = useParams<{ matchId: string }>();
   const navigate = useNavigate();
+  const { adminMatches } = useMatchStore();
   const [activeTab, setActiveTab] = useState<TabKey>("Scorecard");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -163,7 +165,10 @@ export function MatchDetails() {
         }
         setError(null);
 
-        const response: any = await cricketApi.getMatchDetails(matchId, fresh, controller.signal);
+        const admin = adminMatches.find((m) => m.id === matchId);
+        const response: any = admin
+          ? await cricketApi.getMatchDetailsByUrl(admin.sourceUrl, true, controller.signal, { tournamentId: "admin", series: admin.sectionLabel })
+          : await cricketApi.getMatchDetails(matchId, fresh, controller.signal);
         if (!active) {
           return;
         }
@@ -179,7 +184,8 @@ export function MatchDetails() {
         }
 
         const status = String(response?.match?.status || "").toLowerCase();
-        endedRef.current = Boolean(response?.match?.matchEnded) || status === "completed";
+        const result = String(response?.match?.result || "").toLowerCase();
+        endedRef.current = Boolean(response?.match?.matchEnded) || status === "completed" || /(won|result|match over|innings complete)/.test(status) || /(won|result)/.test(result);
       } catch (fetchError: any) {
         if (fetchError?.name === "AbortError") {
           return;
@@ -201,14 +207,14 @@ export function MatchDetails() {
       if (!endedRef.current) {
         loadMatch(true);
       }
-    }, 2000);
+    }, 1000);
 
     return () => {
       active = false;
       abortRef.current?.abort();
       clearInterval(pollHandle);
     };
-  }, [matchId]);
+  }, [matchId, adminMatches]);
 
   const match = matchPayload?.match || {};
   const scoreboard = matchPayload?.scoreboard || {};
@@ -235,6 +241,22 @@ export function MatchDetails() {
   const nonStriker = batters[1] || null;
   const currentBowler = bowlers[0] || null;
   const ballTrail = extractBallTrail(commentary);
+  
+  const strikerSR = striker && striker.balls > 0 ? ((striker.runs / striker.balls) * 100).toFixed(1) : "-";
+  const nonStrikerSR = nonStriker && nonStriker.balls > 0 ? ((nonStriker.runs / nonStriker.balls) * 100).toFixed(1) : "-";
+  const matchStatusLower = String(match?.status || "").toLowerCase();
+  const matchResultText = String(match?.result || "").trim();
+  const matchEnded = Boolean(match?.matchEnded) || matchStatusLower === "completed" || /(won|result|match over|innings complete)/.test(matchStatusLower) || /(won|result)/i.test(matchResultText);
+  const inningsCount = innings.length;
+  const opponentYetToBat = inningsCount <= 1 && (!match?.team2Score || String(match?.team2Score || "").trim() === "-");
+  const equationTextRaw = String(liveStats?.equation || "").trim();
+  const chaseLine =
+    equationTextRaw ||
+    (/(need|needs|runs needed|required)/i.test(String(match?.status || "")) ? String(match?.status || "").trim() : "");
+  const matchNotStarted =
+    !matchEnded &&
+    /(upcoming|scheduled|starts|toss pending)/.test(matchStatusLower) &&
+    inningsCount === 0;
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.5 }} className="min-h-screen">
@@ -296,8 +318,8 @@ export function MatchDetails() {
               <div className="flex items-center gap-3 md:justify-end justify-center">
                 <div className="text-right">
                   <p className="text-white/80 text-sm font-semibold">{match?.team2 || "Team B"}</p>
-                  <p className="text-[#9de8ff] text-4xl font-black leading-none">{match?.team2Score || "-"}</p>
-                  <p className="text-white/40 text-xs mt-1">Overs {match?.team2Overs || "-"}</p>
+                  <p className="text-[#9de8ff] text-4xl font-black leading-none">{opponentYetToBat ? "Yet to bat" : (match?.team2Score || "-")}</p>
+                  <p className="text-white/40 text-xs mt-1">Overs {opponentYetToBat ? "-" : (match?.team2Overs || "-")}</p>
                 </div>
                 <TeamLogo teamId={teamB.teamId} short={teamB.short} size={52} />
               </div>
@@ -333,6 +355,38 @@ export function MatchDetails() {
             </div>
 
             {error && <p className="text-[#ff8ca8] text-xs mt-3">{error}</p>}
+            {matchNotStarted && (
+              <div className="mt-4 rounded-2xl p-4 md:p-5" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.10)" }}>
+                <div className="text-xs font-black tracking-wide text-white/60">⏳ MATCH YET TO START</div>
+                <div className="text-white font-semibold text-sm mt-1">Live scorecard will appear automatically once the innings begins.</div>
+              </div>
+            )}
+            {matchEnded && (
+              <div className="mt-4 rounded-2xl p-4 md:p-5" style={{ background: "linear-gradient(135deg, rgba(0,230,118,0.16), rgba(16,185,129,0.10))", border: "1px solid rgba(0,230,118,0.28)" }}>
+                <div className="text-xs font-black tracking-wide" style={{ color: "#00E676" }}>✅ MATCH ENDED</div>
+                <div className="text-white font-black text-lg mt-1">{matchResultText || String(match?.status || "Result")}</div>
+                <div className="grid grid-cols-2 gap-3 mt-3">
+                  <div className="rounded-xl p-3" style={{ background: "rgba(0,0,0,0.18)", border: "1px solid rgba(255,255,255,0.08)" }}>
+                    <div className="text-white/50 text-xs">{match?.team1 || "Team A"}</div>
+                    <div className="text-white font-black text-base">{match?.team1Score || "-"}</div>
+                  </div>
+                  <div className="rounded-xl p-3" style={{ background: "rgba(0,0,0,0.18)", border: "1px solid rgba(255,255,255,0.08)" }}>
+                    <div className="text-white/50 text-xs">{match?.team2 || "Team B"}</div>
+                    <div className="text-white font-black text-base">{match?.team2Score || "-"}</div>
+                  </div>
+                </div>
+              </div>
+            )}
+            {!matchEnded && opponentYetToBat && (
+              <div className="mt-3 text-xs font-semibold text-white/45">
+                {match?.team2 || "Opponent"}: <span className="text-white/75">Yet to bat</span>
+              </div>
+            )}
+            {!matchEnded && chaseLine && (
+              <div className="mt-2 text-xs font-semibold" style={{ color: "#ffc86b" }}>
+                {chaseLine}
+              </div>
+            )}
             {match?.sourceUrl && (
               <a
                 href={match.sourceUrl}
@@ -374,26 +428,43 @@ export function MatchDetails() {
                       Live Window
                     </h3>
                     <span className="text-xs px-2 py-1 rounded-lg" style={{ background: "rgba(124,231,255,0.1)", color: "#7ce8ff", border: "1px solid rgba(124,231,255,0.25)" }}>
-                      Auto refresh 2s
+                      Auto refresh 3s
                     </span>
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
-                    <div className="rounded-xl p-3" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)" }}>
-                      <p className="text-white/40 text-[11px] uppercase mb-1">Striker</p>
-                      <p className="text-white text-sm font-bold truncate">{striker?.name || "-"}</p>
-                      <p className="text-[#7ce8ff] text-lg font-black">{striker ? `${striker.runs}` : "-"}<span className="text-xs text-white/35"> ({striker?.balls ?? "-"})</span></p>
-                    </div>
-                    <div className="rounded-xl p-3" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)" }}>
-                      <p className="text-white/40 text-[11px] uppercase mb-1">Non Striker</p>
-                      <p className="text-white text-sm font-bold truncate">{nonStriker?.name || "-"}</p>
-                      <p className="text-[#7ce8ff] text-lg font-black">{nonStriker ? `${nonStriker.runs}` : "-"}<span className="text-xs text-white/35"> ({nonStriker?.balls ?? "-"})</span></p>
-                    </div>
-                    <div className="rounded-xl p-3" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)" }}>
-                      <p className="text-white/40 text-[11px] uppercase mb-1">Current Bowler</p>
-                      <p className="text-white text-sm font-bold truncate">{currentBowler?.name || "-"}</p>
-                      <p className="text-[#ffbf73] text-lg font-black">{currentBowler?.figures || "-"}<span className="text-xs text-white/35"> ({currentBowler?.overs || "-"})</span></p>
-                    </div>
+                    {loading ? (
+                      <>
+                        {[1, 2, 3].map((i) => (
+                          <div key={i} className="rounded-xl p-3 animate-pulse" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)" }}>
+                            <div className="h-3 bg-white/10 rounded w-16 mb-2"></div>
+                            <div className="h-4 bg-white/10 rounded w-24 mb-2"></div>
+                            <div className="h-6 bg-white/10 rounded w-20"></div>
+                          </div>
+                        ))}
+                      </>
+                    ) : (
+                      <>
+                        <div className="rounded-xl p-3" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)" }}>
+                          <p className="text-white/40 text-[11px] uppercase mb-1">Striker</p>
+                          <p className="text-white text-sm font-bold truncate">{striker?.name || "-"}</p>
+                          <p className="text-[#7ce8ff] text-lg font-black">{striker ? `${striker.runs}` : "-"}<span className="text-xs text-white/35"> ({striker?.balls ?? "-"})</span></p>
+                          <p className="text-white/40 text-[10px] mt-1">SR: {strikerSR}</p>
+                        </div>
+                        <div className="rounded-xl p-3" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)" }}>
+                          <p className="text-white/40 text-[11px] uppercase mb-1">Non Striker</p>
+                          <p className="text-white text-sm font-bold truncate">{nonStriker?.name || "-"}</p>
+                          <p className="text-[#7ce8ff] text-lg font-black">{nonStriker ? `${nonStriker.runs}` : "-"}<span className="text-xs text-white/35"> ({nonStriker?.balls ?? "-"})</span></p>
+                          <p className="text-white/40 text-[10px] mt-1">SR: {nonStrikerSR}</p>
+                        </div>
+                        <div className="rounded-xl p-3" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)" }}>
+                          <p className="text-white/40 text-[11px] uppercase mb-1">Current Bowler</p>
+                          <p className="text-white text-sm font-bold truncate">{currentBowler?.name || "-"}</p>
+                          <p className="text-[#ffbf73] text-lg font-black">{currentBowler?.figures || "-"}</p>
+                          <p className="text-white/40 text-[10px] mt-1">Overs: {currentBowler?.overs || "-"}</p>
+                        </div>
+                      </>
+                    )}
                   </div>
 
                   <div className="rounded-xl p-3 mb-4" style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)" }}>

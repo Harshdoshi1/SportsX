@@ -224,6 +224,14 @@ export const cricketApi = {
       { bypassCache: fresh, signal },
     ),
 
+  getMatchDetailsByUrl: (url: string, fresh = false, signal?: AbortSignal, params?: { tournamentId?: string; series?: string }) => {
+    const qUrl = encodeURIComponent(url);
+    const tournamentId = params?.tournamentId ? `&tournamentId=${encodeURIComponent(params.tournamentId)}` : "";
+    const series = params?.series ? `&series=${encodeURIComponent(params.series)}` : "";
+    const path = `/match/by-url?url=${qUrl}${tournamentId}${series}`;
+    return request(fresh ? withFreshQuery(path) : path, { bypassCache: fresh, signal });
+  },
+
   getTeams: (params?: { page?: number; limit?: number; q?: string }) => {
     const page = params?.page ?? 1;
     const limit = params?.limit ?? 20;

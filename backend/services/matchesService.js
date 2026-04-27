@@ -232,4 +232,51 @@ export const matchesService = {
       },
     };
   },
+
+  async getMatchDetailsByUrl(sourceUrl, options = {}) {
+    const url = String(sourceUrl || "").trim();
+    if (!url) {
+      return {
+        data: { match: null, scoreboard: { innings: [], events: [], commentary: [], batters: [], bowlers: [], liveStats: {} } },
+        meta: { provider: "crex-live-scraper", cacheHit: true, fetchedAt: new Date().toISOString(), stale: false },
+      };
+    }
+
+    const forceFresh = Boolean(options?.forceFresh);
+    const tournamentId = String(options?.tournamentId || "admin").toLowerCase();
+    const series = String(options?.series || "Admin Live Feed");
+
+    const crexLiveMatch = await crexLiveMatchService.getLiveMatchByUrl(url, { forceFresh, tournamentId, series });
+    if (!crexLiveMatch) {
+      return {
+        data: { match: null, scoreboard: { innings: [], events: [], commentary: [], batters: [], bowlers: [], liveStats: {} } },
+        meta: { provider: "crex-live-scraper", cacheHit: true, fetchedAt: new Date().toISOString(), stale: false },
+      };
+    }
+
+    const normalizedMatch = normalizeCrexLiveMatch(crexLiveMatch);
+    return {
+      data: {
+        match: {
+          ...normalizedMatch,
+          sourceUrl: url,
+          raw: normalizedMatch?.raw || crexLiveMatch,
+        },
+        scoreboard: {
+          innings: crexLiveMatch?.scoreboard?.innings || [],
+          events: crexLiveMatch?.scoreboard?.events || crexLiveMatch?.scoreboard?.commentary || [],
+          commentary: crexLiveMatch?.scoreboard?.commentary || [],
+          batters: crexLiveMatch?.scoreboard?.batters || [],
+          bowlers: crexLiveMatch?.scoreboard?.bowlers || [],
+          liveStats: crexLiveMatch?.scoreboard?.liveStats || {},
+        },
+      },
+      meta: {
+        provider: "crex-live-scraper",
+        cacheHit: Boolean(crexLiveMatch?._meta?.cacheHit),
+        fetchedAt: new Date().toISOString(),
+        stale: Boolean(crexLiveMatch?._meta?.stale),
+      },
+    };
+  },
 };

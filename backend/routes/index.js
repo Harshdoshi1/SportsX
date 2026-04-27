@@ -6,6 +6,7 @@ import playerRoutes from "./playerRoutes.js";
 import searchRoutes from "./searchRoutes.js";
 import seriesRoutes from "./seriesRoutes.js";
 import teamsRoutes from "./teamsRoutes.js";
+import adminRoutes from "./adminRoutes.js";
 import { teamsController } from "../controllers/teamsController.js";
 import { supabaseIplSyncService } from "../services/supabaseIplSyncService.js";
 
@@ -49,5 +50,6 @@ router.use("/series", seriesRoutes);
 router.use("/search", searchRoutes);
 router.use("/players", playerRoutes);
 router.use("/ipl", iplRoutes);
+router.use("/admin", adminRoutes);
 
 export default router;

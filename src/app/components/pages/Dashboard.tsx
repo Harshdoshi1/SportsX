@@ -10,6 +10,7 @@ import { cricketApi } from "../../services/cricketApi";
 import { getTeamLogoProps, isLiveStatus, isUpcomingStatus, safeArray, deriveTeamShort } from "../../services/cricketUi";
 import { IPL_STANDINGS } from "../../data/ipl2026";
 import { getIplTeamByShort, type IplTeamId } from "../../data/iplTeams";
+import { useMatchStore, type AdminUpcomingMatch } from "../../../contexts/MatchContext";
 
 const CRICKET_ICON_IMAGE =
   "https://img.freepik.com/free-vector/red-ball-hitting-wicket-stumps-with-bat-black-abstract-splash-background-cricket-fever-concept_1302-5492.jpg?semt=ais_hybrid&w=740&q=80";
@@ -388,8 +389,9 @@ function PremiumMatchCard({ match, index }: { match: UiMatch; index: number }) {
   );
 }
 
-export function Dashboard() {
+export function Dashboard({ adminMode = false }: { adminMode?: boolean }) {
   const navigate = useNavigate();
+  const { adminMatches, liveSnapshotsByMatchId, connectionLostByMatchId, setUpcomingLiveUrl } = useMatchStore();
   const [liveMatches, setLiveMatches] = useState<UiMatch[]>([]);
   const [iccLiveMatches, setIccLiveMatches] = useState<UiMatch[]>([]);
   const [upcomingMatches, setUpcomingMatches] = useState<UiMatch[]>([]);
@@ -515,6 +517,21 @@ export function Dashboard() {
 
   const liveMatchCards = filteredLivePool.slice(0, 3);
   const upcomingMatchCards = upcomingMatches.slice(0, 6);
+
+  const adminUpcoming = useMemo(() => adminMatches.filter((m) => m.type === "upcoming"), [adminMatches]);
+  const adminLive = useMemo(() => adminMatches.filter((m) => m.type === "live"), [adminMatches]);
+  const adminEnded = useMemo(() => adminMatches.filter((m) => m.type === "ended"), [adminMatches]);
+
+  const parseTeamsFromTitle = (title: string) => {
+    const raw = String(title || "");
+    const hit = raw.match(/(.+?)\s+vs\s+(.+)/i);
+    if (hit?.[1] && hit?.[2]) {
+      return { a: hit[1].trim(), b: hit[2].trim() };
+    }
+    const parts = raw.split(/[-–|]/).map((p) => p.trim()).filter(Boolean);
+    if (parts[0] && parts[1]) return { a: parts[0], b: parts[1] };
+    return { a: "Team A", b: "Team B" };
+  };
 
   return (
     <motion.div
@@ -687,11 +704,128 @@ export function Dashboard() {
 
           {/* Live Match Cards */}
           <div className="space-y-4 mb-8">
-            {liveMatchCards.length === 0 && (
+            {adminLive.length === 0 && adminEnded.length === 0 && liveMatchCards.length === 0 && (
               <GlassCard className="p-5">
                 <p className="text-white/50 text-sm">No live matches available right now from the API.</p>
               </GlassCard>
             )}
+
+            {adminEnded.map((m, i) => {
+              const teams = parseTeamsFromTitle(m.matchTitle);
+              const teamA = getTeamLogoProps(teams.a);
+              const teamB = getTeamLogoProps(teams.b);
+              const snapshot = liveSnapshotsByMatchId[m.id];
+              const match = snapshot?.match || {};
+              return (
+                <motion.div
+                  key={m.id}
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: 0.15 + i * 0.05 }}
+                >
+                  <GlassCard className="p-5 cursor-pointer" hover onClick={() => navigate(`/match/${m.id}`)}>
+                    <div className="flex items-center justify-between mb-4">
+                      <span className="text-xs font-semibold text-white/40">{m.sectionLabel}</span>
+                      <div className="flex items-center gap-3">
+                        <span className="text-xs font-bold px-2 py-1 rounded-lg" style={{ background: "rgba(0,230,118,0.16)", border: "1px solid rgba(0,230,118,0.3)", color: "#00E676" }}>
+                          ✅ ENDED
+                        </span>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); navigate(`/lounge/${m.id}`); }}
+                          className="px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5"
+                          style={{ background: "linear-gradient(135deg, rgba(124,77,255,0.3), rgba(255,77,141,0.3))", border: "1px solid rgba(124,77,255,0.4)", color: "#e0d0ff" }}
+                        >
+                          <Users size={12} />
+                          Lounge
+                        </button>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-4">
+                      <div className="flex-1">
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center gap-2">
+                            <TeamLogo teamId={teamA.teamId} short={teamA.short} size={28} />
+                            <span className="text-white font-bold">{teams.a}</span>
+                          </div>
+                          <span className="text-white font-black text-sm md:text-base">{String(match?.score || m.finalTeam1Score || "-")}</span>
+                        </div>
+                        <div className="h-px my-2" style={{ background: "rgba(255,255,255,0.06)" }} />
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <TeamLogo teamId={teamB.teamId} short={teamB.short} size={28} />
+                            <span className="text-white font-bold">{teams.b}</span>
+                          </div>
+                          <span className="text-[#00E676] text-xs font-bold truncate">{m.finalResultText}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </GlassCard>
+                </motion.div>
+              );
+            })}
+
+            {adminLive.map((m, i) => {
+              const teams = parseTeamsFromTitle(m.matchTitle);
+              const teamA = getTeamLogoProps(teams.a);
+              const teamB = getTeamLogoProps(teams.b);
+              const snapshot = liveSnapshotsByMatchId[m.id];
+              const match = snapshot?.match || {};
+              const lost = Boolean(connectionLostByMatchId[m.id]);
+              const statusText = String(match?.status || (lost ? "Connection Lost" : "LIVE")).toUpperCase();
+              const scoreText = String(match?.score || "Connecting...");
+              return (
+                <motion.div
+                  key={m.id}
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: 0.15 + i * 0.05 }}
+                >
+                  <GlassCard className="p-5 cursor-pointer" hover onClick={() => navigate(`/match/${m.id}`)}>
+                    <div className="flex items-center justify-between mb-4">
+                      <span className="text-xs font-semibold text-white/40">{m.sectionLabel}</span>
+                      <div className="flex items-center gap-3">
+                        <span className="text-xs font-bold px-2 py-1 rounded-lg flex items-center gap-1.5" style={{ background: "rgba(255,77,141,0.15)", border: "1px solid rgba(255,77,141,0.3)", color: "#FF4D8D" }}>
+                          <motion.div animate={{ scale: [1, 1.4, 1] }} transition={{ duration: 1.2, repeat: Infinity }} className="w-1.5 h-1.5 rounded-full bg-[#FF4D8D]" />
+                          {statusText}
+                        </span>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); navigate(`/lounge/${m.id}`); }}
+                          className="px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5"
+                          style={{ background: "linear-gradient(135deg, rgba(124,77,255,0.3), rgba(255,77,141,0.3))", border: "1px solid rgba(124,77,255,0.4)", color: "#e0d0ff" }}
+                        >
+                          <Users size={12} />
+                          Lounge
+                        </button>
+                      </div>
+                    </div>
+                    {lost && (
+                      <div className="mb-3 text-xs font-semibold px-3 py-2 rounded-lg" style={{ background: "rgba(255,145,0,0.12)", border: "1px solid rgba(255,145,0,0.25)", color: "#FF9100" }}>
+                        Connection Lost — retrying…
+                      </div>
+                    )}
+                    <div className="flex items-center gap-4">
+                      <div className="flex-1">
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center gap-2">
+                            <TeamLogo teamId={teamA.teamId} short={teamA.short} size={28} />
+                            <span className="text-white font-bold">{teams.a}</span>
+                          </div>
+                          <span className="text-white font-black text-sm md:text-base">{scoreText}</span>
+                        </div>
+                        <div className="h-px my-2" style={{ background: "rgba(255,255,255,0.06)" }} />
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <TeamLogo teamId={teamB.teamId} short={teamB.short} size={28} />
+                            <span className="text-white font-bold">{teams.b}</span>
+                          </div>
+                          <span className="text-white/60 text-xs uppercase">{String(match?.status || "LIVE")}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </GlassCard>
+                </motion.div>
+              );
+            })}
 
             {liveMatchCards.map((match, i) => {
               const teamA = getTeamLogoProps(match.teamA);
@@ -759,11 +893,71 @@ export function Dashboard() {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-            {upcomingMatchCards.length === 0 && (
+            {adminUpcoming.length === 0 && upcomingMatchCards.length === 0 && (
               <GlassCard className="p-5 md:col-span-2">
                 <p className="text-white/50 text-sm">No upcoming fixtures returned by the API.</p>
               </GlassCard>
             )}
+            {adminUpcoming.map((m, i) => {
+              const teams = parseTeamsFromTitle(m.matchTitle);
+              const asUi: UiMatch = {
+                id: m.id,
+                league: m.sectionLabel,
+                tournamentId: "admin",
+                teamA: teams.a,
+                teamB: teams.b,
+                teamADisplay: teams.a,
+                teamBDisplay: teams.b,
+                score: "Upcoming",
+                status: "Upcoming",
+                date: new Date(m.scheduledAtIso).toLocaleDateString("en-IN", { day: "2-digit", month: "2-digit", year: "numeric" }),
+                startTime: new Date(m.scheduledAtIso).toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit", hour12: true }),
+                venue: "TBA",
+                matchNo: "",
+              };
+              return (
+                <motion.div key={m.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 + i * 0.05 }}>
+                  <GlassCard className="p-5 cursor-pointer relative" hover onClick={() => navigate(`/match/${m.id}`)}>
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="text-xs font-semibold text-white/40">{m.sectionLabel}</span>
+                      <span className="text-xs font-bold px-2 py-1 rounded-lg" style={{ background: "rgba(124,77,255,0.15)", border: "1px solid rgba(124,77,255,0.3)", color: "#a78bfa" }}>
+                        UPCOMING
+                      </span>
+                    </div>
+                    {adminMode && (
+                      <motion.button
+                        whileHover={{ scale: 1.05 }}
+                        whileTap={{ scale: 0.95 }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          const current = String((m as AdminUpcomingMatch).liveSourceUrl || m.sourceUrl || "");
+                          const next = window.prompt("Paste Live Match URL (Crex). Leave blank to cancel.", current);
+                          if (!next) return;
+                          try {
+                            // eslint-disable-next-line no-new
+                            new URL(next);
+                          } catch {
+                            return;
+                          }
+                          setUpcomingLiveUrl(m.id, next);
+                        }}
+                        className="absolute top-4 right-4 w-10 h-10 rounded-full flex items-center justify-center"
+                        style={{
+                          background: "linear-gradient(135deg, rgba(255,77,141,0.95), rgba(124,77,255,0.95))",
+                          boxShadow: "0 0 22px rgba(255,77,141,0.4), 0 0 42px rgba(124,77,255,0.25)",
+                          border: "1px solid rgba(255,255,255,0.18)",
+                        }}
+                        title="Attach Live URL"
+                      >
+                        <Plus size={18} className="text-white" />
+                      </motion.button>
+                    )}
+                    <div className="text-white font-black text-lg mb-2">{m.matchTitle}</div>
+                    <div className="text-white/50 text-sm">{asUi.date} • {asUi.startTime}</div>
+                  </GlassCard>
+                </motion.div>
+              );
+            })}
             {upcomingMatchCards.map((match, i) => (
               <PremiumMatchCard key={match.id} match={match} index={i} />
             ))}

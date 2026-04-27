@@ -844,6 +844,11 @@ let _inFlight = null;
 
 // ─── Public API ──────────────────────────────────────────────────────────────
 export const crexPlayerService = {
+  async ensureLoaded() {
+    await ensurePlayerMapLoaded();
+    return true;
+  },
+
   getPlayerList() {
     return IPL_PLAYER_CREX_MAP.slice();
   },
@@ -865,6 +870,11 @@ export const crexPlayerService = {
       }) ||
       null
     );
+  },
+
+  async findPlayerMetaAsync(playerName) {
+    await ensurePlayerMapLoaded();
+    return this.findPlayerMeta(playerName);
   },
 
   async scrapeSinglePlayer(playerInput) {

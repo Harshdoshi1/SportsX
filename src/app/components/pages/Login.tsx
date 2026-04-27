@@ -2,16 +2,39 @@ import { useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { useNavigate } from "react-router";
 import { Mail, Lock, User, Eye, EyeOff, Zap, ArrowRight } from "lucide-react";
+import { useAdmin } from "../../../contexts/AdminContext";
 
 export function Login() {
   const navigate = useNavigate();
+  const { login } = useAdmin();
   const [isLogin, setIsLogin] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  const handleSubmit = () => navigate("/dashboard");
+  const handleSubmit = async () => {
+    setError("");
+    setLoading(true);
+    
+    try {
+      // Check if admin credentials
+      const isAdminLogin = await login(email, password);
+      
+      if (isAdminLogin) {
+        navigate("/admin/dashboard");
+      } else {
+        // Regular user login (no validation for now)
+        navigate("/dashboard");
+      }
+    } catch (err) {
+      setError("Login failed. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <motion.div
@@ -166,19 +189,31 @@ export function Login() {
                 </div>
               )}
 
+              {error && (
+                <motion.div
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="text-red-400 text-sm text-center p-3 rounded-lg"
+                  style={{ background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.2)" }}
+                >
+                  {error}
+                </motion.div>
+              )}
+
               {/* Submit Button */}
               <motion.button
                 onClick={handleSubmit}
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
-                className="w-full py-3.5 rounded-xl font-bold text-white flex items-center justify-center gap-2 mt-2"
+                disabled={loading}
+                whileHover={{ scale: loading ? 1 : 1.02 }}
+                whileTap={{ scale: loading ? 1 : 0.98 }}
+                className="w-full py-3.5 rounded-xl font-bold text-white flex items-center justify-center gap-2 mt-2 disabled:opacity-50 disabled:cursor-not-allowed"
                 style={{
                   background: "linear-gradient(135deg, #3BD4E7, #7C4DFF)",
                   boxShadow: "0 0 30px rgba(124,77,255,0.4), 0 4px 20px rgba(59,212,231,0.3)",
                 }}
               >
-                {isLogin ? "Sign In" : "Create Account"}
-                <ArrowRight size={18} />
+                {loading ? "Please wait..." : isLogin ? "Sign In" : "Create Account"}
+                {!loading && <ArrowRight size={18} />}
               </motion.button>
             </motion.div>
           </AnimatePresence>

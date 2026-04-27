@@ -166,10 +166,19 @@ const parseStructuredLiveData = (pageText) => {
   };
 };
 
-const extractCrexCode = (url) =>
-  String(url || "")
-    .match(/match-updates-([A-Za-z0-9]+)/i)?.[1]
-    ?.toLowerCase() || "live";
+const extractCrexCode = (url) => {
+  const raw = String(url || "");
+  const code = raw.match(/match-updates-([A-Za-z0-9]+)/i)?.[1]?.toLowerCase();
+  if (code) return code;
+
+  const fallback = raw
+    .replace(/^https?:\/\//i, "")
+    .replace(/[^a-z0-9]+/gi, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(-32)
+    .toLowerCase();
+  return fallback || "live";
+};
 
 const buildMatchId = (source) => `${source.tournamentId}-${extractCrexCode(source.sourceUrl)}`;
 
@@ -204,6 +213,44 @@ const parseTeamsFromHeading = (line) => {
 };
 
 const normalizeScoreToken = (value) => String(value || "").replace(/\s+/g, "").trim();
+
+const fixScoreAndOvers = (scoreValue, oversValue) => {
+  const score = normalizeScoreToken(scoreValue);
+  const overs = String(oversValue || "").trim() || null;
+  const hit = score.match(/^(\d{1,3})\s*[-/]\s*(\d{1,3})$/);
+  if (!hit) {
+    return { score: score || null, overs };
+  }
+
+  const runs = Number(hit[1]);
+  const wktsRaw = String(hit[2] || "");
+  const wktsNum = Number(wktsRaw);
+  if (!Number.isFinite(runs) || !Number.isFinite(wktsNum)) {
+    return { score: score || null, overs };
+  }
+
+  // Guard against a known Crex scrape glitch where the first digit of overs
+  // gets appended to wickets (e.g. "91-21" with overs "6.0" should be "91-2" overs "16.0").
+  if (wktsNum > 10 && wktsRaw.length === 2 && overs && /^\d{1,2}\.\d$/.test(overs)) {
+    const wickets = Number(wktsRaw[0]);
+    const stolen = wktsRaw[1];
+    if (wickets >= 0 && wickets <= 10) {
+      return {
+        score: `${runs}-${wickets}`,
+        overs: `${stolen}${overs}`,
+      };
+    }
+  }
+
+  if (wktsNum > 10 && wktsNum < 100) {
+    const clamped = Math.floor(wktsNum / 10);
+    if (clamped >= 0 && clamped <= 10) {
+      return { score: `${runs}-${clamped}`, overs };
+    }
+  }
+
+  return { score: `${runs}-${wktsNum}`, overs };
+};
 
 const findScoreForTeam = (lines, teamToken) => {
   const token = String(teamToken || "").toLowerCase();
@@ -550,10 +597,16 @@ const scrapeCrexMatch = async (source) => {
       team2Score: findScoreForTeam(lines, teams.team2),
     };
     const scoreLine = parsePrimaryScoreLine(lines, teams.team1, teams.team2);
-    const team1Score = structured?.team1Score || scoreLine.team1Score || scoreFromTeams.team1Score?.score || null;
-    const team2Score = structured?.team2Score || scoreLine.team2Score || scoreFromTeams.team2Score?.score || null;
-    const team1OversFallback = scoreLine.team1Overs || scoreFromTeams.team1Score?.overs || null;
-    const team2OversFallback = scoreLine.team2Overs || scoreFromTeams.team2Score?.overs || null;
+    const team1ScoreRaw = structured?.team1Score || scoreLine.team1Score || scoreFromTeams.team1Score?.score || null;
+    const team2ScoreRaw = structured?.team2Score || scoreLine.team2Score || scoreFromTeams.team2Score?.score || null;
+    const team1OversRaw = structured?.team1Overs || scoreLine.team1Overs || scoreFromTeams.team1Score?.overs || null;
+    const team2OversRaw = structured?.team2Overs || scoreLine.team2Overs || scoreFromTeams.team2Score?.overs || null;
+    const team1Fixed = fixScoreAndOvers(team1ScoreRaw, team1OversRaw);
+    const team2Fixed = fixScoreAndOvers(team2ScoreRaw, team2OversRaw);
+    const team1Score = team1Fixed.score;
+    const team2Score = team2Fixed.score;
+    const team1OversFallback = team1Fixed.overs;
+    const team2OversFallback = team2Fixed.overs;
     const genericScore =
       lines
         .map((line) => line.match(/\b([A-Z]{2,}(?:-[A-Z])?)\s+(\d{1,3}\s*[-/]\s*\d{1,2}(?:\.?\d+)?)/i))
@@ -615,8 +668,8 @@ const scrapeCrexMatch = async (source) => {
       team2Name: structured?.team2 || teams.team2,
       team1Score,
       team2Score,
-      team1Overs: structured?.team1Overs || team1OversFallback,
-      team2Overs: structured?.team2Overs || team2OversFallback,
+      team1Overs: team1OversFallback,
+      team2Overs: team2OversFallback,
       score:
         team1Score || team2Score
           ? `${team1Score || "-"} · ${team2Score || "-"}`
@@ -748,6 +801,22 @@ export const crexLiveMatchService = {
     if (!source) {
       return null;
     }
+
+    return readMatchFromSource(source, options);
+  },
+
+  async getLiveMatchByUrl(sourceUrl, options = {}) {
+    const url = String(sourceUrl || "").trim();
+    if (!url) {
+      return null;
+    }
+
+    const source = {
+      sourceId: `admin-${extractCrexCode(url)}`,
+      tournamentId: String(options?.tournamentId || "admin").toLowerCase(),
+      series: String(options?.series || "Admin Live Feed"),
+      sourceUrl: url,
+    };
 
     return readMatchFromSource(source, options);
   },

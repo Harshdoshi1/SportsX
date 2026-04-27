@@ -1,8 +1,9 @@
-import { createBrowserRouter } from "react-router";
+import { createBrowserRouter, Navigate } from "react-router";
 import { Root } from "./components/Root";
 import { Splash } from "./components/pages/Splash";
 import { Login } from "./components/pages/Login";
 import { Dashboard } from "./components/pages/Dashboard";
+import { AdminDashboard } from "./components/pages/AdminDashboard";
 import { SportPage } from "./components/pages/SportPage";
 import { League } from "./components/pages/League";
 import { MatchDetails } from "./components/pages/MatchDetails";
@@ -13,6 +14,23 @@ import { TeamAnalysis } from "./components/pages/TeamAnalysis";
 import { PlayerAnalysis } from "./components/pages/PlayerAnalysis";
 import { MatchLounge } from "./components/pages/MatchLounge";
 import { LoungeRoom } from "./components/pages/LoungeRoom";
+import { useAdmin } from "../contexts/AdminContext";
+
+function AdminOnly({ children }: { children: React.ReactNode }) {
+  const { isAdmin } = useAdmin();
+  if (!isAdmin) {
+    return <Navigate to="/dashboard" replace />;
+  }
+  return <>{children}</>;
+}
+
+function AdminDashboardRoute() {
+  return (
+    <AdminOnly>
+      <AdminDashboard />
+    </AdminOnly>
+  );
+}
 
 export const router = createBrowserRouter([
   {
@@ -22,6 +40,7 @@ export const router = createBrowserRouter([
       { index: true, Component: Splash },
       { path: "login", Component: Login },
       { path: "dashboard", Component: Dashboard },
+      { path: "admin/dashboard", Component: AdminDashboardRoute },
       // Full navigation flow: Sport → League → Team → Player
       { path: "sport/:sportId", Component: SportPage },
       { path: "sport/:sportId/league/:leagueId", Component: League },

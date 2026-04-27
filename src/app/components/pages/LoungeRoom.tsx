@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { useNavigate, useParams } from "react-router";
 import { Navbar } from "../ui/Navbar";
@@ -14,6 +14,8 @@ import { getTeamLogoProps } from "../../services/cricketUi";
 import { IPL_PLAYER_IMAGES } from "../../data/ipl2026";
 import { ImageWithFallback } from "../figma/ImageWithFallback";
 import { cricketApi } from "../../services/cricketApi";
+import { useMatchStore } from "../../../contexts/MatchContext";
+import { resolvePlayerImageUrl } from "../../../utils/playerImageResolver";
 
 /* ─── Types ─── */
 interface Message {
@@ -192,6 +194,7 @@ function SpeakingRing({ active, children }: { active: boolean; children: React.R
 export function LoungeRoom() {
   const { matchId, roomId } = useParams<{ matchId: string; roomId: string }>();
   const navigate = useNavigate();
+  const { adminMatches } = useMatchStore();
 
   const parsedTeams = parseMatchId(matchId || "");
   const [resolvedTeams, setResolvedTeams] = useState(parsedTeams);
@@ -213,6 +216,7 @@ export function LoungeRoom() {
   const inFlightRef = useRef(false);
   const abortRef = useRef<AbortController | null>(null);
   const endedRef = useRef(false);
+  const playerImageCacheRef = useRef<Record<string, string | null>>({});
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const speakingCount = voiceUsers.filter((u) => u.isSpeaking).length;
@@ -238,7 +242,10 @@ export function LoungeRoom() {
 
       try {
         setScorecardError(null);
-        const detail: any = await cricketApi.getMatchDetails(matchId, true, controller.signal);
+        const admin = adminMatches.find((m) => m.id === matchId);
+        const detail: any = admin
+          ? await cricketApi.getMatchDetailsByUrl(admin.sourceUrl, true, controller.signal, { tournamentId: "admin", series: admin.sectionLabel })
+          : await cricketApi.getMatchDetails(matchId, true, controller.signal);
         if (!active) {
           return;
         }
@@ -250,7 +257,8 @@ export function LoungeRoom() {
         setLivePayload(detail || null);
 
         const status = String(detail?.match?.status || "").toLowerCase();
-        endedRef.current = Boolean(detail?.match?.matchEnded) || status === "completed";
+        const result = String(detail?.match?.result || "").toLowerCase();
+        endedRef.current = Boolean(detail?.match?.matchEnded) || status === "completed" || /(won|result|match over|innings complete)/.test(status) || /(won|result)/.test(result);
       } catch (fetchError: any) {
         if (fetchError?.name === "AbortError") {
           return;
@@ -273,14 +281,14 @@ export function LoungeRoom() {
       if (!endedRef.current) {
         loadLiveScore();
       }
-    }, 2000);
+    }, 1000);
 
     return () => {
       active = false;
       abortRef.current?.abort();
       clearInterval(interval);
     };
-  }, [matchId]);
+  }, [matchId, adminMatches]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -329,7 +337,11 @@ export function LoungeRoom() {
   const liveMatch = livePayload?.match || {};
   const liveScoreboard = livePayload?.scoreboard || {};
   const liveStats = liveScoreboard?.liveStats || {};
+  const matchStatusLower = String(liveMatch?.status || "").toLowerCase();
+  const matchResultText = String(liveMatch?.result || "").trim();
+  const matchEnded = Boolean(liveMatch?.matchEnded) || matchStatusLower === "completed" || /(won|result|match over|innings complete)/.test(matchStatusLower) || /(won|result)/i.test(matchResultText);
   const innings = extractInnings(liveScoreboard);
+  const equationTextRaw = String(liveStats?.equation || "").trim();
   const batters = extractBatters(liveScoreboard);
   const bowlers = extractBowlers(liveScoreboard);
 
@@ -354,18 +366,43 @@ export function LoungeRoom() {
     name: String(bat?.name || "Not available"),
     runs: Number(bat?.runs || 0),
     balls: Number(bat?.balls || 0),
-    image: getPlayerImage(String(bat?.name || "")),
+    image: playerImageCacheRef.current[String(bat?.name || "").trim()] ?? getPlayerImage(String(bat?.name || "")),
   }));
 
   const leadBowler = bowlers[0];
-  const figureTokens = String(leadBowler?.figures || "0-0").split("-");
   const bowlerData = {
     name: String(leadBowler?.name || "Not available"),
     overs: String(leadBowler?.overs || "-"),
-    runs: Number(figureTokens[1] || 0),
-    wickets: Number(figureTokens[0] || 0),
-    image: getPlayerImage(String(leadBowler?.name || "")),
+    wickets: String(leadBowler?.figures || "-").split("-")[0] || "0",
+    runs: String(leadBowler?.figures || "-").split("-")[1] || "0",
+    image: playerImageCacheRef.current[String(leadBowler?.name || "").trim()] ?? getPlayerImage(String(leadBowler?.name || "")),
   };
+
+  useEffect(() => {
+    const names = Array.from(
+      new Set(
+        [...batters.map((b) => String(b?.name || "").trim()), ...bowlers.map((b) => String(b?.name || "").trim())]
+          .filter(Boolean)
+          .slice(0, 12),
+      ),
+    );
+    if (names.length === 0) return;
+    let active = true;
+    const controller = new AbortController();
+    (async () => {
+      const pairs = await Promise.all(
+        names.map(async (n) => [n, await resolvePlayerImageUrl(n, controller.signal)] as const),
+      );
+      if (!active) return;
+      const next = { ...playerImageCacheRef.current };
+      for (const [n, url] of pairs) next[n] = url;
+      playerImageCacheRef.current = next;
+    })();
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, [batters, bowlers]);
 
   const team1Runs = parseRunsFromScore(team1ScoreText);
   const team2Runs = parseRunsFromScore(team2ScoreText);
@@ -432,6 +469,19 @@ export function LoungeRoom() {
             </div>
           </div>
 
+          {!matchEnded && equationTextRaw && (
+            <div className="rounded-xl p-3 mb-4" style={{ background: "rgba(255,200,107,0.08)", border: "1px solid rgba(255,200,107,0.18)", color: "#ffc86b" }}>
+              <div className="text-xs font-semibold">{equationTextRaw}</div>
+            </div>
+          )}
+
+          {matchEnded && (
+            <div className="rounded-xl p-3 mb-4" style={{ background: "linear-gradient(135deg, rgba(0,230,118,0.16), rgba(16,185,129,0.10))", border: "1px solid rgba(0,230,118,0.28)" }}>
+              <div className="text-xs font-black tracking-wide" style={{ color: "#00E676" }}>🏆 FINAL RESULT</div>
+              <div className="text-white font-black text-sm mt-1">{matchResultText || String(liveMatch?.status || "Match ended")}</div>
+            </div>
+          )}
+
           {scorecardError && (
             <div className="mb-3 text-xs text-[#ff8ca8]">{scorecardError}</div>
           )}
@@ -441,7 +491,17 @@ export function LoungeRoom() {
             {/* Batsmen */}
             <div className="flex items-center gap-4">
               {scorecardLoading && (
-                <div className="text-white/40 text-xs">Updating live scorecard...</div>
+                <div className="flex items-center gap-4">
+                  {[1, 2].map((i) => (
+                    <div key={i} className="flex items-center gap-2 animate-pulse">
+                      <div className="w-10 h-10 rounded-full bg-white/10"></div>
+                      <div>
+                        <div className="h-3 bg-white/10 rounded w-16 mb-1"></div>
+                        <div className="h-3 bg-white/10 rounded w-12"></div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               )}
               {!scorecardLoading && batsmanData.length === 0 && (
                 <div className="text-white/40 text-xs">Live batting data not available</div>
@@ -466,17 +526,29 @@ export function LoungeRoom() {
 
             {/* Bowler */}
             <div className="flex items-center gap-2">
-              <div className="w-10 h-10 rounded-full overflow-hidden" style={{ border: "2px solid rgba(255,77,141,0.3)", background: "rgba(255,255,255,0.06)" }}>
-                {bowlerData.image ? (
-                  <ImageWithFallback src={bowlerData.image} alt={bowlerData.name} fallbackMode="person" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                ) : (
-                  <div className="w-full h-full flex items-center justify-center text-white/40 text-xs font-bold">?</div>
-                )}
-              </div>
-              <div>
-                <p className="text-white text-xs font-semibold">{bowlerData.name.split(" ").pop()}</p>
-                <p className="text-[#FF4D8D] text-xs font-mono font-bold">{bowlerData.wickets}-{bowlerData.runs} <span className="text-white/30">({bowlerData.overs})</span></p>
-              </div>
+              {scorecardLoading ? (
+                <div className="flex items-center gap-2 animate-pulse">
+                  <div className="w-10 h-10 rounded-full bg-white/10"></div>
+                  <div>
+                    <div className="h-3 bg-white/10 rounded w-16 mb-1"></div>
+                    <div className="h-3 bg-white/10 rounded w-12"></div>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div className="w-10 h-10 rounded-full overflow-hidden" style={{ border: "2px solid rgba(255,77,141,0.3)", background: "rgba(255,255,255,0.06)" }}>
+                    {bowlerData.image ? (
+                      <ImageWithFallback src={bowlerData.image} alt={bowlerData.name} fallbackMode="person" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-white/40 text-xs font-bold">?</div>
+                    )}
+                  </div>
+                  <div>
+                    <p className="text-white text-xs font-semibold">{bowlerData.name.split(" ").pop()}</p>
+                    <p className="text-[#FF4D8D] text-xs font-mono font-bold">{bowlerData.wickets}-{bowlerData.runs} <span className="text-white/30">({bowlerData.overs})</span></p>
+                  </div>
+                </>
+              )}
             </div>
           </div>
 

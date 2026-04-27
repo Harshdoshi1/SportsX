@@ -1,7 +1,10 @@
 import { Outlet } from "react-router";
 import { motion } from "motion/react";
+import { useAdminMatchPolling } from "../../contexts/MatchContext";
 
 export function Root() {
+  useAdminMatchPolling();
+
   return (
     <div className="min-h-screen relative overflow-hidden" style={{ background: "linear-gradient(145deg, #000104 0%, #01040c 34%, #01030a 68%, #000208 100%)" }}>
       {/* Animated background blobs */}

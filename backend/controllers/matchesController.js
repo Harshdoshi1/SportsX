@@ -79,4 +79,17 @@ export const matchesController = {
       next(error);
     }
   },
+
+  async getMatchDetailsByUrl(req, res, next) {
+    try {
+      const forceFresh = parseFresh(req.query);
+      const url = String(req.query?.url || "").trim();
+      const tournamentId = String(req.query?.tournamentId || "admin").toLowerCase();
+      const series = String(req.query?.series || "Admin Live Feed");
+      const result = await matchesService.getMatchDetailsByUrl(url, { forceFresh, tournamentId, series });
+      ok(res, { match: result.data.match, scoreboard: result.data.scoreboard }, result.meta);
+    } catch (error) {
+      next(error);
+    }
+  },
 };
