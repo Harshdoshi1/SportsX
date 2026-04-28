@@ -52,11 +52,11 @@ const runDistribution = [
 
 const winRateData = [
   { team: "RCB", winRate: 80, color: "#FF4D8D" },
-  { team: "MI", winRate: 70, color: "#3BD4E7" },
-  { team: "CSK", winRate: 60, color: "#FF9100" },
-  { team: "KKR", winRate: 60, color: "#7C4DFF" },
-  { team: "DC", winRate: 50, color: "#00E676" },
-  { team: "SRH", winRate: 50, color: "#FF9100" },
+  { team: "MI", winRate: 70, color: "#1364fa" },
+  { team: "CSK", winRate: 60, color: "#ffe600" },
+  { team: "KKR", winRate: 60, color: "#5218f3" },
+  { team: "DC", winRate: 50, color: "#009cf7" },
+  { team: "SRH", winRate: 50, color: "#ff3c00" },
 ];
 
 const weeklyEngagement = [
@@ -172,7 +172,7 @@ export function Analytics() {
                       src={selectedPlayerImage}
                       alt={selectedPlayerName}
                       className="w-14 h-14 rounded-2xl object-cover"
-                      style={{ border: "1px solid rgba(255,255,255,0.2)" }}
+                      style={{ border: "1px solid rgba(255, 255, 255, 0.16)" }}
                     />
                   ) : (
                     <div
