@@ -184,13 +184,13 @@ const withFreshQuery = (basePath: string) => {
 
 export const cricketApi = {
   getIplPoints: (fresh = false) =>
-    request(fresh ? withFreshQuery(`/ipl/points`) : `/ipl/points`, { bypassCache: fresh }),
+    request(fresh ? withFreshQuery(`/ipl/points`) : `/ipl/points/quick`, { bypassCache: fresh }),
 
   getIplScrapedMatches: (fresh = false) =>
-    request(fresh ? withFreshQuery(`/ipl/matches`) : `/ipl/matches`, { bypassCache: fresh }),
+    request(fresh ? withFreshQuery(`/ipl/matches`) : `/ipl/matches/quick`, { bypassCache: fresh }),
 
   getIplStats: (fresh = false) =>
-    request(fresh ? withFreshQuery(`/ipl/stats`) : `/ipl/stats`, { bypassCache: fresh }),
+    request(fresh ? withFreshQuery(`/ipl/stats`) : `/ipl/stats/quick`, { bypassCache: fresh }),
 
   getIplSquads: (fresh = false) =>
     request(fresh ? withFreshQuery(`/ipl/squads`) : `/ipl/squads`, { bypassCache: fresh }),

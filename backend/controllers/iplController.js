@@ -2,6 +2,7 @@ import { supabaseIplSyncService } from "../services/supabaseIplSyncService.js";
 import { ok } from "../utils/response.js";
 
 const IPL_ENDPOINT_TTL_MS = 90 * 1000;
+const IPL_BACKGROUND_REFRESH_THRESHOLD_MS = 70 * 1000;
 
 const endpointCache = {
   points: { data: null, meta: null, updatedAt: 0, pending: null },
@@ -9,6 +10,7 @@ const endpointCache = {
   stats: { data: null, meta: null, updatedAt: 0, pending: null },
   squads: { data: null, meta: null, updatedAt: 0, pending: null },
   news: { data: null, meta: null, updatedAt: 0, pending: null },
+  refreshing: new Set(),
 };
 
 const setNoStore = (res) => {
@@ -27,14 +29,53 @@ const shouldUseCached = (entry, forceFresh) => {
   return Date.now() - entry.updatedAt < IPL_ENDPOINT_TTL_MS;
 };
 
+const shouldRefreshInBackground = (entry) => {
+  if (entry.data === null || entry.updatedAt <= 0) {
+    return false;
+  }
+  return Date.now() - entry.updatedAt >= IPL_BACKGROUND_REFRESH_THRESHOLD_MS;
+};
+
 const resolveEndpoint = async (key, forceFresh, fetcher, metaFactory) => {
   const entry = endpointCache[key];
+  const isSlowEndpoint = key === "stats" || key === "squads" || key === "news";
 
   if (shouldUseCached(entry, forceFresh)) {
+    if (isSlowEndpoint && shouldRefreshInBackground(entry) && !endpointCache.refreshing.has(key)) {
+      endpointCache.refreshing.add(key);
+      fetcher()
+        .then((data) => {
+          entry.data = data;
+          entry.meta = { ...metaFactory(data), scrapedAt: new Date().toISOString() };
+          entry.updatedAt = Date.now();
+        })
+        .catch(() => {})
+        .finally(() => endpointCache.refreshing.delete(key));
+    }
     return {
       data: entry.data,
       meta: entry.meta,
       cached: true,
+    };
+  }
+
+  if (isSlowEndpoint && entry.data && !forceFresh) {
+    if (!endpointCache.refreshing.has(key)) {
+      endpointCache.refreshing.add(key);
+      fetcher()
+        .then((data) => {
+          entry.data = data;
+          entry.meta = { ...metaFactory(data), scrapedAt: new Date().toISOString() };
+          entry.updatedAt = Date.now();
+        })
+        .catch(() => {})
+        .finally(() => endpointCache.refreshing.delete(key));
+    }
+    return {
+      data: entry.data,
+      meta: entry.meta,
+      cached: true,
+      stale: true,
     };
   }
 
@@ -68,6 +109,82 @@ const resolveEndpoint = async (key, forceFresh, fetcher, metaFactory) => {
 };
 
 export const iplController = {
+  async getPointsQuick(req, res, next) {
+    try {
+      setNoStore(res);
+      const result = await resolveEndpoint(
+        "points",
+        false,
+        () => supabaseIplSyncService.getPoints(false),
+        (points) => ({ source: "supabase-cache", count: points.length }),
+      );
+      ok(
+        res,
+        {
+          points: result.data,
+        },
+        {
+          ...result.meta,
+          cached: result.cached,
+          mode: "quick",
+        },
+      );
+    } catch (error) {
+      next(error);
+    }
+  },
+
+  async getMatchesQuick(req, res, next) {
+    try {
+      setNoStore(res);
+      const result = await resolveEndpoint(
+        "matches",
+        false,
+        () => supabaseIplSyncService.getMatches(false),
+        (matches) => ({ source: "supabase-cache", count: matches.length }),
+      );
+      ok(
+        res,
+        {
+          matches: result.data,
+        },
+        {
+          ...result.meta,
+          cached: result.cached,
+          mode: "quick",
+        },
+      );
+    } catch (error) {
+      next(error);
+    }
+  },
+
+  async getStatsQuick(req, res, next) {
+    try {
+      setNoStore(res);
+      const result = await resolveEndpoint(
+        "stats",
+        false,
+        () => supabaseIplSyncService.getStats(false),
+        (stats) => ({ source: "supabase-cache", count: stats?.leaders?.length || 0 }),
+      );
+      ok(
+        res,
+        {
+          stats: result.data,
+        },
+        {
+          ...result.meta,
+          cached: result.cached,
+          mode: "quick",
+          stale: result.stale || false,
+        },
+      );
+    } catch (error) {
+      next(error);
+    }
+  },
+
   async getPoints(req, res, next) {
     try {
       setNoStore(res);

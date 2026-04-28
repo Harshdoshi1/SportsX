@@ -4,11 +4,17 @@ import { GlassCard } from "../ui/GlassCard";
 import { BackButton } from "../ui/BackButton";
 import { Breadcrumbs } from "../ui/Breadcrumbs";
 import { useSearchParams } from "react-router";
+import { useEffect, useState } from "react";
+import { cricketApi } from "../../services/cricketApi";
 import {
   AreaChart, Area, BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, RadarChart, Radar, PolarGrid, PolarAngleAxis,
 } from "recharts";
 import { TrendingUp, Award, Target, Activity, Zap, BarChart2, UserRound, Sparkles } from "lucide-react";
+
+const safeArray = <T,>(value: any): T[] => {
+  return Array.isArray(value) ? value : [];
+};
 
 const runProgressData = [
   { over: "1-5", rcb: 52, mi: 48, csk: 45, avg: 46 },
@@ -96,6 +102,43 @@ export function Analytics() {
   const selectedPlayerTeam = String(searchParams.get("team") || "").trim();
   const selectedPlayerRole = String(searchParams.get("role") || "").trim();
   const selectedPlayerImage = String(searchParams.get("image") || "").trim();
+  const [battingLeaders, setBattingLeaders] = useState<any[]>([]);
+  const [bowlingLeaders, setBowlingLeaders] = useState<any[]>([]);
+  const [playerScoresReal, setPlayerScoresReal] = useState(playerScores);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const loadStats = async () => {
+      try {
+        setLoading(true);
+        const statsRes = await cricketApi.getIplStats();
+        const statsData = (statsRes as any)?.stats || {};
+
+        const batting = safeArray<any>(statsData?.leaders || statsData?.battingLeaders).slice(0, 6);
+        const bowling = safeArray<any>(statsData?.bowlingLeaders).slice(0, 6);
+
+        setBattingLeaders(batting);
+        setBowlingLeaders(bowling);
+
+        if (batting.length > 0) {
+          const realPlayerScores = batting.map((p: any, i: number) => ({
+            match: `P${i + 1}`,
+            [p.player]: Number(p.runs || 0),
+          })).slice(0, 6);
+
+          if (realPlayerScores.length > 0) {
+            setPlayerScoresReal(realPlayerScores);
+          }
+        }
+      } catch (error) {
+        console.warn("Failed to load player stats", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadStats();
+  }, []);
 
   return (
     <motion.div
@@ -229,20 +272,24 @@ export function Analytics() {
               </h3>
               <p className="text-white/30 text-xs mb-5">Last 6 match scores</p>
               <ResponsiveContainer width="100%" height={260}>
-                <LineChart data={playerScores}>
+                <LineChart data={playerScoresReal.length > 0 ? playerScoresReal : playerScores}>
                   <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
                   <XAxis dataKey="match" stroke="#ffffff20" tick={{ fill: "#ffffff50", fontSize: 12 }} />
                   <YAxis stroke="#ffffff20" tick={{ fill: "#ffffff50", fontSize: 12 }} />
                   <Tooltip content={<CustomTooltip />} />
-                  <Line type="monotone" dataKey="Kohli" stroke="#FF4D8D" strokeWidth={2.5} dot={{ r: 4, fill: "#FF4D8D" }} activeDot={{ r: 7 }} />
-                  <Line type="monotone" dataKey="Gill" stroke="#3BD4E7" strokeWidth={2.5} dot={{ r: 4, fill: "#3BD4E7" }} activeDot={{ r: 7 }} />
-                  <Line type="monotone" dataKey="Maxwell" stroke="#FF9100" strokeWidth={2.5} dot={{ r: 4, fill: "#FF9100" }} activeDot={{ r: 7 }} />
+                  {battingLeaders.slice(0, 3).map((p: any, i: number) => {
+                    const colors = ["#FF4D8D", "#3BD4E7", "#FF9100"];
+                    return <Line key={p.player} type="monotone" dataKey={p.player} stroke={colors[i]} strokeWidth={2.5} dot={{ r: 4, fill: colors[i] }} activeDot={{ r: 7 }} />;
+                  })}
                 </LineChart>
               </ResponsiveContainer>
               <div className="flex gap-4 mt-2">
-                {[["Kohli", "#FF4D8D"], ["Gill", "#3BD4E7"], ["Maxwell", "#FF9100"]].map(([p, c]) => (
-                  <div key={p} className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-full" style={{ background: c }} /><span className="text-white/40 text-xs">{p}</span></div>
-                ))}
+                {battingLeaders.slice(0, 3).map((p: any, i: number) => {
+                  const colors = ["#FF4D8D", "#3BD4E7", "#FF9100"];
+                  return (
+                    <div key={p.player} className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-full" style={{ background: colors[i] }} /><span className="text-white/40 text-xs">{p.player}</span></div>
+                  );
+                })}
               </div>
             </GlassCard>
           </motion.div>
