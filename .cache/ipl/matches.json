@@ -1,21 +1,6 @@
 {
-  "updatedAt": "2026-04-27T10:38:11.479Z",
+  "updatedAt": "2026-04-28T10:13:32.655Z",
   "data": [
-    {
-      "id": "2479",
-      "matchNo": "Match 39",
-      "team1": "DC",
-      "team2": "RCB",
-      "team1Name": "Delhi Capitals",
-      "team2Name": "Royal Challengers Bengaluru",
-      "team1Score": null,
-      "team2Score": null,
-      "date": "APR, MON 27",
-      "startTime": "7:30 pm IST",
-      "venue": "Arun Jaitley Stadium, Delhi",
-      "status": "Upcoming",
-      "result": null
-    },
     {
       "id": "2480",
       "matchNo": "Match 40",
@@ -480,6 +465,21 @@
       "venue": "Eden Gardens, Kolkata",
       "status": "Upcoming",
       "result": null
+    },
+    {
+      "id": "2479",
+      "matchNo": "Match 39",
+      "team1": "DC",
+      "team2": "RCB",
+      "team1Name": "Delhi Capitals",
+      "team2Name": "Royal Challengers Bengaluru",
+      "team1Score": null,
+      "team2Score": "77/1 (6.3 OV )",
+      "date": "APR, MON 27",
+      "startTime": "7:30 pm IST",
+      "venue": "Arun Jaitley Stadium, Delhi",
+      "status": "Completed",
+      "result": "Royal Challengers Bengaluru Won by 9 Wickets"
     },
     {
       "id": "2478",

@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-04-27T10:38:12.885Z",
+  "updatedAt": "2026-04-28T10:13:33.443Z",
   "data": {
     "categories": {
       "batting": [
@@ -24,6 +24,19 @@
         "sixes": 28
       },
       {
+        "player": "K L Rahul",
+        "image": "https://ipl-stats-sports-mechanic.s3.ap-south-1.amazonaws.com/ipl/playerimages/K%20L%20Rahul.png",
+        "teamShort": "DC",
+        "teamName": "Delhi Capitals",
+        "matches": 8,
+        "innings": 8,
+        "runs": 358,
+        "average": "51.14",
+        "strikeRate": "185.49",
+        "fours": 36,
+        "sixes": 19
+      },
+      {
         "player": "Vaibhav Sooryavanshi",
         "image": "https://ipl-stats-sports-mechanic.s3.ap-south-1.amazonaws.com/ipl/playerimages/Vaibhav%20Sooryavanshi.png",
         "teamShort": "RR",
@@ -37,17 +50,17 @@
         "sixes": 32
       },
       {
-        "player": "K L Rahul",
-        "image": "https://ipl-stats-sports-mechanic.s3.ap-south-1.amazonaws.com/ipl/playerimages/K%20L%20Rahul.png",
-        "teamShort": "DC",
-        "teamName": "Delhi Capitals",
-        "matches": 7,
-        "innings": 7,
-        "runs": 357,
-        "average": "59.50",
-        "strikeRate": "187.89",
-        "fours": 36,
-        "sixes": 19
+        "player": "Virat Kohli",
+        "image": "https://ipl-stats-sports-mechanic.s3.ap-south-1.amazonaws.com/ipl/playerimages/Virat%20Kohli.png",
+        "teamShort": "RCB",
+        "teamName": "Royal Challengers Bengaluru",
+        "matches": 8,
+        "innings": 8,
+        "runs": 351,
+        "average": "58.50",
+        "strikeRate": "162.50",
+        "fours": 37,
+        "sixes": 14
       },
       {
         "player": "Heinrich Klaasen",
@@ -74,19 +87,6 @@
         "strikeRate": "148.64",
         "fours": 30,
         "sixes": 14
-      },
-      {
-        "player": "Virat Kohli",
-        "image": "https://ipl-stats-sports-mechanic.s3.ap-south-1.amazonaws.com/ipl/playerimages/Virat%20Kohli.png",
-        "teamShort": "RCB",
-        "teamName": "Royal Challengers Bengaluru",
-        "matches": 7,
-        "innings": 7,
-        "runs": 328,
-        "average": "54.67",
-        "strikeRate": "163.18",
-        "fours": 36,
-        "sixes": 12
       },
       {
         "player": "Sai Sudharsan",
@@ -156,6 +156,19 @@
         "sixes": 28
       },
       {
+        "player": "K L Rahul",
+        "image": "https://ipl-stats-sports-mechanic.s3.ap-south-1.amazonaws.com/ipl/playerimages/K%20L%20Rahul.png",
+        "teamShort": "DC",
+        "teamName": "Delhi Capitals",
+        "matches": 8,
+        "innings": 8,
+        "runs": 358,
+        "average": "51.14",
+        "strikeRate": "185.49",
+        "fours": 36,
+        "sixes": 19
+      },
+      {
         "player": "Vaibhav Sooryavanshi",
         "image": "https://ipl-stats-sports-mechanic.s3.ap-south-1.amazonaws.com/ipl/playerimages/Vaibhav%20Sooryavanshi.png",
         "teamShort": "RR",
@@ -169,17 +182,17 @@
         "sixes": 32
       },
       {
-        "player": "K L Rahul",
-        "image": "https://ipl-stats-sports-mechanic.s3.ap-south-1.amazonaws.com/ipl/playerimages/K%20L%20Rahul.png",
-        "teamShort": "DC",
-        "teamName": "Delhi Capitals",
-        "matches": 7,
-        "innings": 7,
-        "runs": 357,
-        "average": "59.50",
-        "strikeRate": "187.89",
-        "fours": 36,
-        "sixes": 19
+        "player": "Virat Kohli",
+        "image": "https://ipl-stats-sports-mechanic.s3.ap-south-1.amazonaws.com/ipl/playerimages/Virat%20Kohli.png",
+        "teamShort": "RCB",
+        "teamName": "Royal Challengers Bengaluru",
+        "matches": 8,
+        "innings": 8,
+        "runs": 351,
+        "average": "58.50",
+        "strikeRate": "162.50",
+        "fours": 37,
+        "sixes": 14
       },
       {
         "player": "Heinrich Klaasen",
@@ -206,19 +219,6 @@
         "strikeRate": "148.64",
         "fours": 30,
         "sixes": 14
-      },
-      {
-        "player": "Virat Kohli",
-        "image": "https://ipl-stats-sports-mechanic.s3.ap-south-1.amazonaws.com/ipl/playerimages/Virat%20Kohli.png",
-        "teamShort": "RCB",
-        "teamName": "Royal Challengers Bengaluru",
-        "matches": 7,
-        "innings": 7,
-        "runs": 328,
-        "average": "54.67",
-        "strikeRate": "163.18",
-        "fours": 36,
-        "sixes": 12
       },
       {
         "player": "Sai Sudharsan",
@@ -274,6 +274,21 @@
       }
     ],
     "bowlingLeaders": [
+      {
+        "player": "Bhuvneshwar Kumar",
+        "image": "https://ipl-stats-sports-mechanic.s3.ap-south-1.amazonaws.com/ipl/playerimages/Bhuvneshwar%20Kumar.png",
+        "teamShort": "RCB",
+        "teamName": "Royal Challengers Bengaluru",
+        "matches": 8,
+        "innings": 8,
+        "overs": "31.0",
+        "runs": 236,
+        "wickets": 14,
+        "bbi": "5/3",
+        "average": "16.85",
+        "economy": "7.61",
+        "strikeRate": "13.28"
+      },
       {
         "player": "Anshul Kamboj",
         "image": "https://ipl-stats-sports-mechanic.s3.ap-south-1.amazonaws.com/ipl/playerimages/Anshul%20Kamboj.png",
@@ -365,21 +380,6 @@
         "strikeRate": "13.00"
       },
       {
-        "player": "Bhuvneshwar Kumar",
-        "image": "https://ipl-stats-sports-mechanic.s3.ap-south-1.amazonaws.com/ipl/playerimages/Bhuvneshwar%20Kumar.png",
-        "teamShort": "RCB",
-        "teamName": "Royal Challengers Bengaluru",
-        "matches": 7,
-        "innings": 7,
-        "overs": "28.0",
-        "runs": 231,
-        "wickets": 11,
-        "bbi": "26/3",
-        "average": "21.00",
-        "economy": "8.25",
-        "strikeRate": "15.27"
-      },
-      {
         "player": "Ravi Bishnoi",
         "image": "https://ipl-stats-sports-mechanic.s3.ap-south-1.amazonaws.com/ipl/playerimages/Ravi%20Bishnoi.png",
         "teamShort": "RR",
@@ -410,18 +410,18 @@
         "strikeRate": "10.66"
       },
       {
-        "player": "Kartik Tyagi",
-        "image": "https://ipl-stats-sports-mechanic.s3.ap-south-1.amazonaws.com/ipl/playerimages/Kartik%20Tyagi.png",
-        "teamShort": "KKR",
-        "teamName": "Kolkata Knight Riders",
+        "player": "Krunal Pandya",
+        "image": "https://ipl-stats-sports-mechanic.s3.ap-south-1.amazonaws.com/ipl/playerimages/Krunal%20Pandya.png",
+        "teamShort": "RCB",
+        "teamName": "Royal Challengers Bengaluru",
         "matches": 8,
-        "innings": 7,
+        "innings": 8,
         "overs": "27.0",
-        "runs": 260,
+        "runs": 239,
         "wickets": 9,
-        "bbi": "22/3",
-        "average": "28.88",
-        "economy": "9.62",
+        "bbi": "30/2",
+        "average": "26.55",
+        "economy": "8.85",
         "strikeRate": "18.00"
       }
     ],
@@ -436,6 +436,14 @@
       },
       {
         "rank": 2,
+        "player": "K L Rahul",
+        "image": "https://ipl-stats-sports-mechanic.s3.ap-south-1.amazonaws.com/ipl/playerimages/K%20L%20Rahul.png",
+        "teamShort": "DC",
+        "teamName": "Delhi Capitals",
+        "value": "358"
+      },
+      {
+        "rank": 3,
         "player": "Vaibhav Sooryavanshi",
         "image": "https://ipl-stats-sports-mechanic.s3.ap-south-1.amazonaws.com/ipl/playerimages/Vaibhav%20Sooryavanshi.png",
         "teamShort": "RR",
@@ -443,15 +451,15 @@
         "value": "357"
       },
       {
-        "rank": 3,
-        "player": "K L Rahul",
-        "image": "https://ipl-stats-sports-mechanic.s3.ap-south-1.amazonaws.com/ipl/playerimages/K%20L%20Rahul.png",
-        "teamShort": "DC",
-        "teamName": "Delhi Capitals",
-        "value": "357"
+        "rank": 4,
+        "player": "Virat Kohli",
+        "image": "https://ipl-stats-sports-mechanic.s3.ap-south-1.amazonaws.com/ipl/playerimages/Virat%20Kohli.png",
+        "teamShort": "RCB",
+        "teamName": "Royal Challengers Bengaluru",
+        "value": "351"
       },
       {
-        "rank": 4,
+        "rank": 5,
         "player": "Heinrich Klaasen",
         "image": "https://ipl-stats-sports-mechanic.s3.ap-south-1.amazonaws.com/ipl/playerimages/Heinrich%20Klaasen.png",
         "teamShort": "SRH",
@@ -459,20 +467,12 @@
         "value": "349"
       },
       {
-        "rank": 5,
+        "rank": 6,
         "player": "Shubman Gill",
         "image": "https://ipl-stats-sports-mechanic.s3.ap-south-1.amazonaws.com/ipl/playerimages/Shubman%20Gill.png",
         "teamShort": "GT",
         "teamName": "Gujarat Titans",
         "value": "330"
-      },
-      {
-        "rank": 6,
-        "player": "Virat Kohli",
-        "image": "https://ipl-stats-sports-mechanic.s3.ap-south-1.amazonaws.com/ipl/playerimages/Virat%20Kohli.png",
-        "teamShort": "RCB",
-        "teamName": "Royal Challengers Bengaluru",
-        "value": "328"
       },
       {
         "rank": 7,
@@ -510,6 +510,14 @@
     "mostWickets": [
       {
         "rank": 1,
+        "player": "Bhuvneshwar Kumar",
+        "image": "https://ipl-stats-sports-mechanic.s3.ap-south-1.amazonaws.com/ipl/playerimages/Bhuvneshwar%20Kumar.png",
+        "teamShort": "RCB",
+        "teamName": "Royal Challengers Bengaluru",
+        "value": "14"
+      },
+      {
+        "rank": 2,
         "player": "Anshul Kamboj",
         "image": "https://ipl-stats-sports-mechanic.s3.ap-south-1.amazonaws.com/ipl/playerimages/Anshul%20Kamboj.png",
         "teamShort": "CSK",
@@ -517,7 +525,7 @@
         "value": "14"
       },
       {
-        "rank": 2,
+        "rank": 3,
         "player": "Eshan Malinga",
         "image": "https://ipl-stats-sports-mechanic.s3.ap-south-1.amazonaws.com/ipl/playerimages/Eshan%20Malinga.png",
         "teamShort": "SRH",
@@ -525,7 +533,7 @@
         "value": "14"
       },
       {
-        "rank": 3,
+        "rank": 4,
         "player": "Jofra Archer",
         "image": "https://ipl-stats-sports-mechanic.s3.ap-south-1.amazonaws.com/ipl/playerimages/Jofra%20Archer.png",
         "teamShort": "RR",
@@ -533,7 +541,7 @@
         "value": "13"
       },
       {
-        "rank": 4,
+        "rank": 5,
         "player": "Prince Yadav",
         "image": "https://ipl-stats-sports-mechanic.s3.ap-south-1.amazonaws.com/ipl/playerimages/Prince%20Yadav.png",
         "teamShort": "LSG",
@@ -541,7 +549,7 @@
         "value": "13"
       },
       {
-        "rank": 5,
+        "rank": 6,
         "player": "Kagiso Rabada",
         "image": "https://ipl-stats-sports-mechanic.s3.ap-south-1.amazonaws.com/ipl/playerimages/Kagiso%20Rabada.png",
         "teamShort": "GT",
@@ -549,20 +557,12 @@
         "value": "13"
       },
       {
-        "rank": 6,
+        "rank": 7,
         "player": "Prasidh Krishna",
         "image": "https://ipl-stats-sports-mechanic.s3.ap-south-1.amazonaws.com/ipl/playerimages/Prasidh%20Krishna.png",
         "teamShort": "GT",
         "teamName": "Gujarat Titans",
         "value": "12"
-      },
-      {
-        "rank": 7,
-        "player": "Bhuvneshwar Kumar",
-        "image": "https://ipl-stats-sports-mechanic.s3.ap-south-1.amazonaws.com/ipl/playerimages/Bhuvneshwar%20Kumar.png",
-        "teamShort": "RCB",
-        "teamName": "Royal Challengers Bengaluru",
-        "value": "11"
       },
       {
         "rank": 8,
@@ -582,10 +582,10 @@
       },
       {
         "rank": 10,
-        "player": "Kartik Tyagi",
-        "image": "https://ipl-stats-sports-mechanic.s3.ap-south-1.amazonaws.com/ipl/playerimages/Kartik%20Tyagi.png",
-        "teamShort": "KKR",
-        "teamName": "Kolkata Knight Riders",
+        "player": "Krunal Pandya",
+        "image": "https://ipl-stats-sports-mechanic.s3.ap-south-1.amazonaws.com/ipl/playerimages/Krunal%20Pandya.png",
+        "teamShort": "RCB",
+        "teamName": "Royal Challengers Bengaluru",
         "value": "9"
       }
     ],
@@ -608,18 +608,18 @@
       },
       {
         "rank": 3,
-        "player": "Vaibhav Sooryavanshi",
-        "image": "https://ipl-stats-sports-mechanic.s3.ap-south-1.amazonaws.com/ipl/playerimages/Vaibhav%20Sooryavanshi.png",
-        "teamShort": "RR",
-        "teamName": "Rajasthan Royals",
-        "value": "1"
-      },
-      {
-        "rank": 4,
         "player": "K L Rahul",
         "image": "https://ipl-stats-sports-mechanic.s3.ap-south-1.amazonaws.com/ipl/playerimages/K%20L%20Rahul.png",
         "teamShort": "DC",
         "teamName": "Delhi Capitals",
+        "value": "1"
+      },
+      {
+        "rank": 4,
+        "player": "Vaibhav Sooryavanshi",
+        "image": "https://ipl-stats-sports-mechanic.s3.ap-south-1.amazonaws.com/ipl/playerimages/Vaibhav%20Sooryavanshi.png",
+        "teamShort": "RR",
+        "teamName": "Rajasthan Royals",
         "value": "1"
       },
       {
@@ -666,6 +666,14 @@
       },
       {
         "rank": 3,
+        "player": "Virat Kohli",
+        "image": "https://ipl-stats-sports-mechanic.s3.ap-south-1.amazonaws.com/ipl/playerimages/Virat%20Kohli.png",
+        "teamShort": "RCB",
+        "teamName": "Royal Challengers Bengaluru",
+        "value": "3"
+      },
+      {
+        "rank": 4,
         "player": "Heinrich Klaasen",
         "image": "https://ipl-stats-sports-mechanic.s3.ap-south-1.amazonaws.com/ipl/playerimages/Heinrich%20Klaasen.png",
         "teamShort": "SRH",
@@ -673,19 +681,11 @@
         "value": "3"
       },
       {
-        "rank": 4,
+        "rank": 5,
         "player": "Shubman Gill",
         "image": "https://ipl-stats-sports-mechanic.s3.ap-south-1.amazonaws.com/ipl/playerimages/Shubman%20Gill.png",
         "teamShort": "GT",
         "teamName": "Gujarat Titans",
-        "value": "3"
-      },
-      {
-        "rank": 5,
-        "player": "Virat Kohli",
-        "image": "https://ipl-stats-sports-mechanic.s3.ap-south-1.amazonaws.com/ipl/playerimages/Virat%20Kohli.png",
-        "teamShort": "RCB",
-        "teamName": "Royal Challengers Bengaluru",
         "value": "3"
       },
       {
@@ -706,14 +706,6 @@
       },
       {
         "rank": 8,
-        "player": "Dhruv Jurel",
-        "image": "https://ipl-stats-sports-mechanic.s3.ap-south-1.amazonaws.com/ipl/playerimages/Dhruv%20Jurel.png",
-        "teamShort": "RR",
-        "teamName": "Rajasthan Royals",
-        "value": "3"
-      },
-      {
-        "rank": 9,
         "player": "Devdutt Padikkal",
         "image": "https://ipl-stats-sports-mechanic.s3.ap-south-1.amazonaws.com/ipl/playerimages/Devdutt%20Padikkal.png",
         "teamShort": "RCB",
@@ -721,11 +713,19 @@
         "value": "3"
       },
       {
-        "rank": 10,
-        "player": "Vaibhav Sooryavanshi",
-        "image": "https://ipl-stats-sports-mechanic.s3.ap-south-1.amazonaws.com/ipl/playerimages/Vaibhav%20Sooryavanshi.png",
+        "rank": 9,
+        "player": "Dhruv Jurel",
+        "image": "https://ipl-stats-sports-mechanic.s3.ap-south-1.amazonaws.com/ipl/playerimages/Dhruv%20Jurel.png",
         "teamShort": "RR",
         "teamName": "Rajasthan Royals",
+        "value": "3"
+      },
+      {
+        "rank": 10,
+        "player": "K L Rahul",
+        "image": "https://ipl-stats-sports-mechanic.s3.ap-south-1.amazonaws.com/ipl/playerimages/K%20L%20Rahul.png",
+        "teamShort": "DC",
+        "teamName": "Delhi Capitals",
         "value": "2"
       }
     ],
@@ -807,16 +807,24 @@
       },
       {
         "rank": 10,
-        "player": "Sanju Samson",
-        "image": "https://ipl-stats-sports-mechanic.s3.ap-south-1.amazonaws.com/ipl/playerimages/Sanju%20Samson.png",
-        "teamShort": "CSK",
-        "teamName": "Chennai Super Kings",
-        "value": "15"
+        "player": "Devdutt Padikkal",
+        "image": "https://ipl-stats-sports-mechanic.s3.ap-south-1.amazonaws.com/ipl/playerimages/Devdutt%20Padikkal.png",
+        "teamShort": "RCB",
+        "teamName": "Royal Challengers Bengaluru",
+        "value": "16"
       }
     ],
     "mostFours": [
       {
         "rank": 1,
+        "player": "Virat Kohli",
+        "image": "https://ipl-stats-sports-mechanic.s3.ap-south-1.amazonaws.com/ipl/playerimages/Virat%20Kohli.png",
+        "teamShort": "RCB",
+        "teamName": "Royal Challengers Bengaluru",
+        "value": "37"
+      },
+      {
+        "rank": 2,
         "player": "Abhishek Sharma",
         "image": "https://ipl-stats-sports-mechanic.s3.ap-south-1.amazonaws.com/ipl/playerimages/Abhishek%20Sharma.png",
         "teamShort": "SRH",
@@ -824,19 +832,11 @@
         "value": "36"
       },
       {
-        "rank": 2,
+        "rank": 3,
         "player": "K L Rahul",
         "image": "https://ipl-stats-sports-mechanic.s3.ap-south-1.amazonaws.com/ipl/playerimages/K%20L%20Rahul.png",
         "teamShort": "DC",
         "teamName": "Delhi Capitals",
-        "value": "36"
-      },
-      {
-        "rank": 3,
-        "player": "Virat Kohli",
-        "image": "https://ipl-stats-sports-mechanic.s3.ap-south-1.amazonaws.com/ipl/playerimages/Virat%20Kohli.png",
-        "teamShort": "RCB",
-        "teamName": "Royal Challengers Bengaluru",
         "value": "36"
       },
       {

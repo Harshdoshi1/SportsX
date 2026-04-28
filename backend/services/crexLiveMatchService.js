@@ -2,11 +2,11 @@ import puppeteer from "puppeteer";
 
 const LIVE_MATCH_SOURCES = [
   {
-    sourceId: "icc-cwcl2-11hc",
+    sourceId: "icc-wct-11lo",
     tournamentId: "icc",
-    series: "Men's CWC League 2 2023-27",
+    series: "Women's Challenge Trophy 2026",
     sourceUrl:
-      "https://crex.com/cricket-live-score/oma-vs-uae-99th-match-mens-cwc-league-2-2023-27-match-updates-11HC",
+      "https://crex.com/cricket-live-score/ita-w-vs-usa-w-10th-match-womens-challenge-trophy-2026-match-updates-11LO",
   },
   {
     sourceId: "ipl-118f",
@@ -20,7 +20,6 @@ const LIVE_MATCH_SOURCES = [
 const CACHE_TTL_MS = 1500;
 const cacheByMatchId = new Map();
 const inFlightByMatchId = new Map();
-const customSourceByMatchId = new Map();
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -167,19 +166,10 @@ const parseStructuredLiveData = (pageText) => {
   };
 };
 
-const extractCrexCode = (url) => {
-  const raw = String(url || "");
-  const code = raw.match(/match-updates-([A-Za-z0-9]+)/i)?.[1]?.toLowerCase();
-  if (code) return code;
-
-  const fallback = raw
-    .replace(/^https?:\/\//i, "")
-    .replace(/[^a-z0-9]+/gi, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(-32)
-    .toLowerCase();
-  return fallback || "live";
-};
+const extractCrexCode = (url) =>
+  String(url || "")
+    .match(/match-updates-([A-Za-z0-9]+)/i)?.[1]
+    ?.toLowerCase() || "live";
 
 const buildMatchId = (source) => `${source.tournamentId}-${extractCrexCode(source.sourceUrl)}`;
 
@@ -215,47 +205,9 @@ const parseTeamsFromHeading = (line) => {
 
 const normalizeScoreToken = (value) => String(value || "").replace(/\s+/g, "").trim();
 
-const fixScoreAndOvers = (scoreValue, oversValue) => {
-  const score = normalizeScoreToken(scoreValue);
-  const overs = String(oversValue || "").trim() || null;
-  const hit = score.match(/^(\d{1,3})\s*[-/]\s*(\d{1,3})$/);
-  if (!hit) {
-    return { score: score || null, overs };
-  }
-
-  const runs = Number(hit[1]);
-  const wktsRaw = String(hit[2] || "");
-  const wktsNum = Number(wktsRaw);
-  if (!Number.isFinite(runs) || !Number.isFinite(wktsNum)) {
-    return { score: score || null, overs };
-  }
-
-  // Guard against a known Crex scrape glitch where the first digit of overs
-  // gets appended to wickets (e.g. "91-21" with overs "6.0" should be "91-2" overs "16.0").
-  if (wktsNum > 10 && wktsRaw.length === 2 && overs && /^\d{1,2}\.\d$/.test(overs)) {
-    const wickets = Number(wktsRaw[0]);
-    const stolen = wktsRaw[1];
-    if (wickets >= 0 && wickets <= 10) {
-      return {
-        score: `${runs}-${wickets}`,
-        overs: `${stolen}${overs}`,
-      };
-    }
-  }
-
-  if (wktsNum > 10 && wktsNum < 100) {
-    const clamped = Math.floor(wktsNum / 10);
-    if (clamped >= 0 && clamped <= 10) {
-      return { score: `${runs}-${clamped}`, overs };
-    }
-  }
-
-  return { score: `${runs}-${wktsNum}`, overs };
-};
-
 const findScoreForTeam = (lines, teamToken) => {
   const token = String(teamToken || "").toLowerCase();
-  const scoreRegex = /(\d{1,3}\s*[-/]\s*\d{1,2})(?:\s*\(?\s*(\d{1,2}(?:\.\d+)?)\s*(?:ov|overs)?\s*\)?)?/i;
+  const scoreRegex = /(\d{1,3}\s*[-/]\s*\d{1,2}(?:\s*\(?\d{1,2}(?:\.\d+)?\)?(?:\s*ov)?\s*)?)/i;
 
   for (let i = 0; i < lines.length; i += 1) {
     const line = String(lines[i] || "");
@@ -266,27 +218,18 @@ const findScoreForTeam = (lines, teamToken) => {
 
     const sameLineHit = line.match(scoreRegex);
     if (sameLineHit?.[1]) {
-      return {
-        score: normalizeScoreToken(sameLineHit[1]),
-        overs: String(sameLineHit[2] || "").trim() || null,
-      };
+      return sameLineHit[1].replace(/\s+/g, " ").trim();
     }
 
     for (let j = i + 1; j <= i + 2 && j < lines.length; j += 1) {
       const nextLineHit = String(lines[j] || "").match(scoreRegex);
       if (nextLineHit?.[1]) {
-        return {
-          score: normalizeScoreToken(nextLineHit[1]),
-          overs: String(nextLineHit[2] || "").trim() || null,
-        };
+        return nextLineHit[1].replace(/\s+/g, " ").trim();
       }
     }
   }
 
-  return {
-    score: null,
-    overs: null,
-  };
+  return null;
 };
 
 const uniqueByKey = (items, keyFn) => {
@@ -378,103 +321,6 @@ const parseBowlers = (text) => {
   return uniqueByKey(rows, (row) => `${row.name}:${row.figures}:${row.overs}`).slice(0, 4);
 };
 
-const parseScorecardInnings = (text, teams = { team1: "", team2: "" }) => {
-  const raw = String(text || "");
-  const teamTokens = [String(teams.team1 || "").toUpperCase(), String(teams.team2 || "").toUpperCase()].filter(Boolean);
-  const rows = [];
-
-  for (const token of teamTokens) {
-    const escaped = token.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    const re = new RegExp(`${escaped}\\s+(\\d{1,3}\\s*[/-]\\s*\\d{1,2})(?:\\s*\\(?\\s*(\\d{1,2}(?:\\.\\d+)?)\\s*(?:ov|overs)?\\s*\\)?)?`, "i");
-    const hit = raw.match(re);
-    if (!hit?.[1]) {
-      continue;
-    }
-
-    rows.push({
-      team: token,
-      score: normalizeScoreToken(hit[1]),
-      overs: String(hit[2] || "").trim() || null,
-    });
-  }
-
-  return rows.slice(0, 2).map((row) => ({
-    title: `${row.team} Innings`,
-    team: row.team,
-    score: row.score,
-    overs: row.overs || "-",
-  }));
-};
-
-const parseScorecardPlayers = (text) => {
-  const lines = String(text || "")
-    .split("\n")
-    .map((line) => String(line || "").replace(/\s+/g, " ").trim())
-    .filter(Boolean);
-
-  const readSection = (startPattern, stopPattern) => {
-    const startIdx = lines.findIndex((line) => startPattern.test(line));
-    if (startIdx < 0) {
-      return [];
-    }
-
-    const out = [];
-    for (let i = startIdx + 1; i < lines.length; i += 1) {
-      const line = lines[i];
-      if (stopPattern.test(line)) {
-        break;
-      }
-      out.push(line);
-    }
-
-    return out;
-  };
-
-  const battingSection = readSection(
-    /^(batter|batters|batters|batting)$/i,
-    /^(bowler|bowlers|bowling|fall of wickets|yet to bat|partnership)$/i,
-  );
-  const bowlingSection = readSection(
-    /^(bowler|bowlers|bowling)$/i,
-    /^(fall of wickets|yet to bat|partnership|current run rate|required run rate)$/i,
-  );
-
-  const batters = [];
-  const batterRegex = /^([A-Za-z][A-Za-z.'\-\s]+?)\s+(\d{1,3})\s+(\d{1,3})(?:\s+\d{1,2}\s+\d{1,2}\s+\d{1,3}(?:\.\d+)?)?$/;
-  for (const row of battingSection) {
-    const hit = row.match(batterRegex);
-    if (!hit) {
-      continue;
-    }
-
-    batters.push({
-      name: String(hit[1] || "").trim(),
-      runs: Number(hit[2] || 0),
-      balls: Number(hit[3] || 0),
-    });
-  }
-
-  const bowlers = [];
-  const bowlerRegex = /^([A-Za-z][A-Za-z.'\-\s]+?)\s+(\d{1,2}(?:\.\d+)?)\s+\d{1,2}\s+(\d{1,3})\s+(\d{1,2})\s+(\d{1,2}(?:\.\d+)?)$/;
-  for (const row of bowlingSection) {
-    const hit = row.match(bowlerRegex);
-    if (!hit) {
-      continue;
-    }
-
-    bowlers.push({
-      name: String(hit[1] || "").trim(),
-      figures: `${Number(hit[4] || 0)}-${Number(hit[3] || 0)}`,
-      overs: String(hit[2] || "-").trim(),
-    });
-  }
-
-  return {
-    batters: uniqueByKey(batters, (row) => `${row.name}:${row.runs}:${row.balls}`).slice(0, 6),
-    bowlers: uniqueByKey(bowlers, (row) => `${row.name}:${row.figures}:${row.overs}`).slice(0, 6),
-  };
-};
-
 const parseCommentary = (text) => {
   const raw = String(text || "")
     .replace(/\s+/g, " ")
@@ -516,28 +362,6 @@ const parseStatus = (text) => {
   return "Live";
 };
 
-const toScorecardUrl = (sourceUrl) => {
-  const raw = String(sourceUrl || "").trim();
-  if (!raw) return "";
-  if (/\/match-scorecard\/?$/i.test(raw)) {
-    return raw;
-  }
-  return `${raw.replace(/\/+$/, "")}/match-scorecard`;
-};
-
-const parseEquationFromText = (text) => {
-  const raw = String(text || "").replace(/\s+/g, " ").trim();
-  if (!raw) return null;
-
-  const needLine = raw.match(/\b([A-Z]{2,}(?:-[A-Z])?)\s+need\s+\d+\s+runs\s+in\s+\d+\s+balls\b/i)?.[0];
-  if (needLine) return needLine;
-
-  const altLine = raw.match(/\b\d+\s+runs\s+needed\s+in\s+\d+\s+balls\b/i)?.[0];
-  if (altLine) return altLine;
-
-  return null;
-};
-
 const launchBrowser = async () =>
   puppeteer.launch({
     headless: true,
@@ -577,28 +401,14 @@ const scrapeCrexMatch = async (source) => {
       return { text, lines };
     });
 
-    let scorecardText = "";
-    try {
-      const scorecardPage = await browser.newPage();
-      await configurePage(scorecardPage);
-      await scorecardPage.goto(toScorecardUrl(source.sourceUrl), { waitUntil: "networkidle2", timeout: 60000 });
-      await sleep(900);
-      scorecardText = await scorecardPage.evaluate(() => String(document.body?.innerText || ""));
-      await scorecardPage.close();
-    } catch {
-      scorecardText = "";
-    }
-
     const lines = payload?.lines || [];
     const pageText = String(payload?.text || "");
-    const scorecardPayload = parseScorecardPlayers(scorecardText);
     const headingLine =
       lines.find((line) => /\bVs\b/i.test(line) && /live/i.test(line)) ||
       lines.find((line) => /\bVs\b/i.test(line)) ||
       "";
     const teams = parseTeamsFromHeading(headingLine) || fallbackTeams;
     const structured = parseStructuredLiveData(pageText);
-    const parsedScorecardInnings = parseScorecardInnings(scorecardText, teams);
 
     const statusLine =
       lines.find((line) => /live|innings break|stumps|won by|match tied|result|scheduled|starts in/i.test(line)) ||
@@ -617,16 +427,8 @@ const scrapeCrexMatch = async (source) => {
       team2Score: findScoreForTeam(lines, teams.team2),
     };
     const scoreLine = parsePrimaryScoreLine(lines, teams.team1, teams.team2);
-    const team1ScoreRaw = structured?.team1Score || scoreLine.team1Score || scoreFromTeams.team1Score?.score || null;
-    const team2ScoreRaw = structured?.team2Score || scoreLine.team2Score || scoreFromTeams.team2Score?.score || null;
-    const team1OversRaw = structured?.team1Overs || scoreLine.team1Overs || scoreFromTeams.team1Score?.overs || null;
-    const team2OversRaw = structured?.team2Overs || scoreLine.team2Overs || scoreFromTeams.team2Score?.overs || null;
-    const team1Fixed = fixScoreAndOvers(team1ScoreRaw, team1OversRaw);
-    const team2Fixed = fixScoreAndOvers(team2ScoreRaw, team2OversRaw);
-    const team1Score = team1Fixed.score;
-    const team2Score = team2Fixed.score;
-    const team1OversFallback = team1Fixed.overs;
-    const team2OversFallback = team2Fixed.overs;
+    const team1Score = structured?.team1Score || scoreLine.team1Score || scoreFromTeams.team1Score || null;
+    const team2Score = structured?.team2Score || scoreLine.team2Score || scoreFromTeams.team2Score || null;
     const genericScore =
       lines
         .map((line) => line.match(/\b([A-Z]{2,}(?:-[A-Z])?)\s+(\d{1,3}\s*[-/]\s*\d{1,2}(?:\.?\d+)?)/i))
@@ -634,7 +436,6 @@ const scrapeCrexMatch = async (source) => {
 
     const matchId = buildMatchId(source);
 
-    const equationFromScorecard = parseEquationFromText(scorecardText);
     const currentRunRate =
       structured?.liveStats?.currentRunRate || pageText.match(/CRR\s*:\s*([0-9.]+)/i)?.[1] || null;
     const tossInfo = pageText.match(/([A-Z]{2,}(?:-[A-Z])?\s+opt\s+to\s+(?:Bat|Bowl))/i)?.[1] || null;
@@ -642,39 +443,25 @@ const scrapeCrexMatch = async (source) => {
       structured?.liveStats?.partnership || pageText.match(/P'?ship\s*:\s*([^\n]+)/i)?.[1]?.trim() || null;
     const lastWicket =
       structured?.liveStats?.lastWicket || pageText.match(/Last\s*Wkt\s*:\s*([^\n]+)/i)?.[1]?.trim() || null;
-    const batters = (
-      scorecardPayload.batters.length > 0
-        ? scorecardPayload.batters
-        : structured?.batters?.length
-          ? structured.batters
-          : parseBatters(pageText)
-    ).slice(0, 6);
-    const bowlers = (
-      scorecardPayload.bowlers.length > 0
-        ? scorecardPayload.bowlers
-        : structured?.bowlers?.length
-          ? structured.bowlers
-          : parseBowlers(pageText)
-    ).slice(0, 6);
+    const batters = (structured?.batters?.length ? structured.batters : parseBatters(pageText)).slice(0, 4);
+    const bowlers = (structured?.bowlers?.length ? structured.bowlers : parseBowlers(pageText)).slice(0, 4);
     const commentary = parseCommentary(pageText);
 
     const innings =
-      parsedScorecardInnings.length > 0
-        ? parsedScorecardInnings
-        : structured?.innings?.length > 0
+      structured?.innings?.length > 0
         ? structured.innings
         : [
             {
               title: `${teams.team1} Innings`,
               team: teams.team1,
               score: team1Score,
-              overs: team1OversFallback || "-",
+              overs: scoreLine.team1Overs || "-",
             },
             {
               title: `${teams.team2} Innings`,
               team: teams.team2,
               score: team2Score,
-              overs: team2OversFallback || "-",
+              overs: scoreLine.team2Overs || "-",
             },
           ].filter((item) => item.score);
 
@@ -689,8 +476,8 @@ const scrapeCrexMatch = async (source) => {
       team2Name: structured?.team2 || teams.team2,
       team1Score,
       team2Score,
-      team1Overs: team1OversFallback,
-      team2Overs: team2OversFallback,
+      team1Overs: structured?.team1Overs || scoreLine.team1Overs || null,
+      team2Overs: structured?.team2Overs || scoreLine.team2Overs || null,
       score:
         team1Score || team2Score
           ? `${team1Score || "-"} · ${team2Score || "-"}`
@@ -714,7 +501,7 @@ const scrapeCrexMatch = async (source) => {
           tossInfo,
           partnership,
           lastWicket,
-          equation: equationFromScorecard || structured?.liveStats?.equation || null,
+          equation: structured?.liveStats?.equation || null,
         },
       },
     };
@@ -726,8 +513,7 @@ const scrapeCrexMatch = async (source) => {
 };
 
 const readMatchFromSource = async (source, options = {}) => {
-  const derivedMatchId = buildMatchId(source);
-  const matchId = String(options?.cacheKey || derivedMatchId);
+  const matchId = buildMatchId(source);
   const forceFresh = Boolean(options?.forceFresh);
   const now = Date.now();
   const cached = cacheByMatchId.get(matchId);
@@ -825,58 +611,6 @@ export const crexLiveMatchService = {
     }
 
     return readMatchFromSource(source, options);
-  },
-
-  async getLiveMatchByUrl(sourceUrl, options = {}) {
-    const url = String(sourceUrl || "").trim();
-    if (!url) {
-      return null;
-    }
-
-    const source = {
-      sourceId: `admin-${extractCrexCode(url)}`,
-      tournamentId: String(options?.tournamentId || "admin").toLowerCase(),
-      series: String(options?.series || "Admin Live Feed"),
-      sourceUrl: url,
-    };
-
-    return readMatchFromSource(source, options);
-  },
-
-  setCustomLiveSource(matchId, sourceUrl, options = {}) {
-    const id = String(matchId || "").trim();
-    const url = String(sourceUrl || "").trim();
-    if (!id || !url) {
-      return null;
-    }
-
-    const source = {
-      sourceId: `custom-${extractCrexCode(url)}`,
-      tournamentId: String(options?.tournamentId || "admin").toLowerCase(),
-      series: String(options?.series || "Admin Live Feed"),
-      sourceUrl: url,
-    };
-
-    customSourceByMatchId.set(id, source);
-    return { matchId: id, ...source };
-  },
-
-  getCustomLiveSource(matchId) {
-    const id = String(matchId || "").trim();
-    return customSourceByMatchId.get(id) || null;
-  },
-
-  async getCustomLiveMatchById(matchId, options = {}) {
-    const id = String(matchId || "").trim();
-    const source = customSourceByMatchId.get(id);
-    if (!source) {
-      return null;
-    }
-
-    return readMatchFromSource(source, {
-      ...options,
-      cacheKey: `custom-${id}`,
-    });
   },
 
   async getIccLiveMatch(options = {}) {

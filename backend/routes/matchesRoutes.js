@@ -3,7 +3,6 @@ import { matchesController } from "../controllers/matchesController.js";
 
 const router = Router();
 
-router.post("/live-source", matchesController.setLiveSource);
 router.get("/live", matchesController.getLive);
 router.get("/icc-live", matchesController.getIccLive);
 router.get("/ipl-live", matchesController.getIplLive);

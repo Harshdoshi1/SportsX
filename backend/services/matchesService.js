@@ -1,6 +1,5 @@
 import { supabaseIplSyncService } from "./supabaseIplSyncService.js";
 import { crexLiveMatchService } from "./crexLiveMatchService.js";
-import { supabaseLiveScoreCacheService } from "./supabaseLiveScoreCacheService.js";
 
 const CACHE_TTL_MS = 2 * 60 * 1000;
 let cacheData = null;
@@ -101,47 +100,7 @@ const loadMatches = async (forceRefresh = false) => {
 const byStatus = (matches, expected) =>
   matches.filter((match) => String(match?.status || "").toLowerCase() === expected);
 
-const buildScoreboardPayload = (liveMatch) => ({
-  innings: liveMatch?.scoreboard?.innings || [],
-  events: liveMatch?.scoreboard?.events || liveMatch?.scoreboard?.commentary || [],
-  commentary: liveMatch?.scoreboard?.commentary || [],
-  batters: liveMatch?.scoreboard?.batters || [],
-  bowlers: liveMatch?.scoreboard?.bowlers || [],
-  liveStats: liveMatch?.scoreboard?.liveStats || {},
-});
-
-const toCachedResponse = (snapshot) => {
-  const payload = snapshot?.payload || {};
-  return {
-    data: {
-      match: payload?.match || null,
-      scoreboard: payload?.scoreboard || { innings: [], events: [], commentary: [], batters: [], bowlers: [], liveStats: {} },
-    },
-    meta: {
-      provider: "supabase-live-cache",
-      cacheHit: true,
-      fetchedAt: snapshot?.fetchedAt || new Date().toISOString(),
-      stale: Boolean(snapshot?.stale),
-    },
-  };
-};
-
 export const matchesService = {
-  setMatchLiveSource(matchId, sourceUrl, options = {}) {
-    const linked = crexLiveMatchService.setCustomLiveSource(matchId, sourceUrl, {
-      tournamentId: options?.tournamentId,
-      series: options?.series,
-    });
-
-    return {
-      data: linked,
-      meta: {
-        provider: "crex-live-scraper",
-        updatedAt: new Date().toISOString(),
-      },
-    };
-  },
-
   async getLiveMatches() {
     const loaded = await loadMatches();
     return {
@@ -188,36 +147,11 @@ export const matchesService = {
 
   async getIccLiveMatches(options = {}) {
     const forceFresh = Boolean(options?.forceFresh);
-    if (!forceFresh) {
-      const cached = await supabaseLiveScoreCacheService.listFreshByTournament("icc", { maxAgeMs: 90_000 });
-      if (cached.length > 0) {
-        const data = cached.map((row) => normalizeCrexLiveMatch(row.payload?.match || {}));
-        return {
-          data,
-          meta: {
-            provider: "supabase-live-cache",
-            cacheHit: true,
-            fetchedAt: new Date().toISOString(),
-            stale: false,
-          },
-        };
-      }
-    }
-
     const matches = await crexLiveMatchService.getConfiguredLiveMatches({
       tournamentId: "icc",
       forceFresh,
     });
     const normalized = matches.map(normalizeCrexLiveMatch);
-
-    await Promise.all(
-      normalized.map((match, idx) =>
-        supabaseLiveScoreCacheService.upsertSnapshot(String(match?.id || `icc-${idx}`), {
-          match,
-          scoreboard: buildScoreboardPayload(matches[idx]),
-        }),
-      ),
-    );
 
     return {
       data: normalized,
@@ -232,36 +166,11 @@ export const matchesService = {
 
   async getIplLiveMatches(options = {}) {
     const forceFresh = Boolean(options?.forceFresh);
-    if (!forceFresh) {
-      const cached = await supabaseLiveScoreCacheService.listFreshByTournament("ipl", { maxAgeMs: 90_000 });
-      if (cached.length > 0) {
-        const data = cached.map((row) => normalizeCrexLiveMatch(row.payload?.match || {}));
-        return {
-          data,
-          meta: {
-            provider: "supabase-live-cache",
-            cacheHit: true,
-            fetchedAt: new Date().toISOString(),
-            stale: false,
-          },
-        };
-      }
-    }
-
     const matches = await crexLiveMatchService.getConfiguredLiveMatches({
       tournamentId: "ipl",
       forceFresh,
     });
     const normalized = matches.map(normalizeCrexLiveMatch);
-
-    await Promise.all(
-      normalized.map((match, idx) =>
-        supabaseLiveScoreCacheService.upsertSnapshot(String(match?.id || `ipl-${idx}`), {
-          match,
-          scoreboard: buildScoreboardPayload(matches[idx]),
-        }),
-      ),
-    );
 
     return {
       data: normalized,
@@ -278,52 +187,23 @@ export const matchesService = {
     const id = String(matchId || "");
     const forceFresh = Boolean(options?.forceFresh);
 
-    if (!forceFresh) {
-      const cached = await supabaseLiveScoreCacheService.getSnapshotByMatchId(id, { maxAgeMs: 20_000 });
-      if (cached && !cached.stale) {
-        return toCachedResponse(cached);
-      }
-    }
-
-    const customLiveMatch = await crexLiveMatchService.getCustomLiveMatchById(id, { forceFresh });
-    if (customLiveMatch) {
-      const normalizedMatch = normalizeCrexLiveMatch(customLiveMatch);
-      await supabaseLiveScoreCacheService.upsertSnapshot(id, {
-        match: { ...normalizedMatch, id },
-        scoreboard: buildScoreboardPayload(customLiveMatch),
-      });
-      return {
-        data: {
-          match: {
-            ...normalizedMatch,
-            id,
-            raw: normalizedMatch?.raw || customLiveMatch,
-          },
-          scoreboard: buildScoreboardPayload(customLiveMatch),
-        },
-        meta: {
-          provider: "crex-live-scraper",
-          cacheHit: Boolean(customLiveMatch?._meta?.cacheHit),
-          fetchedAt: new Date().toISOString(),
-          stale: Boolean(customLiveMatch?._meta?.stale),
-        },
-      };
-    }
-
     const crexLiveMatch = await crexLiveMatchService.getLiveMatchById(id, { forceFresh });
     if (crexLiveMatch) {
       const normalizedMatch = normalizeCrexLiveMatch(crexLiveMatch);
-      await supabaseLiveScoreCacheService.upsertSnapshot(id, {
-        match: { ...normalizedMatch, id },
-        scoreboard: buildScoreboardPayload(crexLiveMatch),
-      });
       return {
         data: {
           match: {
             ...normalizedMatch,
             raw: normalizedMatch?.raw || crexLiveMatch,
           },
-          scoreboard: buildScoreboardPayload(crexLiveMatch),
+          scoreboard: {
+            innings: crexLiveMatch?.scoreboard?.innings || [],
+            events: crexLiveMatch?.scoreboard?.events || crexLiveMatch?.scoreboard?.commentary || [],
+            commentary: crexLiveMatch?.scoreboard?.commentary || [],
+            batters: crexLiveMatch?.scoreboard?.batters || [],
+            bowlers: crexLiveMatch?.scoreboard?.bowlers || [],
+            liveStats: crexLiveMatch?.scoreboard?.liveStats || {},
+          },
         },
         meta: {
           provider: "crex-live-scraper",
@@ -349,60 +229,6 @@ export const matchesService = {
         provider: "iplt20-scraper",
         cacheHit: loaded.cacheHit,
         fetchedAt: new Date().toISOString(),
-      },
-    };
-  },
-
-  async getMatchDetailsByUrl(sourceUrl, options = {}) {
-    const url = String(sourceUrl || "").trim();
-    if (!url) {
-      return {
-        data: { match: null, scoreboard: { innings: [], events: [], commentary: [], batters: [], bowlers: [], liveStats: {} } },
-        meta: { provider: "crex-live-scraper", cacheHit: true, fetchedAt: new Date().toISOString(), stale: false },
-      };
-    }
-
-    const forceFresh = Boolean(options?.forceFresh);
-    const tournamentId = String(options?.tournamentId || "admin").toLowerCase();
-    const series = String(options?.series || "Admin Live Feed");
-
-    if (!forceFresh) {
-      const cached = await supabaseLiveScoreCacheService.getSnapshotBySourceUrl(url, { maxAgeMs: 20_000 });
-      if (cached && !cached.stale) {
-        return toCachedResponse(cached);
-      }
-    }
-
-    const crexLiveMatch = await crexLiveMatchService.getLiveMatchByUrl(url, { forceFresh, tournamentId, series });
-    if (!crexLiveMatch) {
-      return {
-        data: { match: null, scoreboard: { innings: [], events: [], commentary: [], batters: [], bowlers: [], liveStats: {} } },
-        meta: { provider: "crex-live-scraper", cacheHit: true, fetchedAt: new Date().toISOString(), stale: false },
-      };
-    }
-
-    const normalizedMatch = normalizeCrexLiveMatch(crexLiveMatch);
-    await supabaseLiveScoreCacheService.upsertSnapshot(String(normalizedMatch?.id || `url-${Date.now()}`), {
-      match: {
-        ...normalizedMatch,
-        sourceUrl: url,
-      },
-      scoreboard: buildScoreboardPayload(crexLiveMatch),
-    });
-    return {
-      data: {
-        match: {
-          ...normalizedMatch,
-          sourceUrl: url,
-          raw: normalizedMatch?.raw || crexLiveMatch,
-        },
-        scoreboard: buildScoreboardPayload(crexLiveMatch),
-      },
-      meta: {
-        provider: "crex-live-scraper",
-        cacheHit: Boolean(crexLiveMatch?._meta?.cacheHit),
-        fetchedAt: new Date().toISOString(),
-        stale: Boolean(crexLiveMatch?._meta?.stale),
       },
     };
   },

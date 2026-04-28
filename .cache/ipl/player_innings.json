@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-04-24T07:07:15.975Z",
+  "updatedAt": "2026-04-28T09:53:57.806Z",
   "data": [
     {
       "nameKey": "viratkohli",
@@ -1511,6 +1511,58 @@
         "avgRuns": 67.5
       },
       "lastScraped": "2026-04-24T07:07:15.454Z"
+    },
+    {
+      "nameKey": "prasidhkrishna",
+      "crexSlug": "prasidh-krishna-EF",
+      "team": "GT",
+      "role": null,
+      "innings": [],
+      "bowlingInnings": [
+        {
+          "opponent": "RCB",
+          "date": null,
+          "overs": 2,
+          "maidens": 0,
+          "runsConceded": 31,
+          "wickets": 0,
+          "economy": 15.5,
+          "wicketPlayers": [],
+          "matchUrl": "https://crex.com/cricket-live-score/gt-vs-rcb-34th-match-indian-premier-league-2026-match-updates-118F"
+        },
+        {
+          "opponent": "DC",
+          "date": null,
+          "overs": 4,
+          "maidens": 0,
+          "runsConceded": 52,
+          "wickets": 2,
+          "economy": 13,
+          "wicketPlayers": [
+            "Pathum Nissanka",
+            "Vipraj Nigam"
+          ],
+          "matchUrl": "https://crex.com/cricket-live-score/dc-vs-gt-14th-match-indian-premier-league-2026-match-updates-10YC"
+        },
+        {
+          "opponent": "PBKS",
+          "date": null,
+          "overs": 4,
+          "maidens": 0,
+          "runsConceded": 29,
+          "wickets": 3,
+          "economy": 7.25,
+          "wicketPlayers": [
+            "Shreyas Iyer(C)",
+            "Shashank Singh",
+            "Marcus Stoinis"
+          ],
+          "matchUrl": "https://crex.com/cricket-live-score/gt-vs-pbks-4th-match-indian-premier-league-2026-match-updates-10Y2"
+        }
+      ],
+      "opponentStats": [],
+      "favouriteTarget": null,
+      "lastScraped": "2026-04-28T09:53:57.383Z"
     }
   ]
 }
