@@ -39,6 +39,30 @@ create index if not exists idx_live_match_snapshots_source_url on public.live_ma
 create index if not exists idx_live_match_snapshots_fetched on public.live_match_snapshots (fetched_at desc);
 
 -- -----------------------------------------------------------------------------
+-- Admin tracked source links (server can keep polling without frontend session)
+-- -----------------------------------------------------------------------------
+create table if not exists public.admin_tracked_matches (
+  id uuid primary key default gen_random_uuid(),
+  source_url text not null unique,
+  mode text not null default 'live', -- live|upcoming
+  tournament_id text not null default 'admin',
+  series text,
+  team1 text,
+  team2 text,
+  match_title text,
+  status text,
+  last_fetched_at timestamptz,
+  last_error text,
+  is_active boolean not null default true,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint admin_tracked_matches_mode_chk check (mode in ('live', 'upcoming'))
+);
+
+create index if not exists idx_admin_tracked_active_updated on public.admin_tracked_matches (is_active, updated_at desc);
+create index if not exists idx_admin_tracked_tournament on public.admin_tracked_matches (tournament_id, is_active);
+
+-- -----------------------------------------------------------------------------
 -- Helpers
 -- -----------------------------------------------------------------------------
 create or replace function public.set_updated_at()
@@ -581,6 +605,10 @@ drop trigger if exists trg_set_updated_at_live_match_snapshots on public.live_ma
 create trigger trg_set_updated_at_live_match_snapshots before update on public.live_match_snapshots
 for each row execute function public.set_updated_at();
 
+drop trigger if exists trg_set_updated_at_admin_tracked_matches on public.admin_tracked_matches;
+create trigger trg_set_updated_at_admin_tracked_matches before update on public.admin_tracked_matches
+for each row execute function public.set_updated_at();
+
 -- -----------------------------------------------------------------------------
 -- Supabase RLS (read open, writes only for authenticated by default)
 -- -----------------------------------------------------------------------------
@@ -604,6 +632,7 @@ alter table public.home_upcoming_games enable row level security;
 alter table public.ipl_feed_cache enable row level security;
 alter table public.sync_job_state enable row level security;
 alter table public.live_match_snapshots enable row level security;
+alter table public.admin_tracked_matches enable row level security;
 
 -- Public read policies
 drop policy if exists "public read leagues" on public.leagues;
@@ -646,6 +675,8 @@ drop policy if exists "public read sync job state" on public.sync_job_state;
 create policy "public read sync job state" on public.sync_job_state for select to anon, authenticated using (true);
 drop policy if exists "public read live match snapshots" on public.live_match_snapshots;
 create policy "public read live match snapshots" on public.live_match_snapshots for select to anon, authenticated using (true);
+drop policy if exists "public read admin tracked matches" on public.admin_tracked_matches;
+create policy "public read admin tracked matches" on public.admin_tracked_matches for select to anon, authenticated using (true);
 
 -- Authenticated write policies (tighten to service role in production if needed)
 drop policy if exists "auth write leagues" on public.leagues;
@@ -688,6 +719,8 @@ drop policy if exists "auth write sync job state" on public.sync_job_state;
 create policy "auth write sync job state" on public.sync_job_state for all to anon, authenticated using (true) with check (true);
 drop policy if exists "auth write live match snapshots" on public.live_match_snapshots;
 create policy "auth write live match snapshots" on public.live_match_snapshots for all to anon, authenticated using (true) with check (true);
+drop policy if exists "auth write admin tracked matches" on public.admin_tracked_matches;
+create policy "auth write admin tracked matches" on public.admin_tracked_matches for all to anon, authenticated using (true) with check (true);
 
 commit;
 

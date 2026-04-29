@@ -10,6 +10,7 @@ import { cricketApi } from "../../services/cricketApi";
 import { getTeamLogoProps, isLiveStatus, isUpcomingStatus, safeArray, deriveTeamShort } from "../../services/cricketUi";
 import { IPL_STANDINGS } from "../../data/ipl2026";
 import { getIplTeamByShort, type IplTeamId } from "../../data/iplTeams";
+import { useMatchStore } from "../../../contexts/MatchContext";
 
 const CRICKET_ICON_IMAGE =
   "https://img.freepik.com/free-vector/red-ball-hitting-wicket-stumps-with-bat-black-abstract-splash-background-cricket-fever-concept_1302-5492.jpg?semt=ais_hybrid&w=740&q=80";
@@ -54,11 +55,35 @@ type UiMatch = {
   teamADisplay: string;
   teamBDisplay: string;
   score: string;
+  teamAScore?: string;
+  teamAOvers?: string;
+  teamBScore?: string;
+  teamBOvers?: string;
   status: string;
   date: string;
   startTime: string;
   venue: string;
   matchNo: string;
+};
+
+const parseRunsAndOvers = (value: unknown): { runsText: string; oversText: string } => {
+  const raw = String(value || "").trim();
+  if (!raw) return { runsText: "", oversText: "" };
+  const compact = raw.match(/^\s*(\d{1,3})\s*[-/]\s*(\d{2,}(?:\.\d+)?)\s*$/);
+  if (compact) {
+    const runs = String(compact[1] || "").trim();
+    const tail = String(compact[2] || "").trim();
+    if (tail.includes(".") && tail.length >= 3) {
+      const wkts = tail.slice(0, 1);
+      const overs = tail.slice(1);
+      return { runsText: `${runs}-${wkts}`, oversText: overs };
+    }
+  }
+  const match = raw.match(/^\s*([0-9]+\s*[-/]\s*[0-9]+|[0-9]+)\s*(?:\(([^)]+)\))?\s*$/);
+  if (match) {
+    return { runsText: String(match[1] || "").trim(), oversText: String(match[2] || "").trim() };
+  }
+  return { runsText: raw, oversText: "" };
 };
 
 type TrendingNewsItem = {
@@ -73,7 +98,6 @@ const formatMatchDateSafe = (value: unknown) => {
   if (!raw) {
     return "TBD";
   }
-
   if (/[A-Za-z]{3}/.test(raw) && !/\d{4}/.test(raw)) {
     return raw;
   }
@@ -127,12 +151,23 @@ const toUiMatch = (match: any): UiMatch => ({
     (match?.team1Score || match?.team2Score
       ? `${match?.team1Score || "-"} · ${match?.team2Score || "-"}`
       : "Score unavailable"),
+  teamAScore: parseRunsAndOvers(match?.team1Score).runsText || undefined,
+  teamAOvers: (parseRunsAndOvers(match?.team1Score).oversText || String(match?.team1Overs || "").trim()) || undefined,
+  teamBScore: parseRunsAndOvers(match?.team2Score).runsText || undefined,
+  teamBOvers: (parseRunsAndOvers(match?.team2Score).oversText || String(match?.team2Overs || "").trim()) || undefined,
   status: match?.status || "Status unavailable",
   date: formatMatchDateSafe(match?.date || match?.starts_at || match?.startsAt),
   startTime: formatMatchStartTimeSafe(match?.startTime, match?.starts_at || match?.startsAt),
   venue: match?.venue || "Venue TBA",
   matchNo: String(match?.matchNo || "").trim(),
 });
+
+const guessTournamentIdFromCategory = (value: string) => {
+  const normalized = String(value || "").toLowerCase();
+  if (normalized.includes("ipl")) return "ipl";
+  if (normalized.includes("icc")) return "icc";
+  return "admin";
+};
 
 const buildMatchIdentity = (match: UiMatch) => {
   const teamA = String(match?.teamA || "").toLowerCase().trim();
@@ -388,8 +423,95 @@ function PremiumMatchCard({ match, index }: { match: UiMatch; index: number }) {
   );
 }
 
+function PremiumLiveMatchCard({ match, index }: { match: UiMatch; index: number }) {
+  const navigate = useNavigate();
+  const teamA = getTeamLogoProps(match.teamA);
+  const teamB = getTeamLogoProps(match.teamB);
+  const matchRouteId = match.id;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: 0.2 + index * 0.08 }}
+    >
+      <GlassCard className="p-0 overflow-hidden" hover onClick={() => navigate(`/match/${matchRouteId}`)}>
+        <div className="h-1" style={{ background: "linear-gradient(90deg, #FF4D8D, #7C4DFF, #3BD4E7)" }} />
+        <div className="p-5 md:p-6">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <span className="text-white/70 text-xs font-semibold">{match.league}</span>
+              {match.matchNo && <span className="text-white/30 text-xs ml-2">• {match.matchNo}</span>}
+            </div>
+            <span className="text-xs font-bold" style={{ color: "#FF4D8D" }}>{String(match.status || "LIVE").toUpperCase()}</span>
+          </div>
+
+          <div className="grid grid-cols-[1fr_auto_1fr] gap-4 items-center mb-4">
+            <div className="flex items-center gap-3">
+              <TeamLogo teamId={teamA.teamId} short={teamA.short} size={46} />
+              <div>
+                <p className="text-white font-black text-base md:text-lg">{match.teamA}</p>
+                <p className="text-white/35 text-xs truncate">{match.teamADisplay}</p>
+                {match.teamAScore && (
+                  <p className="text-[#3BD4E7] text-xs font-mono font-bold mt-1">
+                    {match.teamAScore}
+                    {match.teamAOvers && <span className="text-white/30 font-normal"> ({match.teamAOvers} ov)</span>}
+                  </p>
+                )}
+              </div>
+            </div>
+
+            <div className="text-center">
+              <div
+                className="w-10 h-10 rounded-xl flex items-center justify-center mx-auto"
+                style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)" }}
+              >
+                <span className="text-white/40 font-black text-xs">VS</span>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3 justify-end">
+              <div className="text-right">
+                <p className="text-white font-black text-base md:text-lg">{match.teamB}</p>
+                <p className="text-white/35 text-xs truncate">{match.teamBDisplay}</p>
+                {match.teamBScore && (
+                  <p className="text-[#3BD4E7] text-xs font-mono font-bold mt-1">
+                    {match.teamBScore}
+                    {match.teamBOvers && <span className="text-white/30 font-normal"> ({match.teamBOvers} ov)</span>}
+                  </p>
+                )}
+              </div>
+              <TeamLogo teamId={teamB.teamId} short={teamB.short} size={46} />
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between gap-3">
+            <div className="text-white/60 text-sm font-semibold truncate">{match.score}</div>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                navigate(`/lounge/${matchRouteId}`);
+              }}
+              className="px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2"
+              style={{
+                background: "linear-gradient(135deg, rgba(124,77,255,0.35), rgba(255,77,141,0.35))",
+                border: "1px solid rgba(124,77,255,0.55)",
+                color: "#efe8ff",
+              }}
+            >
+              <Users size={14} />
+              Join Lounge
+            </button>
+          </div>
+        </div>
+      </GlassCard>
+    </motion.div>
+  );
+}
+
 export function Dashboard() {
   const navigate = useNavigate();
+  const { adminMatches, liveSnapshotsByMatchId } = useMatchStore();
   const [liveMatches, setLiveMatches] = useState<UiMatch[]>([]);
   const [iccLiveMatches, setIccLiveMatches] = useState<UiMatch[]>([]);
   const [upcomingMatches, setUpcomingMatches] = useState<UiMatch[]>([]);
@@ -418,6 +540,28 @@ export function Dashboard() {
     });
   }, []);
 
+  const adminLiveMatches = useMemo(() => {
+    const live = adminMatches.filter((m) => m.type === "live");
+    const mapped = live
+      .map((m) => {
+        const snapshot = liveSnapshotsByMatchId[m.id];
+        const matchPayload = snapshot?.match;
+        if (!matchPayload) {
+          return null;
+        }
+        const ui = toUiMatch({
+          ...matchPayload,
+          id: m.id,
+          tournamentId: matchPayload?.tournamentId || guessTournamentIdFromCategory(m.category),
+          series: matchPayload?.series || m.sectionLabel || m.category,
+        });
+        return ui;
+      })
+      .filter(Boolean) as UiMatch[];
+
+    return dedupeMatches(mapped);
+  }, [adminMatches, liveSnapshotsByMatchId]);
+
   useEffect(() => {
     let active = true;
 
@@ -426,12 +570,10 @@ export function Dashboard() {
         setLoading(true);
         setError(null);
 
-        const [iplScrapedRes, iplLiveRes, iccLiveRes, teamsRes, newsRes] = await Promise.all([
+        const [iplScrapedRes, iplLiveRes, teamsRes] = await Promise.all([
           cricketApi.getIplScrapedMatches(),
-          cricketApi.getIplLiveMatches(1, 20, true),
-          cricketApi.getIccLiveMatches(),
-          cricketApi.getTeams({ page: 1, limit: 500 }),
-          cricketApi.getIplNews(),
+          cricketApi.getIplLiveMatches(1, 20, false),
+          cricketApi.getTeams({ page: 1, limit: 1 }),
         ]);
 
         if (!active) {
@@ -441,25 +583,37 @@ export function Dashboard() {
         const iplScraped = safeArray<any>((iplScrapedRes as any).matches).map(toUiMatch);
         const iplFromLiveLinks = safeArray<any>((iplLiveRes as any).matches).map(toUiMatch);
         const ipl = dedupeMatches([...iplFromLiveLinks, ...iplScraped]);
-        const iccLive = safeArray<any>((iccLiveRes as any).matches).map(toUiMatch);
         const live = ipl.filter((match) => isLiveStatus(match.status));
         const upcoming = ipl.filter((match) => isUpcomingStatus(match.status));
-        const teams = safeArray<any>((teamsRes as any).teams);
-        const topTrendingNews = safeArray<any>((newsRes as any)?.news)
-          .map((item) => ({
-            title: String(item?.title || "Untitled"),
-            summary: item?.summary ? String(item.summary) : null,
-            publishedAt: String(item?.publishedAt || ""),
-            tag: String(item?.tag || "IPL 2026"),
-          }))
-          .slice(0, 3);
+        const totalTeams = Number((teamsRes as any)?.pagination?.total ?? 0);
 
         setLiveMatches(live);
-        setIccLiveMatches(iccLive.filter((match) => isLiveStatus(match.status)));
+        setIccLiveMatches([]);
         setUpcomingMatches(upcoming);
         setIplMatches(ipl);
-        setTeamsCount(teams.length);
-        setTrendingNews(topTrendingNews);
+        setTeamsCount(totalTeams);
+        setTrendingNews([]);
+        setLoading(false);
+
+        Promise.all([cricketApi.getIccLiveMatches(), cricketApi.getIplNews()])
+          .then(([iccLiveRes, newsRes]) => {
+            if (!active) return;
+            const iccLive = safeArray<any>((iccLiveRes as any).matches).map(toUiMatch);
+            const topTrendingNews = safeArray<any>((newsRes as any)?.news)
+              .map((item) => ({
+                title: String(item?.title || "Untitled"),
+                summary: item?.summary ? String(item.summary) : null,
+                publishedAt: String(item?.publishedAt || ""),
+                tag: String(item?.tag || "IPL 2026"),
+              }))
+              .slice(0, 3);
+
+            setIccLiveMatches(iccLive.filter((match) => isLiveStatus(match.status)));
+            setTrendingNews(topTrendingNews);
+          })
+          .catch(() => {
+            if (!active) return;
+          });
       } catch (fetchError: any) {
         if (!active) {
           return;
@@ -495,6 +649,7 @@ export function Dashboard() {
     const pool: UiMatch[] = [];
 
     if (includeIpl) {
+      pool.push(...adminLiveMatches.filter((match) => isLiveStatus(match.status)));
       pool.push(...liveMatches.filter((match) => isLiveStatus(match.status)));
     }
 
@@ -502,7 +657,6 @@ export function Dashboard() {
       pool.push(...iccLiveMatches.filter((match) => isLiveStatus(match.status)));
     }
 
-    // Keep ordering deterministic: ICC first, then stable by match id.
     return pool.sort((a, b) => {
       const aIccRank = a.tournamentId === "icc" ? 0 : 1;
       const bIccRank = b.tournamentId === "icc" ? 0 : 1;
@@ -511,7 +665,7 @@ export function Dashboard() {
       }
       return String(a.id).localeCompare(String(b.id));
     });
-  }, [favTournaments, liveMatches, iccLiveMatches]);
+  }, [favTournaments, adminLiveMatches, liveMatches, iccLiveMatches]);
 
   const liveMatchCards = filteredLivePool.slice(0, 3);
   const upcomingMatchCards = upcomingMatches.slice(0, 6);
@@ -693,55 +847,9 @@ export function Dashboard() {
               </GlassCard>
             )}
 
-            {liveMatchCards.map((match, i) => {
-              const teamA = getTeamLogoProps(match.teamA);
-              const teamB = getTeamLogoProps(match.teamB);
-              const matchRouteId = match.id;
-
-              return (
-              <motion.div
-                key={match.id}
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: 0.3 + i * 0.1 }}
-              >
-                <GlassCard className="p-5 cursor-pointer" hover onClick={() => navigate(`/match/${match.id}`)}>
-                  <div className="flex items-center justify-between mb-4">
-                    <span className="text-xs font-semibold text-white/40">{match.league}</span>
-                    <div className="flex items-center gap-3">
-                      <span className="text-white/40 text-xs">{match.date}</span>
-                      <button
-                        onClick={(e) => { e.stopPropagation(); navigate(`/lounge/${matchRouteId}`); }}
-                        className="px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5"
-                        style={{ background: "linear-gradient(135deg, rgba(124,77,255,0.3), rgba(255,77,141,0.3))", border: "1px solid rgba(124,77,255,0.4)", color: "#e0d0ff" }}
-                      >
-                        <Users size={12} />
-                        Join Lounge
-                      </button>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-4">
-                    <div className="flex-1">
-                      <div className="flex items-center justify-between mb-2">
-                        <div className="flex items-center gap-2">
-                          <TeamLogo teamId={teamA.teamId} short={teamA.short} size={28} />
-                          <span className="text-white font-bold">{match.teamA}</span>
-                        </div>
-                        <span className="text-white font-black text-sm md:text-base">{match.score}</span>
-                      </div>
-                      <div className="h-px my-2" style={{ background: "rgba(255,255,255,0.06)" }} />
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <TeamLogo teamId={teamB.teamId} short={teamB.short} size={28} />
-                          <span className="text-white font-bold">{match.teamB}</span>
-                        </div>
-                        <span className="text-white/60 text-xs uppercase">{match.status}</span>
-                      </div>
-                    </div>
-                  </div>
-                </GlassCard>
-              </motion.div>
-            );})}
+            {liveMatchCards.map((match, i) => (
+              <PremiumLiveMatchCard key={match.id} match={match} index={i} />
+            ))}
           </div>
         </div>
 

@@ -14,6 +14,7 @@ import { cricketApi } from "../../services/cricketApi";
 import { safeArray, isUpcomingStatus } from "../../services/cricketUi";
 import { IPL_PLAYER_IMAGES } from "../../data/ipl2026";
 import { IPL_STANDINGS } from "../../data/ipl2026";
+import { useMatchStore } from "../../../contexts/MatchContext";
 
 /* ─── Types ─── */
 interface Room {
@@ -51,9 +52,30 @@ const parseMatchId = (matchId: string) => {
   return { team1: "TEAM A", team2: "TEAM B" };
 };
 
+const parseRunsAndOvers = (value: unknown): { runsText: string; oversText: string } => {
+  const raw = String(value || "").trim();
+  if (!raw) return { runsText: "Yet to bat", oversText: "" };
+  const compact = raw.match(/^\s*(\d{1,3})\s*[-/]\s*(\d{2,}(?:\.\d+)?)\s*$/);
+  if (compact) {
+    const runs = String(compact[1] || "").trim();
+    const tail = String(compact[2] || "").trim();
+    if (tail.includes(".") && tail.length >= 3) {
+      const wkts = tail.slice(0, 1);
+      const overs = tail.slice(1);
+      return { runsText: `${runs}-${wkts}`, oversText: overs };
+    }
+  }
+  const match = raw.match(/^\s*([0-9]+\s*[-/]\s*[0-9]+|[0-9]+)\s*(?:\(([^)]+)\))?\s*$/);
+  if (match) {
+    return { runsText: String(match[1] || "-").trim(), oversText: String(match[2] || "").trim() };
+  }
+  return { runsText: raw, oversText: "" };
+};
+
 export function MatchLounge() {
   const { matchId } = useParams<{ matchId: string }>();
   const navigate = useNavigate();
+  const { adminMatches, liveSnapshotsByMatchId } = useMatchStore();
   const [tab, setTab] = useState<"public" | "private">("public");
   const [searchCode, setSearchCode] = useState("");
   const [searchResult, setSearchResult] = useState<Room | null>(null);
@@ -62,11 +84,12 @@ export function MatchLounge() {
   const [newRoomName, setNewRoomName] = useState("");
   const [generatedCode, setGeneratedCode] = useState("");
   const [codeCopied, setCodeCopied] = useState(false);
-  const [matchData, setMatchData] = useState<any>(null);
+  const [matchPayload, setMatchPayload] = useState<any>(null);
 
+  const match = matchPayload?.match || null;
   const parsedTeams = parseMatchId(matchId || "");
-  const team1 = String(matchData?.team1 || parsedTeams.team1 || "TEAM A").toUpperCase();
-  const team2 = String(matchData?.team2 || parsedTeams.team2 || "TEAM B").toUpperCase();
+  const team1 = String(match?.team1 || parsedTeams.team1 || "TEAM A").toUpperCase();
+  const team2 = String(match?.team2 || parsedTeams.team2 || "TEAM B").toUpperCase();
   const matchName = `${team1} vs ${team2}`;
   const publicRooms = generatePublicRooms(matchName);
   const privateRooms = generatePrivateRooms(matchName);
@@ -74,6 +97,11 @@ export function MatchLounge() {
 
   const teamALogo = getTeamLogoProps(team1);
   const teamBLogo = getTeamLogoProps(team2);
+
+  const score1 = parseRunsAndOvers(match?.team1Score);
+  const score2 = parseRunsAndOvers(match?.team2Score);
+  const overs1 = score1.oversText || String(match?.team1Overs || "").trim();
+  const overs2 = score2.oversText || String(match?.team2Overs || "").trim();
 
   // Look up team standings for win probability
   const team1Standing = IPL_STANDINGS.find(s => s.short === team1);
@@ -89,10 +117,20 @@ export function MatchLounge() {
 
     const loadMatch = async () => {
       try {
-        const detail: any = await cricketApi.getMatchDetails(matchId || "", true);
-        const found = detail?.match || null;
-        if (active && found) {
-          setMatchData(found);
+        if (!matchId) return;
+        const adminMatch = adminMatches.find((m) => m.id === matchId);
+        const isAdminLive = Boolean(adminMatch && adminMatch.type === "live" && adminMatch.sourceUrl);
+        const adminSnapshot = isAdminLive ? liveSnapshotsByMatchId[matchId] : null;
+        if (active && isAdminLive && adminSnapshot?.match) {
+          setMatchPayload({ match: adminSnapshot.match, scoreboard: adminSnapshot.scoreboard || null });
+          return;
+        }
+
+        const detail: any = isAdminLive
+          ? await cricketApi.getMatchDetailsByUrl(String(adminMatch?.sourceUrl || ""), true)
+          : await cricketApi.getMatchDetails(matchId, true);
+        if (active) {
+          setMatchPayload({ match: detail?.match || null, scoreboard: detail?.scoreboard || null });
         }
       } catch {}
     };
@@ -102,7 +140,7 @@ export function MatchLounge() {
     return () => {
       active = false;
     };
-  }, [matchId]);
+  }, [adminMatches, liveSnapshotsByMatchId, matchId]);
 
   const handleSearch = () => {
     const code = searchCode.trim().toUpperCase();
@@ -169,22 +207,24 @@ export function MatchLounge() {
               <TeamLogo teamId={teamALogo.teamId} short={teamALogo.short} size={64} />
               <div>
                 <p className="text-white font-black text-2xl">{team1}</p>
-                <p className="text-[#3BD4E7] text-sm font-mono">{matchData?.team1Score || "Yet to bat"}</p>
+                <p className="text-[#3BD4E7] text-sm font-mono font-bold">{score1.runsText}</p>
+                {overs1 && <p className="text-white/30 text-xs">{overs1} ov</p>}
               </div>
             </div>
 
             {/* VS / Score */}
             <div className="text-center">
               <div className="text-white font-black text-3xl mb-1">VS</div>
-              <p className="text-white/40 text-xs">{matchData?.venue || "Venue TBA"}</p>
-              <p className="text-white/30 text-xs mt-1">{matchData?.date || ""} {matchData?.startTime || ""}</p>
+              <p className="text-white/40 text-xs">{match?.venue || "Venue TBA"}</p>
+              <p className="text-white/30 text-xs mt-1">{match?.date || ""} {match?.startTime || ""}</p>
             </div>
 
             {/* Team B */}
             <div className="flex items-center gap-4 justify-end">
               <div className="text-right">
                 <p className="text-white font-black text-2xl">{team2}</p>
-                <p className="text-[#3BD4E7] text-sm font-mono">{matchData?.team2Score || "Yet to bat"}</p>
+                <p className="text-[#3BD4E7] text-sm font-mono font-bold">{score2.runsText}</p>
+                {overs2 && <p className="text-white/30 text-xs">{overs2} ov</p>}
               </div>
               <TeamLogo teamId={teamBLogo.teamId} short={teamBLogo.short} size={64} />
             </div>
@@ -209,13 +249,13 @@ export function MatchLounge() {
           </div>
 
           {/* CRR + Match Status */}
-          {matchData?.status && (
+          {match?.status && (
             <div className="mt-4 flex items-center gap-3">
               <span className="px-3 py-1 rounded-lg text-xs font-semibold" style={{ background: "rgba(59,212,231,0.15)", border: "1px solid rgba(59,212,231,0.3)", color: "#3BD4E7" }}>
-                {matchData.status}
+                {match?.status}
               </span>
-              {matchData?.result && (
-                <span className="text-white/50 text-xs">{matchData.result}</span>
+              {match?.result && (
+                <span className="text-white/50 text-xs">{match?.result}</span>
               )}
             </div>
           )}

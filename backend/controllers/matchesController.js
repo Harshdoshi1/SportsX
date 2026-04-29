@@ -79,4 +79,30 @@ export const matchesController = {
       next(error);
     }
   },
+
+  async getMatchDetailsByUrl(req, res, next) {
+    try {
+      const forceFresh = parseFresh(req.query);
+      const sourceUrl = String(req.query?.url || "").trim();
+      const tournamentId = String(req.query?.tournamentId || "").trim() || undefined;
+      const series = String(req.query?.series || "").trim() || undefined;
+
+      if (!sourceUrl) {
+        return res.status(400).json({
+          success: false,
+          message: "query parameter 'url' is required",
+        });
+      }
+
+      const result = await matchesService.getMatchDetailsByUrl(sourceUrl, {
+        forceFresh,
+        tournamentId,
+        series,
+      });
+
+      ok(res, { match: result.data.match, scoreboard: result.data.scoreboard }, result.meta);
+    } catch (error) {
+      next(error);
+    }
+  },
 };

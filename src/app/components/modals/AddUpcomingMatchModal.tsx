@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { motion } from "motion/react";
-import { X, Calendar, Clock, Link as LinkIcon, Trophy, Tag, Loader2 } from "lucide-react";
-import { SPORT_CATEGORY_OPTIONS, sportKeyFromCategory, useMatchStore, type SportCategory } from "../../../contexts/MatchContext";
+import { X, Clock, Link as LinkIcon, Loader2 } from "lucide-react";
+import { sportKeyFromCategory, useMatchStore, type SportCategory } from "../../../contexts/MatchContext";
+import { cricketApi } from "../../services/cricketApi";
 
 interface AddUpcomingMatchModalProps {
   isOpen: boolean;
@@ -14,11 +15,6 @@ interface AddUpcomingMatchModalProps {
 export function AddUpcomingMatchModal({ isOpen, onClose, onSuccess, defaultCategory, defaultSectionLabel }: AddUpcomingMatchModalProps) {
   const { addUpcomingMatch } = useMatchStore();
   const [url, setUrl] = useState("");
-  const [category, setCategory] = useState<SportCategory>(defaultCategory || "Cricket > IPL");
-  const [sectionLabel, setSectionLabel] = useState(defaultSectionLabel || "IPL 2026");
-  const [title, setTitle] = useState("");
-  const [date, setDate] = useState("");
-  const [time, setTime] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -35,32 +31,24 @@ export function AddUpcomingMatchModal({ isOpen, onClose, onSuccess, defaultCateg
       return false;
     }
 
-    if (!title.trim()) {
-      setError("Match title is required");
-      return false;
-    }
-
-    if (title.length > 100) {
-      setError("Title must be 100 characters or less");
-      return false;
-    }
-
-    if (!date) {
-      setError("Date is required");
-      return false;
-    }
-
-    const selectedDate = new Date(date);
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    
-    if (selectedDate < today) {
-      setError("Date must be in the future");
-      return false;
-    }
-
     setError("");
     return true;
+  };
+
+  const inferCategory = (payload: any): SportCategory => {
+    const tournamentId = String(payload?.match?.tournamentId || "").toLowerCase();
+    if (tournamentId === "ipl") return "Cricket > IPL";
+    if (tournamentId === "icc") return "Cricket > ICC";
+    return defaultCategory || "Cricket > Other";
+  };
+
+  const deriveScheduleIso = (payload: any) => {
+    const rawDate = String(payload?.match?.date || "").trim();
+    const parsed = new Date(rawDate);
+    if (Number.isFinite(parsed.getTime())) {
+      return parsed.toISOString();
+    }
+    return new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString();
   };
 
   const handleSubmit = async () => {
@@ -72,13 +60,20 @@ export function AddUpcomingMatchModal({ isOpen, onClose, onSuccess, defaultCateg
     setError("");
 
     try {
-      const scheduledAtIso = new Date(`${date}T${time || "00:00"}:00`).toISOString();
+      const details: any = await cricketApi.getMatchDetailsByUrl(url, true);
+      const team1 = String(details?.match?.team1 || "Team A").trim();
+      const team2 = String(details?.match?.team2 || "Team B").trim();
+      const category = inferCategory(details);
+      const sectionLabel = String(details?.match?.series || defaultSectionLabel || "Upcoming").trim() || "Upcoming";
+      const title = `${team1} vs ${team2}`;
+      const scheduledAtIso = deriveScheduleIso(details);
+
       const saved = addUpcomingMatch({
         sourceUrl: url,
         sport: sportKeyFromCategory(category),
         category,
-        sectionLabel: sectionLabel.trim() || "Upcoming",
-        matchTitle: title.trim(),
+        sectionLabel,
+        matchTitle: title,
         scheduledAtIso,
       });
       onSuccess(saved);
@@ -86,11 +81,6 @@ export function AddUpcomingMatchModal({ isOpen, onClose, onSuccess, defaultCateg
       
       // Reset form
       setUrl("");
-      setTitle("");
-      setDate("");
-      setTime("");
-      setCategory(defaultCategory || "Cricket > IPL");
-      setSectionLabel(defaultSectionLabel || "IPL 2026");
     } catch (err: any) {
       setError(err.message || "Failed to add match. Please try again.");
     } finally {
@@ -164,108 +154,9 @@ export function AddUpcomingMatchModal({ isOpen, onClose, onSuccess, defaultCateg
             />
           </div>
 
-          {/* Sport */}
-          <div>
-            <label className="text-white/70 text-sm font-medium mb-2 flex items-center gap-2">
-              <Trophy size={14} />
-              Sport
-            </label>
-            <select
-              value={category}
-              onChange={(e) => setCategory(e.target.value as SportCategory)}
-              className="w-full px-4 py-3 rounded-xl text-white outline-none text-sm transition-all"
-              style={{
-                background: "rgba(255,255,255,0.05)",
-                border: "1px solid rgba(255,255,255,0.08)",
-              }}
-            >
-              {SPORT_CATEGORY_OPTIONS.map((opt) => (
-                <option key={opt} value={opt}>{opt}</option>
-              ))}
-            </select>
-          </div>
-
-          {/* Section Label */}
-          <div>
-            <label className="text-white/70 text-sm font-medium mb-2 flex items-center gap-2">
-              <Tag size={14} />
-              Section Label
-            </label>
-            <input
-              value={sectionLabel}
-              onChange={(e) => setSectionLabel(e.target.value)}
-              className="w-full px-4 py-3 rounded-xl text-white outline-none text-sm transition-all"
-              style={{
-                background: "rgba(255,255,255,0.05)",
-                border: "1px solid rgba(255,255,255,0.08)",
-              }}
-              placeholder='e.g., "IPL 2026"'
-            />
-          </div>
-
-          {/* Title */}
-          <div>
-            <label className="text-white/70 text-sm font-medium mb-2 block">
-              Match Title
-            </label>
-            <input
-              type="text"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="MI vs CSK - Match 1"
-              maxLength={100}
-              className="w-full px-4 py-3 rounded-xl text-white placeholder-white/30 outline-none text-sm transition-all"
-              style={{
-                background: "rgba(255,255,255,0.05)",
-                border: "1px solid rgba(255,255,255,0.08)",
-              }}
-              onFocus={(e) => {
-                e.target.style.borderColor = "rgba(59,212,231,0.5)";
-                e.target.style.boxShadow = "0 0 20px rgba(59,212,231,0.1)";
-              }}
-              onBlur={(e) => {
-                e.target.style.borderColor = "rgba(255,255,255,0.08)";
-                e.target.style.boxShadow = "none";
-              }}
-            />
-            <p className="text-white/30 text-xs mt-1">{title.length}/100 characters</p>
-          </div>
-
-          {/* Date and Time */}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="text-white/70 text-sm font-medium mb-2 flex items-center gap-2">
-                <Calendar size={14} />
-                Date
-              </label>
-              <input
-                type="date"
-                value={date}
-                onChange={(e) => setDate(e.target.value)}
-                className="w-full px-4 py-3 rounded-xl text-white outline-none text-sm transition-all"
-                style={{
-                  background: "rgba(255,255,255,0.05)",
-                  border: "1px solid rgba(255,255,255,0.08)",
-                }}
-              />
-            </div>
-            <div>
-              <label className="text-white/70 text-sm font-medium mb-2 flex items-center gap-2">
-                <Clock size={14} />
-                Time (IST)
-              </label>
-              <input
-                type="time"
-                value={time}
-                onChange={(e) => setTime(e.target.value)}
-                className="w-full px-4 py-3 rounded-xl text-white outline-none text-sm transition-all"
-                style={{
-                  background: "rgba(255,255,255,0.05)",
-                  border: "1px solid rgba(255,255,255,0.08)",
-                }}
-              />
-            </div>
-          </div>
+          <p className="text-xs text-white/45">
+            Teams, title, and scorecard are auto-fetched from the provided URL and its /match-scorecard page.
+          </p>
 
           {/* Error Message */}
           {error && (

@@ -15,6 +15,7 @@ import { IPL_PLAYER_IMAGES, IPL_STANDINGS } from "../../data/ipl2026";
 import { ImageWithFallback } from "../figma/ImageWithFallback";
 import { cricketApi } from "../../services/cricketApi";
 import { safeArray } from "../../services/cricketUi";
+import { useMatchStore } from "../../../contexts/MatchContext";
 
 /* ─── Types ─── */
 interface Message {
@@ -81,6 +82,26 @@ const getPlayerImage = (name: string) => {
   return IPL_PLAYER_IMAGES[slug] || null;
 };
 
+const parseRunsAndOvers = (value: unknown): { runsText: string; oversText: string } => {
+  const raw = String(value || "").trim();
+  if (!raw) return { runsText: "Yet to bat", oversText: "" };
+  const compact = raw.match(/^\s*(\d{1,3})\s*[-/]\s*(\d{2,}(?:\.\d+)?)\s*$/);
+  if (compact) {
+    const runs = String(compact[1] || "").trim();
+    const tail = String(compact[2] || "").trim();
+    if (tail.includes(".") && tail.length >= 3) {
+      const wkts = tail.slice(0, 1);
+      const overs = tail.slice(1);
+      return { runsText: `${runs}-${wkts}`, oversText: overs };
+    }
+  }
+  const match = raw.match(/^\s*([0-9]+\s*[-/]\s*[0-9]+|[0-9]+)\s*(?:\(([^)]+)\))?\s*$/);
+  if (match) {
+    return { runsText: String(match[1] || "-").trim(), oversText: String(match[2] || "").trim() };
+  }
+  return { runsText: raw, oversText: "" };
+};
+
 /* ─── Audio Wave Animation ─── */
 function AudioWaves({ active }: { active: boolean }) {
   if (!active) return null;
@@ -133,13 +154,22 @@ function SpeakingRing({ active, children }: { active: boolean; children: React.R
 export function LoungeRoom() {
   const { matchId, roomId } = useParams<{ matchId: string; roomId: string }>();
   const navigate = useNavigate();
+  const { adminMatches, liveSnapshotsByMatchId } = useMatchStore();
 
   const parsedTeams = parseMatchId(matchId || "");
   const [resolvedTeams, setResolvedTeams] = useState(parsedTeams);
+  const [matchPayload, setMatchPayload] = useState<any>(null);
+  const match = matchPayload?.match || null;
+  const scoreboard = matchPayload?.scoreboard || null;
   const team1 = resolvedTeams.team1;
   const team2 = resolvedTeams.team2;
   const teamALogo = getTeamLogoProps(team1);
   const teamBLogo = getTeamLogoProps(team2);
+
+  const score1 = parseRunsAndOvers(match?.team1Score);
+  const score2 = parseRunsAndOvers(match?.team2Score);
+  const overs1 = score1.oversText || String(match?.team1Overs || "").trim();
+  const overs2 = score2.oversText || String(match?.team2Overs || "").trim();
 
   // Sample batsman/bowler for mini scorecard
   const team1Standing = IPL_STANDINGS.find(s => s.short === team1);
@@ -166,11 +196,26 @@ export function LoungeRoom() {
 
     const loadTeams = async () => {
       try {
-        const detail: any = await cricketApi.getMatchDetails(matchId || "", true);
+        if (!matchId) return;
+        const adminMatch = adminMatches.find((m) => m.id === matchId);
+        const isAdminLive = Boolean(adminMatch && adminMatch.type === "live" && adminMatch.sourceUrl);
+        const adminSnapshot = isAdminLive ? liveSnapshotsByMatchId[matchId] : null;
+        if (active && isAdminLive && adminSnapshot?.match) {
+          const teamA = String(adminSnapshot.match?.team1 || parsedTeams.team1 || "TEAM A").toUpperCase();
+          const teamB = String(adminSnapshot.match?.team2 || parsedTeams.team2 || "TEAM B").toUpperCase();
+          setResolvedTeams({ team1: teamA, team2: teamB });
+          setMatchPayload({ match: adminSnapshot.match, scoreboard: adminSnapshot.scoreboard || null });
+          return;
+        }
+
+        const detail: any = isAdminLive
+          ? await cricketApi.getMatchDetailsByUrl(String(adminMatch?.sourceUrl || ""), true)
+          : await cricketApi.getMatchDetails(matchId || "", true);
         const teamA = String(detail?.match?.team1 || parsedTeams.team1 || "TEAM A").toUpperCase();
         const teamB = String(detail?.match?.team2 || parsedTeams.team2 || "TEAM B").toUpperCase();
         if (active) {
           setResolvedTeams({ team1: teamA, team2: teamB });
+          setMatchPayload({ match: detail?.match || null, scoreboard: detail?.scoreboard || null });
         }
       } catch {
         if (active) {
@@ -184,7 +229,7 @@ export function LoungeRoom() {
     return () => {
       active = false;
     };
-  }, [matchId]);
+  }, [adminMatches, liveSnapshotsByMatchId, matchId]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -262,34 +307,55 @@ export function LoungeRoom() {
     setShowReactions(false);
   };
 
-  const handleCopyCode = () => {
-    navigator.clipboard.writeText(roomCode);
-    setCodeCopied(true);
+  const handleCopyCode = async () => {
+    try {
+      await navigator.clipboard.writeText(roomCode);
+      setCodeCopied(true);
+    } catch {}
     setTimeout(() => setCodeCopied(false), 2000);
   };
 
-  const batsmanData = teamAPlayers
-    .slice()
-    .sort((a, b) => Number(b?.runs || 0) - Number(a?.runs || 0))
-    .slice(0, 2)
-    .map((player) => ({
-      name: String(player?.name || "Not available"),
-      runs: Number(player?.runs || 0),
-      balls: 0,
-      image: player?.image || getPlayerImage(String(player?.name || "")),
-    }));
+  const liveBatters = safeArray<any>(scoreboard?.batters).slice(0, 2);
+  const batsmanData = liveBatters.length
+    ? liveBatters.map((player) => ({
+        name: String(player?.name || ""),
+        runs: Number(player?.runs || 0),
+        balls: Number(player?.balls || 0),
+        image: getPlayerImage(String(player?.name || "")),
+      }))
+    : teamAPlayers
+        .slice()
+        .sort((a, b) => Number(b?.runs || 0) - Number(a?.runs || 0))
+        .slice(0, 2)
+        .map((player) => ({
+          name: String(player?.name || ""),
+          runs: Number(player?.runs || 0),
+          balls: 0,
+          image: player?.image || getPlayerImage(String(player?.name || "")),
+        }));
 
-  const bowlerBase = teamBPlayers
-    .slice()
-    .sort((a, b) => Number(b?.wickets || 0) - Number(a?.wickets || 0))[0];
+  const liveBowler = safeArray<any>(scoreboard?.bowlers)[0] || null;
+  const bowlerData = liveBowler?.name
+    ? {
+        name: String(liveBowler?.name || "Not available"),
+        overs: String(liveBowler?.overs || "-"),
+        runs: Number(String(liveBowler?.figures || "").split("-")[1] || 0),
+        wickets: Number(String(liveBowler?.figures || "").split("-")[0] || 0),
+        image: getPlayerImage(String(liveBowler?.name || "")),
+      }
+    : (() => {
+        const bowlerBase = teamBPlayers
+          .slice()
+          .sort((a, b) => Number(b?.wickets || 0) - Number(a?.wickets || 0))[0];
 
-  const bowlerData = {
-    name: String(bowlerBase?.name || "Not available"),
-    overs: "-",
-    runs: Number(bowlerBase?.runs || 0),
-    wickets: Number(bowlerBase?.wickets || 0),
-    image: bowlerBase?.image || getPlayerImage(String(bowlerBase?.name || "")),
-  };
+        return {
+          name: String(bowlerBase?.name || "Not available"),
+          overs: "-",
+          runs: Number(bowlerBase?.runs || 0),
+          wickets: Number(bowlerBase?.wickets || 0),
+          image: bowlerBase?.image || getPlayerImage(String(bowlerBase?.name || "")),
+        };
+      })();
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.5 }} className="min-h-screen">
@@ -322,7 +388,10 @@ export function LoungeRoom() {
               <TeamLogo teamId={teamALogo.teamId} short={teamALogo.short} size={36} />
               <div>
                 <p className="text-white font-black text-lg">{team1}</p>
-                <p className="text-[#3BD4E7] text-sm font-mono font-bold">167/4 <span className="text-white/30 text-xs font-normal">18.2 ov</span></p>
+                <p className="text-[#3BD4E7] text-sm font-mono font-bold">
+                  {score1.runsText}
+                  {overs1 && <span className="text-white/30 text-xs font-normal"> {overs1} ov</span>}
+                </p>
               </div>
             </div>
             <div className="flex items-center gap-2">
@@ -334,12 +403,15 @@ export function LoungeRoom() {
               >
                 <Radio size={10} /> LIVE
               </motion.div>
-              <span className="text-white/30 text-xs">CRR: 9.10</span>
+              <span className="text-white/30 text-xs">CRR: {String(scoreboard?.liveStats?.currentRunRate || "-")}</span>
             </div>
             <div className="flex items-center gap-3">
               <div className="text-right">
                 <p className="text-white font-black text-lg">{team2}</p>
-                <p className="text-white/40 text-sm">Yet to bat</p>
+                <p className="text-white/40 text-sm">
+                  {score2.runsText === "Yet to bat" ? "Yet to bat" : score2.runsText}
+                  {overs2 && <span className="text-white/30 text-xs"> {overs2} ov</span>}
+                </p>
               </div>
               <TeamLogo teamId={teamBLogo.teamId} short={teamBLogo.short} size={36} />
             </div>

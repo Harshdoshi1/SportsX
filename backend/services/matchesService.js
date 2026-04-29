@@ -232,4 +232,42 @@ export const matchesService = {
       },
     };
   },
+
+  async getMatchDetailsByUrl(sourceUrl, options = {}) {
+    const url = String(sourceUrl || "").trim();
+    if (!url) {
+      throw new Error("source url is required");
+    }
+
+    const forceFresh = Boolean(options?.forceFresh);
+    const crexLiveMatch = await crexLiveMatchService.getLiveMatchByUrl(url, {
+      forceFresh,
+      tournamentId: options?.tournamentId,
+      series: options?.series,
+    });
+
+    const normalizedMatch = normalizeCrexLiveMatch(crexLiveMatch);
+    return {
+      data: {
+        match: {
+          ...normalizedMatch,
+          raw: normalizedMatch?.raw || crexLiveMatch,
+        },
+        scoreboard: {
+          innings: crexLiveMatch?.scoreboard?.innings || [],
+          events: crexLiveMatch?.scoreboard?.events || crexLiveMatch?.scoreboard?.commentary || [],
+          commentary: crexLiveMatch?.scoreboard?.commentary || [],
+          batters: crexLiveMatch?.scoreboard?.batters || [],
+          bowlers: crexLiveMatch?.scoreboard?.bowlers || [],
+          liveStats: crexLiveMatch?.scoreboard?.liveStats || {},
+        },
+      },
+      meta: {
+        provider: "crex-live-scraper",
+        cacheHit: Boolean(crexLiveMatch?._meta?.cacheHit),
+        fetchedAt: new Date().toISOString(),
+        stale: Boolean(crexLiveMatch?._meta?.stale),
+      },
+    };
+  },
 };

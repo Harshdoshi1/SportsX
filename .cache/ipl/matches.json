@@ -1,21 +1,6 @@
 {
-  "updatedAt": "2026-04-28T13:23:57.022Z",
+  "updatedAt": "2026-04-29T10:41:42.715Z",
   "data": [
-    {
-      "id": "2480",
-      "matchNo": "Match 40",
-      "team1": "PBKS",
-      "team2": "RR",
-      "team1Name": "Punjab Kings",
-      "team2Name": "Rajasthan Royals",
-      "team1Score": null,
-      "team2Score": null,
-      "date": "APR, TUE 28",
-      "startTime": "7:30 pm IST",
-      "venue": "New International Cricket Stadium, New Chandigarh",
-      "status": "Upcoming",
-      "result": null
-    },
     {
       "id": "2481",
       "matchNo": "Match 41",
@@ -465,6 +450,21 @@
       "venue": "Eden Gardens, Kolkata",
       "status": "Upcoming",
       "result": null
+    },
+    {
+      "id": "2480",
+      "matchNo": "Match 40",
+      "team1": "PBKS",
+      "team2": "RR",
+      "team1Name": "Punjab Kings",
+      "team2Name": "Rajasthan Royals",
+      "team1Score": "222/4 (20.0 OV)",
+      "team2Score": "228/4 (19.2 OV )",
+      "date": "APR, TUE 28",
+      "startTime": "7:30 pm IST",
+      "venue": "New International Cricket Stadium, New Chandigarh",
+      "status": "Completed",
+      "result": "Rajasthan Royals Won by 6 Wickets"
     },
     {
       "id": "2479",

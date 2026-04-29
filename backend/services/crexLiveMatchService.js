@@ -1,4 +1,6 @@
 import puppeteer from "puppeteer";
+import crypto from "node:crypto";
+import { supabaseLiveScoreCacheService } from "./supabaseLiveScoreCacheService.js";
 
 const LIVE_MATCH_SOURCES = [
   {
@@ -17,9 +19,26 @@ const LIVE_MATCH_SOURCES = [
   },
 ];
 
-const CACHE_TTL_MS = 1500;
+const CACHE_TTL_MS = 12_000;
 const cacheByMatchId = new Map();
 const inFlightByMatchId = new Map();
+
+let sharedBrowserPromise = null;
+
+const normalizeSourceUrl = (value) => {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  return raw.replace(/\/+$/, "");
+};
+
+const toScorecardUrl = (sourceUrl) => {
+  const base = normalizeSourceUrl(sourceUrl);
+  if (!base) return "";
+  if (base.toLowerCase().includes("/match-scorecard")) {
+    return base;
+  }
+  return `${base}/match-scorecard`;
+};
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -171,6 +190,31 @@ const extractCrexCode = (url) =>
     .match(/match-updates-([A-Za-z0-9]+)/i)?.[1]
     ?.toLowerCase() || "live";
 
+const hashUrl = (value) => crypto.createHash("md5").update(String(value || "")).digest("hex").slice(0, 10);
+
+const inferTournamentId = (sourceUrl, fallback = "admin") => {
+  const raw = String(sourceUrl || "").toLowerCase();
+  if (raw.includes("indian-premier-league") || raw.includes("-ipl-") || raw.includes("/ipl")) {
+    return "ipl";
+  }
+  if (raw.includes("icc")) {
+    return "icc";
+  }
+  return String(fallback || "admin").toLowerCase();
+};
+
+const buildSourceFromUrl = (sourceUrl, defaults = {}) => {
+  const normalized = normalizeSourceUrl(sourceUrl);
+  const tournamentId = inferTournamentId(normalized, defaults?.tournamentId || "admin");
+  const code = extractCrexCode(normalized);
+  return {
+    sourceId: defaults?.sourceId || `${tournamentId}-${code}-${hashUrl(normalized)}`,
+    tournamentId,
+    series: String(defaults?.series || "Live Feed").trim(),
+    sourceUrl: normalized,
+  };
+};
+
 const buildMatchId = (source) => `${source.tournamentId}-${extractCrexCode(source.sourceUrl)}`;
 
 const sourceByMatchId = new Map(LIVE_MATCH_SOURCES.map((source) => [buildMatchId(source), source]));
@@ -301,7 +345,7 @@ const parseBatters = (text) => {
     });
   }
 
-  return uniqueByKey(rows, (row) => `${row.name}:${row.runs}:${row.balls}`).slice(0, 4);
+  return uniqueByKey(rows, (row) => `${row.name}:${row.runs}:${row.balls}`).slice(0, 22);
 };
 
 const parseBowlers = (text) => {
@@ -318,7 +362,69 @@ const parseBowlers = (text) => {
     });
   }
 
-  return uniqueByKey(rows, (row) => `${row.name}:${row.figures}:${row.overs}`).slice(0, 4);
+  return uniqueByKey(rows, (row) => `${row.name}:${row.figures}:${row.overs}`).slice(0, 22);
+};
+
+const parseScorecardInnings = (lines) => {
+  const rows = [];
+  const regex = /\b([A-Z]{2,}(?:-[A-Z])?)\s+(\d{1,3}[-/]\d{1,2})\s*(?:\((\d{1,2}(?:\.\d+)?)\s*(?:ov|overs)?\))?/i;
+
+  for (const line of lines) {
+    const hit = String(line || "").match(regex);
+    if (!hit) continue;
+    rows.push({
+      team: String(hit[1] || "").trim(),
+      score: String(hit[2] || "").trim(),
+      overs: String(hit[3] || "-").trim(),
+    });
+  }
+
+  return uniqueByKey(rows, (row) => `${row.team}:${row.score}:${row.overs}`)
+    .slice(0, 8)
+    .map((row) => ({
+      title: `${row.team} Innings`,
+      team: row.team,
+      score: row.score,
+      overs: row.overs,
+    }));
+};
+
+const parseScorecardPayload = (text) => {
+  const normalized = String(text || "").replace(/\r/g, "");
+  const lines = normalized
+    .split("\n")
+    .map((line) => String(line || "").replace(/\s+/g, " ").trim())
+    .filter(Boolean);
+
+  const innings = parseScorecardInnings(lines);
+  const batters = parseBatters(normalized);
+  const bowlers = parseBowlers(normalized);
+
+  return {
+    innings,
+    batters,
+    bowlers,
+  };
+};
+
+const scrapeScorecardPage = async (browser, sourceUrl) => {
+  const scorecardUrl = toScorecardUrl(sourceUrl);
+  if (!scorecardUrl) {
+    return null;
+  }
+
+  const page = await browser.newPage();
+  await configurePage(page);
+  try {
+    await page.goto(scorecardUrl, { waitUntil: "domcontentloaded", timeout: 45000 });
+    await sleep(1200);
+    const bodyText = await page.evaluate(() => String(document.body?.innerText || ""));
+    return parseScorecardPayload(bodyText);
+  } catch {
+    return null;
+  } finally {
+    await page.close();
+  }
 };
 
 const parseCommentary = (text) => {
@@ -362,11 +468,32 @@ const parseStatus = (text) => {
   return "Live";
 };
 
+const pickFirstMatch = (value, patterns) => {
+  const raw = String(value || "");
+  for (const pattern of patterns) {
+    const hit = raw.match(pattern);
+    if (hit) {
+      return hit;
+    }
+  }
+  return null;
+};
+
 const launchBrowser = async () =>
   puppeteer.launch({
     headless: true,
     args: ["--no-sandbox", "--disable-setuid-sandbox"],
   });
+
+const getSharedBrowser = async () => {
+  if (!sharedBrowserPromise) {
+    sharedBrowserPromise = launchBrowser().catch((error) => {
+      sharedBrowserPromise = null;
+      throw error;
+    });
+  }
+  return sharedBrowserPromise;
+};
 
 const configurePage = async (page) => {
   await page.setUserAgent(
@@ -379,13 +506,10 @@ const configurePage = async (page) => {
 };
 
 const scrapeCrexMatch = async (source) => {
-  let browser;
-
+  const fallbackTeams = parseTeamsFromUrl(source.sourceUrl);
+  const browser = await getSharedBrowser();
+  const page = await browser.newPage();
   try {
-    const fallbackTeams = parseTeamsFromUrl(source.sourceUrl);
-
-    browser = await launchBrowser();
-    const page = await browser.newPage();
     await configurePage(page);
 
     await page.goto(source.sourceUrl, { waitUntil: "networkidle2", timeout: 60000 });
@@ -400,6 +524,8 @@ const scrapeCrexMatch = async (source) => {
 
       return { text, lines };
     });
+
+    const scorecardPayload = await scrapeScorecardPage(browser, source.sourceUrl);
 
     const lines = payload?.lines || [];
     const pageText = String(payload?.text || "");
@@ -438,18 +564,50 @@ const scrapeCrexMatch = async (source) => {
 
     const currentRunRate =
       structured?.liveStats?.currentRunRate || pageText.match(/CRR\s*:\s*([0-9.]+)/i)?.[1] || null;
+    const requiredRunRate =
+      structured?.liveStats?.requiredRunRate || pageText.match(/RRR\s*:\s*([0-9.]+)/i)?.[1] || null;
+
+    const equationFallback =
+      structured?.liveStats?.equation ||
+      pickFirstMatch(pageText, [
+        /Need\s+\d+\s+runs?\s+in\s+\d+\s+balls?[^\n]*/i,
+        /Req(?:uired)?\s+\d+\s+in\s+\d+\s+balls?[^\n]*/i,
+      ])?.[0] ||
+      null;
+
+    const needHit = equationFallback
+      ? equationFallback.match(/Need\s+(\d+)\s+runs?\s+in\s+(\d+)\s+balls?/i)
+      : null;
+    const neededRuns = needHit ? Number(needHit[1]) : null;
+    const ballsRemaining = needHit ? Number(needHit[2]) : null;
+
+    const lastSixText =
+      pickFirstMatch(pageText, [
+        /Last\s*6\s*balls\s*:?\s*([^\n]+)/i,
+        /Last\s*Six\s*Balls\s*:?\s*([^\n]+)/i,
+      ])?.[1]?.trim() || null;
     const tossInfo = pageText.match(/([A-Z]{2,}(?:-[A-Z])?\s+opt\s+to\s+(?:Bat|Bowl))/i)?.[1] || null;
     const partnership =
       structured?.liveStats?.partnership || pageText.match(/P'?ship\s*:\s*([^\n]+)/i)?.[1]?.trim() || null;
     const lastWicket =
       structured?.liveStats?.lastWicket || pageText.match(/Last\s*Wkt\s*:\s*([^\n]+)/i)?.[1]?.trim() || null;
-    const batters = (structured?.batters?.length ? structured.batters : parseBatters(pageText)).slice(0, 4);
-    const bowlers = (structured?.bowlers?.length ? structured.bowlers : parseBowlers(pageText)).slice(0, 4);
+    const batters = scorecardPayload?.batters?.length
+      ? scorecardPayload.batters
+      : structured?.batters?.length
+        ? structured.batters
+        : parseBatters(pageText);
+    const bowlers = scorecardPayload?.bowlers?.length
+      ? scorecardPayload.bowlers
+      : structured?.bowlers?.length
+        ? structured.bowlers
+        : parseBowlers(pageText);
     const commentary = parseCommentary(pageText);
 
     const innings =
-      structured?.innings?.length > 0
-        ? structured.innings
+      scorecardPayload?.innings?.length > 0
+        ? scorecardPayload.innings
+        : structured?.innings?.length > 0
+          ? structured.innings
         : [
             {
               title: `${teams.team1} Innings`,
@@ -497,23 +655,25 @@ const scrapeCrexMatch = async (source) => {
         bowlers,
         liveStats: {
           currentRunRate,
-          requiredRunRate: structured?.liveStats?.requiredRunRate || null,
+          requiredRunRate,
           tossInfo,
           partnership,
           lastWicket,
-          equation: structured?.liveStats?.equation || null,
+          equation: equationFallback,
+          neededRuns,
+          ballsRemaining,
+          lastSixBalls: lastSixText,
         },
       },
     };
   } finally {
-    if (browser) {
-      await browser.close();
-    }
+    await page.close();
   }
 };
 
 const readMatchFromSource = async (source, options = {}) => {
   const matchId = buildMatchId(source);
+  const normalizedUrl = normalizeSourceUrl(source?.sourceUrl);
   const forceFresh = Boolean(options?.forceFresh);
   const now = Date.now();
   const cached = cacheByMatchId.get(matchId);
@@ -539,6 +699,28 @@ const readMatchFromSource = async (source, options = {}) => {
     };
   }
 
+  if (!forceFresh && normalizedUrl) {
+    const fromSupabase = await supabaseLiveScoreCacheService.getSnapshotBySourceUrl(normalizedUrl, {
+      maxAgeMs: 20_000,
+    });
+    if (fromSupabase?.payload?.match) {
+      const payloadMatch = fromSupabase.payload.match;
+      cacheByMatchId.set(matchId, {
+        data: payloadMatch,
+        expiresAt: Date.now() + CACHE_TTL_MS,
+        stale: Boolean(fromSupabase?.stale),
+      });
+      return {
+        ...payloadMatch,
+        _meta: {
+          cacheHit: true,
+          stale: Boolean(fromSupabase?.stale),
+          source: "supabase",
+        },
+      };
+    }
+  }
+
   const request = (async () => {
     try {
       const freshMatch = await scrapeCrexMatch(source);
@@ -547,6 +729,12 @@ const readMatchFromSource = async (source, options = {}) => {
         expiresAt: Date.now() + CACHE_TTL_MS,
         stale: false,
       });
+
+      await supabaseLiveScoreCacheService.upsertSnapshot(matchId, {
+        match: freshMatch,
+        scoreboard: freshMatch?.scoreboard || {},
+      });
+
       return {
         ...freshMatch,
         _meta: {
@@ -566,7 +754,58 @@ const readMatchFromSource = async (source, options = {}) => {
         };
       }
 
-      throw error;
+      if (normalizedUrl) {
+        const fallback = await supabaseLiveScoreCacheService.getSnapshotBySourceUrl(normalizedUrl, {
+          maxAgeMs: 5 * 60_000,
+        });
+        if (fallback?.payload?.match) {
+          return {
+            ...fallback.payload.match,
+            _meta: {
+              cacheHit: true,
+              stale: true,
+              source: "supabase-stale",
+            },
+          };
+        }
+      }
+
+      const fallbackTeams = parseTeamsFromUrl(source?.sourceUrl);
+      return {
+        id: matchId,
+        sourceUrl: source?.sourceUrl || null,
+        sport: "cricket",
+        series: source?.series || "Live Feed",
+        team1: fallbackTeams.team1,
+        team2: fallbackTeams.team2,
+        team1Name: fallbackTeams.team1,
+        team2Name: fallbackTeams.team2,
+        team1Score: null,
+        team2Score: null,
+        team1Overs: null,
+        team2Overs: null,
+        score: null,
+        status: "Live",
+        date: null,
+        startTime: "",
+        venue: null,
+        result: null,
+        tournamentId: source?.tournamentId || "admin",
+        fetchedAt: new Date().toISOString(),
+        scoreboard: {
+          innings: [],
+          events: [],
+          commentary: [],
+          batters: [],
+          bowlers: [],
+          liveStats: {},
+        },
+        _meta: {
+          cacheHit: false,
+          stale: true,
+          message: error?.message || "Live data temporarily unavailable",
+        },
+      };
     }
   })();
 
@@ -585,7 +824,7 @@ export const crexLiveMatchService = {
       tournamentId: source.tournamentId,
       id: buildMatchId(source),
       series: source.series,
-      sourceUrl: source.sourceUrl,
+      sourceUrl: normalizeSourceUrl(source.sourceUrl),
     }));
   },
 
@@ -611,6 +850,38 @@ export const crexLiveMatchService = {
     }
 
     return readMatchFromSource(source, options);
+  },
+
+  async getLiveMatchByUrl(sourceUrl, options = {}) {
+    const source = buildSourceFromUrl(sourceUrl, {
+      tournamentId: options?.tournamentId,
+      series: options?.series,
+    });
+
+    if (!source?.sourceUrl) {
+      throw new Error("source url is required");
+    }
+
+    const match = await readMatchFromSource(source, options);
+    return {
+      ...match,
+      sourceUrl: source.sourceUrl,
+      series: match?.series || source.series,
+      tournamentId: match?.tournamentId || source.tournamentId,
+    };
+  },
+
+  async warmConfiguredSnapshots() {
+    const sources = this.getConfiguredSources();
+    const results = await Promise.allSettled(
+      sources.map((source) => readMatchFromSource(source, { forceFresh: true })),
+    );
+
+    return {
+      total: results.length,
+      success: results.filter((row) => row.status === "fulfilled").length,
+      failed: results.filter((row) => row.status === "rejected").length,
+    };
   },
 
   async getIccLiveMatch(options = {}) {

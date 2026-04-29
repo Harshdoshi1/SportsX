@@ -1,6 +1,7 @@
 import { iplPlayerProfileService } from "./iplPlayerProfileService.js";
 import { iplTeamPlayersService } from "./iplTeamPlayersService.js";
 import { supabaseIplSyncService } from "./supabaseIplSyncService.js";
+import { crexLiveMatchService } from "./crexLiveMatchService.js";
 import { env } from "../config/env.js";
 
 let timer = null;
@@ -32,11 +33,13 @@ const runRefresh = async () => {
       lastHeartbeatAt = now;
     }
 
+    const liveWarm = await crexLiveMatchService.warmConfiguredSnapshots();
+
     // eslint-disable-next-line no-console
     console.log(
       `[supabase-sync] enabled=${syncSummary.enabled} feeds=${(syncSummary.results || [])
         .map((row) => `${row.feedKey}:${row.changed ? "updated" : "same"}`)
-        .join(", ")}`,
+        .join(", ")} liveWarm=${liveWarm.success}/${liveWarm.total}`,
     );
   } catch (error) {
     // eslint-disable-next-line no-console

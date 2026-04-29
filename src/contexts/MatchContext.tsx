@@ -285,6 +285,8 @@ export function useAdminMatchPolling() {
   } = useMatchStore();
 
   const consecutiveFailByIdRef = useRef<Record<string, number>>({});
+  const tickCountRef = useRef(0);
+  const lastTickAtRef = useRef(0);
 
   useEffect(() => {
     const liveMatches = adminMatches.filter((m) => m.type === "live");
@@ -295,51 +297,64 @@ export function useAdminMatchPolling() {
 
     const tick = async () => {
       if (!active) return;
-      await Promise.all(
-        liveMatches.map(async (m) => {
-          const controller = new AbortController();
-          controllers.get(m.id)?.abort();
-          controllers.set(m.id, controller);
+      const now = Date.now();
+      const isHidden = typeof document !== "undefined" && document.visibilityState === "hidden";
+      const minGapMs = isHidden ? 15_000 : 5_000;
+      if (now - lastTickAtRef.current < minGapMs) {
+        return;
+      }
+      lastTickAtRef.current = now;
 
-          try {
-            const data: any = await cricketApi.getMatchDetailsByUrl(
-              m.sourceUrl,
-              true,
-              controller.signal,
-              { tournamentId: guessTournamentId(m.category), series: m.sectionLabel },
-            );
+      tickCountRef.current += 1;
+      const shouldForceFresh = tickCountRef.current % 6 === 0;
 
-            consecutiveFailByIdRef.current[m.id] = 0;
-            setConnectionLost(m.id, false);
-            setLiveSnapshot(m.id, {
-              match: data?.match || null,
-              scoreboard: data?.scoreboard || null,
-              fetchedAtIso: nowIso(),
-              stale: Boolean((data as any)?.meta?.stale),
+      for (const m of liveMatches) {
+        const controller = new AbortController();
+        controllers.get(m.id)?.abort();
+        controllers.set(m.id, controller);
+
+        const fails = consecutiveFailByIdRef.current[m.id] || 0;
+        const forceFresh = shouldForceFresh && !isHidden && fails < 2;
+
+        try {
+          const data: any = await cricketApi.getMatchDetailsByUrl(
+            m.sourceUrl,
+            forceFresh,
+            controller.signal,
+            { tournamentId: guessTournamentId(m.category), series: m.sectionLabel },
+          );
+
+          consecutiveFailByIdRef.current[m.id] = 0;
+          setConnectionLost(m.id, false);
+          setLiveSnapshot(m.id, {
+            match: data?.match || null,
+            scoreboard: data?.scoreboard || null,
+            fetchedAtIso: nowIso(),
+            stale: Boolean((data as any)?.meta?.stale),
+          });
+
+          const ended = detectEnded(data);
+          if (ended.ended) {
+            markMatchEnded(m.id, {
+              type: "ended",
+              finalResultText: ended.resultText || "Match ended",
+              playerOfMatch: null,
+              finalTeam1Score: String(data?.match?.team1Score || "") || null,
+              finalTeam2Score: String(data?.match?.team2Score || "") || null,
             });
-
-            const ended = detectEnded(data);
-            if (ended.ended) {
-              markMatchEnded(m.id, {
-                finalResultText: ended.resultText || "Match ended",
-                playerOfMatch: null,
-                finalTeam1Score: String(data?.match?.team1Score || "") || null,
-                finalTeam2Score: String(data?.match?.team2Score || "") || null,
-              });
-            }
-          } catch (e) {
-            const next = (consecutiveFailByIdRef.current[m.id] || 0) + 1;
-            consecutiveFailByIdRef.current[m.id] = next;
-            if (next >= 3) {
-              setConnectionLost(m.id, true);
-            }
           }
-        }),
-      );
+        } catch {
+          const next = (consecutiveFailByIdRef.current[m.id] || 0) + 1;
+          consecutiveFailByIdRef.current[m.id] = next;
+          if (next >= 3) {
+            setConnectionLost(m.id, true);
+          }
+        }
+      }
     };
 
     tick();
-    const handle = window.setInterval(tick, 1000);
+    const handle = window.setInterval(tick, 5000);
     return () => {
       active = false;
       controllers.forEach((c) => c.abort());

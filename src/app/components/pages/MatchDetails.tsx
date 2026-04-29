@@ -9,6 +9,7 @@ import { TeamLogo } from "../ui/TeamLogo";
 import { MessageCircle, Radio, Users, MapPin } from "lucide-react";
 import { cricketApi } from "../../services/cricketApi";
 import { formatApiDate, getTeamLogoProps, safeArray } from "../../services/cricketUi";
+import { useMatchStore } from "../../../contexts/MatchContext";
 
 type TabKey = "Scorecard" | "Commentary" | "Analysis";
 
@@ -35,16 +36,51 @@ type BowlerEntry = {
   overs: string;
 };
 
+const parseRunsAndOvers = (value: unknown): { runsText: string; oversText: string } => {
+  const raw = String(value || "").trim();
+  if (!raw) {
+    return { runsText: "-", oversText: "" };
+  }
+
+  const compact = raw.match(/^\s*(\d{1,3})\s*[-/]\s*(\d{2,}(?:\.\d+)?)\s*$/);
+  if (compact) {
+    const runs = String(compact[1] || "").trim();
+    const tail = String(compact[2] || "").trim();
+    if (tail.includes(".") && tail.length >= 3) {
+      const wkts = tail.slice(0, 1);
+      const overs = tail.slice(1);
+      return {
+        runsText: `${runs}-${wkts}`,
+        oversText: overs,
+      };
+    }
+  }
+
+  const match = raw.match(/^\s*([0-9]+\s*[-/]\s*[0-9]+|[0-9]+)\s*(?:\(([^)]+)\))?\s*$/);
+  if (match) {
+    const runsText = String(match[1] || "-").trim();
+    const oversText = String(match[2] || "").trim();
+    return { runsText, oversText };
+  }
+
+  return { runsText: raw, oversText: "" };
+};
+
 const tabs: TabKey[] = ["Scorecard", "Commentary", "Analysis"];
 
 const extractInnings = (scoreboard: any): InningEntry[] => {
   const innings = safeArray<any>(scoreboard?.innings);
   if (innings.length > 0) {
-    return innings.map((inning, index) => ({
-      title: inning?.team || inning?.title || `Innings ${index + 1}`,
-      score: inning?.score || `${inning?.runs ?? "-"}/${inning?.wickets ?? "-"}`,
-      overs: String(inning?.overs ?? "-"),
-    }));
+    return innings.map((inning, index) => {
+      const rawScore = inning?.score || `${inning?.runs ?? "-"}/${inning?.wickets ?? "-"}`;
+      const parsed = parseRunsAndOvers(rawScore);
+      const overs = parsed.oversText || String(inning?.overs ?? "-");
+      return {
+        title: inning?.team || inning?.title || `Innings ${index + 1}`,
+        score: parsed.runsText,
+        overs: overs,
+      };
+    });
   }
 
   const fallbackScore = safeArray<string>(scoreboard?.score || scoreboard?.scores);
@@ -74,6 +110,50 @@ const extractCommentary = (scoreboard: any): CommentaryEntry[] => {
   return [];
 };
 
+const formatLastSixFromCommentary = (entries: CommentaryEntry[]): string => {
+  const latest = [...entries]
+    .filter((e) => e && e.text)
+    .reverse();
+
+  const balls: string[] = [];
+  for (const entry of latest) {
+    if (balls.length >= 6) break;
+    const t = String(entry.text || "").toLowerCase();
+    if (!t) continue;
+    if (/wide/.test(t)) {
+      balls.push("Wd");
+      continue;
+    }
+    if (/no\s*ball|noball/.test(t)) {
+      balls.push("Nb");
+      continue;
+    }
+    if (/out|wicket|caught|lbw|bowled|run out/.test(t)) {
+      balls.push("W");
+      continue;
+    }
+    if (/six/.test(t)) {
+      balls.push("6");
+      continue;
+    }
+    if (/four/.test(t)) {
+      balls.push("4");
+      continue;
+    }
+    const runHit = t.match(/\b([0-6])\s*runs?\b/);
+    if (runHit) {
+      balls.push(String(runHit[1]));
+      continue;
+    }
+    if (/no run/.test(t)) {
+      balls.push("0");
+      continue;
+    }
+  }
+
+  return balls.reverse().join(" ");
+};
+
 const extractBatters = (scoreboard: any): BatterEntry[] =>
   safeArray<any>(scoreboard?.batters)
     .map((row) => ({
@@ -82,7 +162,7 @@ const extractBatters = (scoreboard: any): BatterEntry[] =>
       balls: Number(row?.balls ?? 0),
     }))
     .filter((row) => row.name)
-    .slice(0, 4);
+    .slice(0, 22);
 
 const extractBowlers = (scoreboard: any): BowlerEntry[] =>
   safeArray<any>(scoreboard?.bowlers)
@@ -92,11 +172,12 @@ const extractBowlers = (scoreboard: any): BowlerEntry[] =>
       overs: String(row?.overs || "-"),
     }))
     .filter((row) => row.name)
-    .slice(0, 4);
+    .slice(0, 22);
 
 export function MatchDetails() {
   const { matchId } = useParams<{ matchId: string }>();
   const navigate = useNavigate();
+  const { adminMatches, liveSnapshotsByMatchId } = useMatchStore();
   const [activeTab, setActiveTab] = useState<TabKey>("Scorecard");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -105,11 +186,24 @@ export function MatchDetails() {
   const previousSnapshotRef = useRef("");
   const abortRef = useRef<AbortController | null>(null);
   const endedRef = useRef(false);
+  const tickRef = useRef(0);
+  const lastTickAtRef = useRef(0);
 
   useEffect(() => {
     if (!matchId) {
       setLoading(false);
       setError("Missing match id");
+      return;
+    }
+
+    const adminMatch = adminMatches.find((m) => m.id === matchId);
+    const isAdminLive = Boolean(adminMatch && adminMatch.type === "live" && adminMatch.sourceUrl);
+    const adminSnapshot = isAdminLive ? liveSnapshotsByMatchId[matchId] : null;
+
+    if (isAdminLive && adminSnapshot?.match) {
+      setMatchPayload({ match: adminSnapshot.match, scoreboard: adminSnapshot.scoreboard || null });
+      setLoading(false);
+      setError(null);
       return;
     }
 
@@ -119,6 +213,16 @@ export function MatchDetails() {
       if (!active || inFlightRef.current) {
         return;
       }
+
+      const now = Date.now();
+      const isHidden = typeof document !== "undefined" && document.visibilityState === "hidden";
+      const minGapMs = isHidden ? 15_000 : 1_000;
+      if (now - lastTickAtRef.current < minGapMs) {
+        return;
+      }
+      lastTickAtRef.current = now;
+      tickRef.current += 1;
+      const shouldForceFresh = fresh || tickRef.current % 8 === 0;
 
       inFlightRef.current = true;
       abortRef.current?.abort();
@@ -131,7 +235,14 @@ export function MatchDetails() {
         }
         setError(null);
 
-        const response: any = await cricketApi.getMatchDetails(matchId, fresh, controller.signal);
+        const response: any = isAdminLive
+          ? await cricketApi.getMatchDetailsByUrl(
+              String(adminMatch?.sourceUrl || ""),
+              shouldForceFresh,
+              controller.signal,
+              { tournamentId: undefined, series: adminMatch?.sectionLabel },
+            )
+          : await cricketApi.getMatchDetails(matchId, shouldForceFresh, controller.signal);
         if (!active) {
           return;
         }
@@ -165,29 +276,40 @@ export function MatchDetails() {
     };
 
     loadMatch(true);
-    const pollHandle = setInterval(() => {
+    const pollHandle = window.setInterval(() => {
       if (!endedRef.current) {
-        loadMatch(true);
+        loadMatch(false);
       }
-    }, 2000);
+    }, 1000);
 
     return () => {
       active = false;
       abortRef.current?.abort();
       clearInterval(pollHandle);
     };
-  }, [matchId]);
+  }, [adminMatches, liveSnapshotsByMatchId, matchId]);
 
   const match = matchPayload?.match || {};
   const scoreboard = matchPayload?.scoreboard || {};
   const teamA = getTeamLogoProps(match?.team1);
   const teamB = getTeamLogoProps(match?.team2);
 
+  const team1Score = parseRunsAndOvers(match?.team1Score);
+  const team2Score = parseRunsAndOvers(match?.team2Score);
+  const team1OversDisplay = team1Score.oversText || String(match?.team1Overs || "").trim();
+  const team2OversDisplay = team2Score.oversText || String(match?.team2Overs || "").trim();
+
   const innings = useMemo(() => extractInnings(scoreboard), [scoreboard]);
   const commentary = useMemo(() => extractCommentary(scoreboard), [scoreboard]);
   const batters = useMemo(() => extractBatters(scoreboard), [scoreboard]);
   const bowlers = useMemo(() => extractBowlers(scoreboard), [scoreboard]);
   const liveStats = scoreboard?.liveStats || {};
+  const currentBatters = batters.slice(0, 2);
+  const currentBowler = bowlers[0] || null;
+  const lastSixBalls = String(liveStats?.lastSixBalls || "").trim() || formatLastSixFromCommentary(commentary);
+  const equationText = String(liveStats?.equation || "").trim();
+  const neededRuns = Number.isFinite(Number(liveStats?.neededRuns)) ? Number(liveStats?.neededRuns) : null;
+  const ballsRemaining = Number.isFinite(Number(liveStats?.ballsRemaining)) ? Number(liveStats?.ballsRemaining) : null;
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.5 }} className="min-h-screen">
@@ -249,17 +371,14 @@ export function MatchDetails() {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-center">
-            <div className="text-center md:text-left">
-              <div className="flex items-center gap-3 mb-3 justify-center md:justify-start">
-                <TeamLogo teamId={teamA.teamId} short={teamA.short} size={54} />
-                <div>
-                  <p className="text-white font-black text-2xl">{match?.team1 || "Team A"}</p>
-                  <p className="text-[#6cecff] text-sm font-semibold">
-                    {match?.team1Score || "-"}
-                    {match?.team1Overs ? ` (${match.team1Overs})` : ""}
-                  </p>
-                </div>
+          <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_1fr] gap-6 items-center mb-8">
+            {/* Team A */}
+            <div className="flex items-center gap-4">
+              <TeamLogo teamId={teamA.teamId} short={teamA.short} size={64} />
+              <div>
+                <p className="text-white font-black text-2xl">{match?.team1 || "Team A"}</p>
+                <p className="text-[#3BD4E7] text-sm font-mono">{team1Score.runsText}</p>
+                {team1OversDisplay && <p className="text-white/35 text-xs">Overs: {team1OversDisplay}</p>}
               </div>
             </div>
 
@@ -278,17 +397,14 @@ export function MatchDetails() {
               )}
             </div>
 
-            <div className="text-center md:text-right">
-              <div className="flex items-center gap-3 mb-3 justify-center md:justify-end">
-                <div className="md:order-last">
-                  <p className="text-white font-black text-2xl">{match?.team2 || "Team B"}</p>
-                  <p className="text-[#6cecff] text-sm font-semibold md:text-right">
-                    {match?.team2Score || "-"}
-                    {match?.team2Overs ? ` (${match.team2Overs})` : ""}
-                  </p>
-                </div>
-                <TeamLogo teamId={teamB.teamId} short={teamB.short} size={54} />
+            {/* Team B */}
+            <div className="flex items-center gap-4 justify-end">
+              <div className="text-right">
+                <p className="text-white font-black text-2xl">{match?.team2 || "Team B"}</p>
+                <p className="text-[#3BD4E7] text-sm font-mono">{team2Score.runsText}</p>
+                {team2OversDisplay && <p className="text-white/35 text-xs">Overs: {team2OversDisplay}</p>}
               </div>
+              <TeamLogo teamId={teamB.teamId} short={teamB.short} size={64} />
             </div>
           </div>
         </motion.div>
@@ -333,6 +449,16 @@ export function MatchDetails() {
                 <GlassCard className="p-5" glow="none">
                   <p className="text-white font-bold mb-4">Live Match Stats</p>
                   <div className="space-y-3 text-sm">
+                    {(neededRuns != null || ballsRemaining != null || equationText) && (
+                      <div className="flex justify-between gap-3">
+                        <span className="text-white/45">Chase</span>
+                        <span className="text-white/80 text-right">
+                          {neededRuns != null && ballsRemaining != null
+                            ? `${neededRuns} runs in ${ballsRemaining} balls`
+                            : equationText || "-"}
+                        </span>
+                      </div>
+                    )}
                     <div className="flex justify-between gap-3">
                       <span className="text-white/45">Current Run Rate</span>
                       <span className="text-[#6cecff] font-semibold">{liveStats?.currentRunRate || "-"}</span>
@@ -341,6 +467,12 @@ export function MatchDetails() {
                       <span className="text-white/45">Required Run Rate</span>
                       <span className="text-white/80 text-right">{liveStats?.requiredRunRate || "-"}</span>
                     </div>
+                    {lastSixBalls && (
+                      <div className="flex justify-between gap-3">
+                        <span className="text-white/45">Last 6 balls</span>
+                        <span className="text-white/80 text-right font-mono">{lastSixBalls}</span>
+                      </div>
+                    )}
                     <div className="flex justify-between gap-3">
                       <span className="text-white/45">Toss</span>
                       <span className="text-white/80 text-right">{liveStats?.tossInfo || "-"}</span>
@@ -365,27 +497,57 @@ export function MatchDetails() {
                 <GlassCard className="overflow-hidden">
                   <div className="px-6 py-4" style={{ borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
                     <h3 className="text-white font-bold">Batters</h3>
+                    {currentBatters.length > 0 && (
+                      <p className="text-white/35 text-xs mt-1">Batting: {currentBatters.map((b) => b.name).join(" · ")}</p>
+                    )}
                   </div>
                   {batters.length === 0 && <div className="px-6 py-5 text-sm text-white/45">Live batter stats are not available yet.</div>}
-                  {batters.map((batter, index) => (
-                    <div key={`${batter.name}-${index}`} className="px-6 py-4 flex items-center justify-between" style={{ borderBottom: index < batters.length - 1 ? "1px solid rgba(255,255,255,0.04)" : "none" }}>
-                      <p className="text-white/85 text-sm font-semibold">{batter.name}</p>
-                      <p className="text-[#6cecff] font-bold text-sm">{batter.runs} ({batter.balls})</p>
+                  {batters.length > 0 && (
+                    <div className="px-6 py-4">
+                      <div className="grid grid-cols-[1fr_auto_auto] gap-4 text-[11px] uppercase tracking-wider text-white/35 pb-3" style={{ borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
+                        <span>Batter</span>
+                        <span className="text-right">R</span>
+                        <span className="text-right">B</span>
+                      </div>
+                      <div className="divide-y" style={{ borderColor: "rgba(255,255,255,0.04)" }}>
+                        {batters.map((batter, index) => (
+                          <div key={`${batter.name}-${index}`} className="grid grid-cols-[1fr_auto_auto] gap-4 py-3">
+                            <p className="text-white/85 text-sm font-semibold truncate">{batter.name}</p>
+                            <p className="text-[#6cecff] font-bold text-sm text-right">{batter.runs}</p>
+                            <p className="text-white/60 text-sm text-right">{batter.balls}</p>
+                          </div>
+                        ))}
+                      </div>
                     </div>
-                  ))}
+                  )}
                 </GlassCard>
 
                 <GlassCard className="overflow-hidden">
                   <div className="px-6 py-4" style={{ borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
                     <h3 className="text-white font-bold">Bowlers</h3>
+                    {currentBowler?.name && (
+                      <p className="text-white/35 text-xs mt-1">Bowling: {currentBowler.name}</p>
+                    )}
                   </div>
                   {bowlers.length === 0 && <div className="px-6 py-5 text-sm text-white/45">Live bowler stats are not available yet.</div>}
-                  {bowlers.map((bowler, index) => (
-                    <div key={`${bowler.name}-${index}`} className="px-6 py-4 flex items-center justify-between" style={{ borderBottom: index < bowlers.length - 1 ? "1px solid rgba(255,255,255,0.04)" : "none" }}>
-                      <p className="text-white/85 text-sm font-semibold">{bowler.name}</p>
-                      <p className="text-[#ffb86b] font-bold text-sm">{bowler.figures} ({bowler.overs})</p>
+                  {bowlers.length > 0 && (
+                    <div className="px-6 py-4">
+                      <div className="grid grid-cols-[1fr_auto_auto] gap-4 text-[11px] uppercase tracking-wider text-white/35 pb-3" style={{ borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
+                        <span>Bowler</span>
+                        <span className="text-right">O</span>
+                        <span className="text-right">Fig</span>
+                      </div>
+                      <div className="divide-y" style={{ borderColor: "rgba(255,255,255,0.04)" }}>
+                        {bowlers.map((bowler, index) => (
+                          <div key={`${bowler.name}-${index}`} className="grid grid-cols-[1fr_auto_auto] gap-4 py-3">
+                            <p className="text-white/85 text-sm font-semibold truncate">{bowler.name}</p>
+                            <p className="text-white/60 text-sm text-right">{bowler.overs}</p>
+                            <p className="text-[#ffb86b] font-bold text-sm text-right">{bowler.figures}</p>
+                          </div>
+                        ))}
+                      </div>
                     </div>
-                  ))}
+                  )}
                 </GlassCard>
               </div>
             </motion.div>

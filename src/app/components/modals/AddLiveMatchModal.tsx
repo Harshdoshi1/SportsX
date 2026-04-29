@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { motion } from "motion/react";
-import { X, Radio, Link as LinkIcon, Trophy, Tag, Loader2, AlertCircle } from "lucide-react";
-import { SPORT_CATEGORY_OPTIONS, sportKeyFromCategory, useMatchStore, type SportCategory } from "../../../contexts/MatchContext";
+import { X, Radio, Link as LinkIcon, Loader2, AlertCircle } from "lucide-react";
+import { sportKeyFromCategory, useMatchStore, type SportCategory } from "../../../contexts/MatchContext";
+import { cricketApi } from "../../services/cricketApi";
 
 interface AddLiveMatchModalProps {
   isOpen: boolean;
@@ -12,11 +13,8 @@ interface AddLiveMatchModalProps {
 }
 
 export function AddLiveMatchModal({ isOpen, onClose, onSuccess, defaultCategory, defaultSectionLabel }: AddLiveMatchModalProps) {
-  const { addLiveMatch } = useMatchStore();
+  const { addLiveMatch, setLiveSnapshot, setConnectionLost } = useMatchStore();
   const [url, setUrl] = useState("");
-  const [category, setCategory] = useState<SportCategory>(defaultCategory || "Cricket > IPL");
-  const [sectionLabel, setSectionLabel] = useState(defaultSectionLabel || "IPL 2026");
-  const [title, setTitle] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -33,18 +31,15 @@ export function AddLiveMatchModal({ isOpen, onClose, onSuccess, defaultCategory,
       return false;
     }
 
-    if (!title.trim()) {
-      setError("Match title is required");
-      return false;
-    }
-
-    if (title.length > 100) {
-      setError("Title must be 100 characters or less");
-      return false;
-    }
-
     setError("");
     return true;
+  };
+
+  const inferCategory = (payload: any): SportCategory => {
+    const tournamentId = String(payload?.match?.tournamentId || "").toLowerCase();
+    if (tournamentId === "ipl") return "Cricket > IPL";
+    if (tournamentId === "icc") return "Cricket > ICC";
+    return defaultCategory || "Cricket > Other";
   };
 
   const handleSubmit = async () => {
@@ -56,21 +51,34 @@ export function AddLiveMatchModal({ isOpen, onClose, onSuccess, defaultCategory,
     setError("");
 
     try {
+      const details: any = await cricketApi.getMatchDetailsByUrl(url, true);
+      const team1 = String(details?.match?.team1 || "Team A").trim();
+      const team2 = String(details?.match?.team2 || "Team B").trim();
+      const category = inferCategory(details);
+      const sectionLabel = String(details?.match?.series || defaultSectionLabel || "Live").trim() || "Live";
+      const title = `${team1} vs ${team2} - Live`;
+
       const saved = addLiveMatch({
         sourceUrl: url,
         sport: sportKeyFromCategory(category),
         category,
-        sectionLabel: sectionLabel.trim() || "Live",
-        matchTitle: title.trim(),
+        sectionLabel,
+        matchTitle: title,
       });
+
+      setConnectionLost(saved.id, false);
+      setLiveSnapshot(saved.id, {
+        match: details?.match || null,
+        scoreboard: details?.scoreboard || null,
+        fetchedAtIso: new Date().toISOString(),
+        stale: Boolean((details as any)?.meta?.stale),
+      });
+
       onSuccess(saved);
       onClose();
       
       // Reset form
       setUrl("");
-      setTitle("");
-      setCategory(defaultCategory || "Cricket > IPL");
-      setSectionLabel(defaultSectionLabel || "IPL 2026");
     } catch (err: any) {
       setError(err.message || "Failed to scrape match. Please check the URL and try again.");
     } finally {
@@ -167,72 +175,9 @@ export function AddLiveMatchModal({ isOpen, onClose, onSuccess, defaultCategory,
             />
           </div>
 
-          {/* Sport */}
-          <div>
-            <label className="text-white/70 text-sm font-medium mb-2 flex items-center gap-2">
-              <Trophy size={14} />
-              Sport
-            </label>
-            <select
-              value={category}
-              onChange={(e) => setCategory(e.target.value as SportCategory)}
-              className="w-full px-4 py-3 rounded-xl text-white outline-none text-sm transition-all"
-              style={{
-                background: "rgba(255,255,255,0.05)",
-                border: "1px solid rgba(255,255,255,0.08)",
-              }}
-            >
-              {SPORT_CATEGORY_OPTIONS.map((opt) => (
-                <option key={opt} value={opt}>{opt}</option>
-              ))}
-            </select>
-          </div>
-
-          {/* Section Label */}
-          <div>
-            <label className="text-white/70 text-sm font-medium mb-2 flex items-center gap-2">
-              <Tag size={14} />
-              Section Label
-            </label>
-            <input
-              value={sectionLabel}
-              onChange={(e) => setSectionLabel(e.target.value)}
-              className="w-full px-4 py-3 rounded-xl text-white outline-none text-sm transition-all"
-              style={{
-                background: "rgba(255,255,255,0.05)",
-                border: "1px solid rgba(255,255,255,0.08)",
-              }}
-              placeholder='e.g., "IPL 2026"'
-            />
-          </div>
-
-          {/* Title */}
-          <div>
-            <label className="text-white/70 text-sm font-medium mb-2 block">
-              Match Title
-            </label>
-            <input
-              type="text"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="RCB vs KKR - Live"
-              maxLength={100}
-              className="w-full px-4 py-3 rounded-xl text-white placeholder-white/30 outline-none text-sm transition-all"
-              style={{
-                background: "rgba(255,255,255,0.05)",
-                border: "1px solid rgba(255,255,255,0.08)",
-              }}
-              onFocus={(e) => {
-                e.target.style.borderColor = "rgba(255,77,141,0.5)";
-                e.target.style.boxShadow = "0 0 20px rgba(255,77,141,0.1)";
-              }}
-              onBlur={(e) => {
-                e.target.style.borderColor = "rgba(255,255,255,0.08)";
-                e.target.style.boxShadow = "none";
-              }}
-            />
-            <p className="text-white/30 text-xs mt-1">{title.length}/100 characters</p>
-          </div>
+          <p className="text-xs text-white/45">
+            Teams, title, series, and scorecard are auto-fetched from the link and its /match-scorecard page.
+          </p>
 
           {/* Error Message */}
           {error && (
