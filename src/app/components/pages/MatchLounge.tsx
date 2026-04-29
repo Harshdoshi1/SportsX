@@ -1,20 +1,38 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { useNavigate, useParams } from "react-router";
 import { Navbar } from "../ui/Navbar";
 import { GlassCard } from "../ui/GlassCard";
 import { BackButton } from "../ui/BackButton";
 import { Breadcrumbs } from "../ui/Breadcrumbs";
-import { TeamLogo } from "../ui/TeamLogo";
 import {
-  Globe, Lock, Plus, Search, Hash, Users, LogIn, Copy, Check, ChevronRight, Radio, Mic,
+  Globe, Lock, Plus, Search, Hash, Users, LogIn, Copy, Check, Mic,
 } from "lucide-react";
-import { getTeamLogoProps } from "../../services/cricketUi";
 import { cricketApi } from "../../services/cricketApi";
-import { safeArray, isUpcomingStatus } from "../../services/cricketUi";
-import { IPL_PLAYER_IMAGES } from "../../data/ipl2026";
-import { IPL_STANDINGS } from "../../data/ipl2026";
+import {
+  DASH,
+  getCurrentBatters,
+  getCurrentBowler,
+  getLiveSummaryStats,
+  getNeedSummary,
+  getRequiredRunRate,
+  getLastSixBalls,
+  parseRunsAndOvers,
+  IPL_NAME_TO_SHORT,
+  SHORT_TO_TEAM_ID,
+  normalizeText,
+  formatApiDate,
+} from "../../services/cricketUi";
 import { useMatchStore } from "../../../contexts/MatchContext";
+import {
+  CurrentPlayersCard,
+  KeyStatsRow,
+  LastSixBallsStrip,
+  LiveNeedRow,
+  MatchHeaderCard,
+  ProbablePlayingXI,
+} from "../ui/cricket-match-ui";
+import { IPL_TEAM_PROFILES } from "../../data/ipl2026";
 
 /* ─── Types ─── */
 interface Room {
@@ -29,53 +47,64 @@ interface Room {
   speaking: number;
 }
 
-/* ─── Mock Data ─── */
-const generatePublicRooms = (matchName: string): Room[] => [
-  { id: "p1", code: "IPL001", name: "Fan Zone 🔴🏏", host: "CricFan18", members: 7, maxMembers: 10, type: "public", match: matchName, speaking: 3 },
-  { id: "p2", code: "IPL002", name: "Analysis Hub 📊", host: "CricketGuru", members: 4, maxMembers: 10, type: "public", match: matchName, speaking: 2 },
-  { id: "p3", code: "IPL003", name: "Live Commentary Room", host: "SportzFan99", members: 9, maxMembers: 10, type: "public", match: matchName, speaking: 5 },
-  { id: "p4", code: "IPL004", name: "Prediction Lounge 🎯", host: "DataNerd", members: 3, maxMembers: 10, type: "public", match: matchName, speaking: 1 },
-  { id: "p5", code: "IPL005", name: "Memes & Chill 😂", host: "ViralCric", members: 8, maxMembers: 10, type: "public", match: matchName, speaking: 4 },
-];
+const PRIVATE_ROOM_STORAGE_KEY = "sportsx-private-lounges-v1";
 
-const generatePrivateRooms = (matchName: string): Room[] => [
-  { id: "pr1", code: "FRD01", name: "Squad Watch Party 🎉", host: "You", members: 4, maxMembers: 10, type: "private", match: matchName, speaking: 2 },
-  { id: "pr2", code: "FRD02", name: "College Crew Room", host: "Arjun", members: 6, maxMembers: 10, type: "private", match: matchName, speaking: 3 },
-];
+const buildRoomCode = (matchId: string, suffix: string) => {
+  const base = (matchId || "MATCH")
+    .replace(/[^a-zA-Z0-9]/g, "")
+    .toUpperCase()
+    .slice(0, 5) || "MATCH";
+  return `${base}${suffix}`.toUpperCase().slice(0, 8);
+};
+
+const readPrivateRooms = () => {
+  try {
+    const raw = localStorage.getItem(PRIVATE_ROOM_STORAGE_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? (parsed as Room[]) : [];
+  } catch {
+    return [];
+  }
+};
+
+const writePrivateRooms = (rooms: Room[]) => {
+  localStorage.setItem(PRIVATE_ROOM_STORAGE_KEY, JSON.stringify(rooms));
+};
 
 /* ─── Helper: parse match info from ID ─── */
 const parseMatchId = (matchId: string) => {
-  const parts = matchId.split("-vs-");
-  if (parts.length === 2) {
-    return { team1: parts[0].toUpperCase(), team2: parts[1].toUpperCase() };
-  }
-  return { team1: "TEAM A", team2: "TEAM B" };
-};
-
-const parseRunsAndOvers = (value: unknown): { runsText: string; oversText: string } => {
-  const raw = String(value || "").trim();
-  if (!raw) return { runsText: "Yet to bat", oversText: "" };
-  const compact = raw.match(/^\s*(\d{1,3})\s*[-/]\s*(\d{2,}(?:\.\d+)?)\s*$/);
-  if (compact) {
-    const runs = String(compact[1] || "").trim();
-    const tail = String(compact[2] || "").trim();
-    if (tail.includes(".") && tail.length >= 3) {
-      const wkts = tail.slice(0, 1);
-      const overs = tail.slice(1);
-      return { runsText: `${runs}-${wkts}`, oversText: overs };
+  const raw = String(matchId || "").toLowerCase();
+  const parts = raw.split("-");
+  
+  // Try to find two known team shorts in the parts
+  const teams: string[] = [];
+  for (const part of parts) {
+    const upper = part.toUpperCase();
+    if (SHORT_TO_TEAM_ID[upper]) {
+      teams.push(upper);
     }
   }
-  const match = raw.match(/^\s*([0-9]+\s*[-/]\s*[0-9]+|[0-9]+)\s*(?:\(([^)]+)\))?\s*$/);
-  if (match) {
-    return { runsText: String(match[1] || "-").trim(), oversText: String(match[2] || "").trim() };
+
+  if (teams.length >= 2) {
+    return { team1: teams[0], team2: teams[1] };
   }
-  return { runsText: raw, oversText: "" };
+
+  // Fallback to -vs- splitting
+  const vsParts = raw.split("-vs-");
+  if (vsParts.length === 2) {
+    return { team1: vsParts[0].toUpperCase(), team2: vsParts[1].toUpperCase() };
+  }
+
+  return { team1: "TEAM A", team2: "TEAM B" };
 };
 
 export function MatchLounge() {
   const { matchId } = useParams<{ matchId: string }>();
   const navigate = useNavigate();
-  const { adminMatches, liveSnapshotsByMatchId } = useMatchStore();
+  const { adminMatches, liveSnapshotsByMatchId, setUpcomingLiveUrl } = useMatchStore();
+  const [liveUrlInput, setLiveUrlInput] = useState("");
+  const adminMatch = adminMatches.find((m) => m.id === matchId);
+  const isMatchAdmin = Boolean(adminMatch);
   const [tab, setTab] = useState<"public" | "private">("public");
   const [searchCode, setSearchCode] = useState("");
   const [searchResult, setSearchResult] = useState<Room | null>(null);
@@ -85,32 +114,63 @@ export function MatchLounge() {
   const [generatedCode, setGeneratedCode] = useState("");
   const [codeCopied, setCodeCopied] = useState(false);
   const [matchPayload, setMatchPayload] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [localMatchInfo, setLocalMatchInfo] = useState<{ team1: string; team2: string } | null>(null);
+  const [privateRooms, setPrivateRooms] = useState<Room[]>([]);
 
   const match = matchPayload?.match || null;
   const parsedTeams = parseMatchId(matchId || "");
-  const team1 = String(match?.team1 || parsedTeams.team1 || "TEAM A").toUpperCase();
-  const team2 = String(match?.team2 || parsedTeams.team2 || "TEAM B").toUpperCase();
-  const matchName = `${team1} vs ${team2}`;
-  const publicRooms = generatePublicRooms(matchName);
-  const privateRooms = generatePrivateRooms(matchName);
-  const allRooms = [...publicRooms, ...privateRooms];
+  const team1 = String(
+    match?.team1 ||
+      match?.teamA ||
+      localMatchInfo?.team1 ||
+      adminMatch?.matchTitle?.split(/\s+vs\s+/i)[0] ||
+      (parsedTeams.team1 === "TEAM A" ? (loading ? "Loading..." : `Match ${matchId}`) : parsedTeams.team1)
+  ).trim();
+  const team2 = String(
+    match?.team2 ||
+      match?.teamB ||
+      localMatchInfo?.team2 ||
+      adminMatch?.matchTitle?.split(/\s+vs\s+/i)[1] ||
+      (parsedTeams.team2 === "TEAM B" ? (loading ? "Loading..." : "") : parsedTeams.team2)
+  ).trim();
 
-  const teamALogo = getTeamLogoProps(team1);
-  const teamBLogo = getTeamLogoProps(team2);
+  const getSquad = (teamName: string) => {
+    if (!teamName || teamName === "TEAM A" || teamName === "TEAM B" || teamName.startsWith("Match ")) return [];
+    const normalized = normalizeText(teamName);
+    const short = IPL_NAME_TO_SHORT[normalized] || teamName;
+    const teamId = SHORT_TO_TEAM_ID[short] || normalized;
+    return IPL_TEAM_PROFILES[teamId]?.fullSquad || [];
+  };
+
+  const squad1 = getSquad(team1);
+  const squad2 = getSquad(team2);
+
+  const matchName = `${team1} vs ${team2}`;
+  const publicRooms: Room[] = [
+    {
+      id: `public-${matchId || "match"}`,
+      code: buildRoomCode(matchId || "match", "L"),
+      name: `${matchName} Match Central`,
+      host: "SportsX",
+      members: 1,
+      maxMembers: 10,
+      type: "public",
+      match: matchName,
+      speaking: 0,
+    },
+  ];
+  const allRooms = [...publicRooms, ...privateRooms];
 
   const score1 = parseRunsAndOvers(match?.team1Score);
   const score2 = parseRunsAndOvers(match?.team2Score);
-  const overs1 = score1.oversText || String(match?.team1Overs || "").trim();
-  const overs2 = score2.oversText || String(match?.team2Overs || "").trim();
-
-  // Look up team standings for win probability
-  const team1Standing = IPL_STANDINGS.find(s => s.short === team1);
-  const team2Standing = IPL_STANDINGS.find(s => s.short === team2);
-  const team1WinRate = team1Standing ? (team1Standing.won / Math.max(team1Standing.played, 1)) * 100 : 50;
-  const team2WinRate = team2Standing ? (team2Standing.won / Math.max(team2Standing.played, 1)) * 100 : 50;
-  const totalRate = team1WinRate + team2WinRate || 1;
-  const team1Prob = Math.round((team1WinRate / totalRate) * 100);
-  const team2Prob = 100 - team1Prob;
+  const livePayload = { match, scoreboard: matchPayload?.scoreboard || null };
+  const liveStats = matchPayload?.scoreboard?.liveStats || {};
+  const currentBatters = getCurrentBatters(livePayload);
+  const currentBowler = getCurrentBowler(livePayload);
+  const needSummary = getNeedSummary(liveStats);
+  const lastSixBalls = getLastSixBalls(livePayload);
+  const summaryStats = getLiveSummaryStats(livePayload);
 
   useEffect(() => {
     let active = true;
@@ -118,21 +178,40 @@ export function MatchLounge() {
     const loadMatch = async () => {
       try {
         if (!matchId) return;
+        if (!matchPayload) setLoading(true);
+
+        // Try to find in admin matches or local info first
         const adminMatch = adminMatches.find((m) => m.id === matchId);
         const isAdminLive = Boolean(adminMatch && adminMatch.type === "live" && adminMatch.sourceUrl);
         const adminSnapshot = isAdminLive ? liveSnapshotsByMatchId[matchId] : null;
+
         if (active && isAdminLive && adminSnapshot?.match) {
           setMatchPayload({ match: adminSnapshot.match, scoreboard: adminSnapshot.scoreboard || null });
+          setLoading(false);
           return;
         }
 
+        // Fetch match details
         const detail: any = isAdminLive
           ? await cricketApi.getMatchDetailsByUrl(String(adminMatch?.sourceUrl || ""), true)
           : await cricketApi.getMatchDetails(matchId, true);
-        if (active) {
-          setMatchPayload({ match: detail?.match || null, scoreboard: detail?.scoreboard || null });
+
+        if (active && detail?.match) {
+          setMatchPayload({ match: detail.match, scoreboard: detail.scoreboard || null });
+          setLoading(false);
+          return;
         }
-      } catch {}
+
+        // If details are empty/not found, try to find in the general match list
+        const iplMatches = await cricketApi.getIplScrapedMatches();
+        const found = (iplMatches?.matches || []).find((m: any) => String(m.id) === String(matchId));
+        if (active && found) {
+          setLocalMatchInfo({ team1: found.team1 || found.teamA, team2: found.team2 || found.teamB });
+        }
+      } catch {
+      } finally {
+        if (active) setLoading(false);
+      }
     };
 
     loadMatch();
@@ -142,6 +221,16 @@ export function MatchLounge() {
     };
   }, [adminMatches, liveSnapshotsByMatchId, matchId]);
 
+  useEffect(() => {
+    if (!matchId) {
+      setPrivateRooms([]);
+      return;
+    }
+
+    const stored = readPrivateRooms().filter((room) => room.match === matchName);
+    setPrivateRooms(stored);
+  }, [matchId, matchName]);
+
   const handleSearch = () => {
     const code = searchCode.trim().toUpperCase();
     const found = allRooms.find((r) => r.code === code);
@@ -150,8 +239,24 @@ export function MatchLounge() {
   };
 
   const handleCreateRoom = () => {
-    const code = `PVT${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
+    const code = `P${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
+    const room: Room = {
+      id: `private-${code}`,
+      code,
+      name: String(newRoomName || `${matchName} Private Lounge`).trim(),
+      host: "You",
+      members: 1,
+      maxMembers: 10,
+      type: "private",
+      match: matchName,
+      speaking: 0,
+    };
+    const nextRooms = [...privateRooms.filter((item) => item.code !== code), room];
+    const otherRooms = readPrivateRooms().filter((item) => item.match !== matchName);
+    setPrivateRooms(nextRooms);
+    writePrivateRooms([...otherRooms, ...nextRooms]);
     setGeneratedCode(code);
+    setNewRoomName("");
   };
 
   const handleCopyCode = () => {
@@ -164,6 +269,20 @@ export function MatchLounge() {
     navigate(`/lounge/${matchId}/room/${room.id}`);
   };
 
+  const matchDateText = useMemo(() => {
+    try {
+      return formatApiDate(match?.date);
+    } catch {
+      return DASH;
+    }
+  }, [match?.date]);
+
+  const matchDateTime = useMemo(() => {
+    return [matchDateText, match?.startTime]
+      .filter(val => val && val !== DASH && !String(val).includes("302-550"))
+      .join(" · ") || DASH;
+  }, [matchDateText, match?.startTime]);
+
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.5 }} className="min-h-screen">
       <Navbar />
@@ -175,332 +294,311 @@ export function MatchLounge() {
           <Breadcrumbs items={[{ label: "IPL 2026", path: "/dashboard" }, { label: `${team1} vs ${team2}` }, { label: "Match Lounge" }]} />
         </div>
 
-        {/* ─── Live Match Scorecard ─── */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
-          className="relative overflow-hidden rounded-3xl p-6 md:p-8 mb-8"
-          style={{
-            background: "linear-gradient(135deg, rgba(255,77,141,0.1) 0%, rgba(124,77,255,0.14) 50%, rgba(59,212,231,0.08) 100%)",
-            border: "1px solid rgba(255,255,255,0.08)",
-          }}
-        >
-          {/* Live badge */}
-          <div className="flex items-center gap-3 mb-6">
-            <motion.div
-              animate={{ scale: [1, 1.15, 1] }}
-              transition={{ duration: 1.2, repeat: Infinity }}
-              className="flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold"
-              style={{ background: "rgba(255,77,141,0.18)", border: "1px solid rgba(255,77,141,0.4)", color: "#FF4D8D" }}
-            >
-              <div className="w-1.5 h-1.5 rounded-full bg-[#FF4D8D]" />
-              LIVE MATCH
-            </motion.div>
-            <span className="text-white/40 text-sm">Indian Premier League 2026</span>
-          </div>
-
-          {/* Teams + Score */}
-          <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_1fr] gap-6 items-center">
-            {/* Team A */}
-            <div className="flex items-center gap-4">
-              <TeamLogo teamId={teamALogo.teamId} short={teamALogo.short} size={64} />
-              <div>
-                <p className="text-white font-black text-2xl">{team1}</p>
-                <p className="text-[#3BD4E7] text-sm font-mono font-bold">{score1.runsText}</p>
-                {overs1 && <p className="text-white/30 text-xs">{overs1} ov</p>}
-              </div>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="mb-8 space-y-5">
+          <MatchHeaderCard
+            series={match?.series || "Indian Premier League 2026"}
+            status={match?.status || "Live"}
+            venue={match?.venue || DASH}
+            dateTime={matchDateTime}
+            team1={team1}
+            team2={team2}
+            team1Score={{ runsText: score1.runsText, oversText: score1.oversText || String(match?.team1Overs || "").trim() }}
+            team2Score={{ runsText: score2.runsText, oversText: score2.oversText || String(match?.team2Overs || "").trim() }}
+            result={match?.result}
+            subtitle={match?.score || ""}
+            isLive={match?.status?.toLowerCase() === "live"}
+            loading={loading}
+            actions={
+              isMatchAdmin && (
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    placeholder="Live match URL..."
+                    className="h-9 w-64 rounded-lg border border-white/10 bg-white/5 px-3 text-xs text-white focus:border-sky-500/50 focus:outline-none"
+                    value={liveUrlInput}
+                    onChange={(e) => setLiveUrlInput(e.target.value)}
+                  />
+                  <button
+                    onClick={() => {
+                      if (liveUrlInput.trim()) {
+                        setUpcomingLiveUrl(matchId!, liveUrlInput.trim());
+                        setLiveUrlInput("");
+                      }
+                    }}
+                    className="flex h-9 items-center gap-2 rounded-lg bg-sky-500 px-4 text-xs font-bold text-white hover:bg-sky-600"
+                  >
+                    <Plus size={14} />
+                    Update Live Link
+                  </button>
+                </div>
+              )
+            }
+          />
+          <KeyStatsRow
+            items={[
+              { label: "CRR", value: summaryStats.crr },
+              { label: "RRR", value: summaryStats.rrr },
+              { label: "Partnership", value: summaryStats.partnership },
+              { label: "Last Wicket", value: summaryStats.lastWicket },
+              { label: "Target", value: summaryStats.target },
+            ]}
+          />
+          <LiveNeedRow
+            neededRuns={needSummary.neededRuns}
+            ballsRemaining={needSummary.ballsRemaining}
+            requiredRate={getRequiredRunRate(liveStats)}
+            equation={needSummary.equation}
+            isFirstInnings={!needSummary.neededRuns && !needSummary.ballsRemaining}
+            totalRuns={score1.runsText}
+            totalBalls={String(Math.floor(Number(score1.oversText) * 6) + (Number(score1.oversText) % 1 * 10 || 0))}
+          />
+          {lastSixBalls.length > 0 && (
+            <div className="rounded-2xl border border-white/7 bg-white/[0.03] px-4 py-3">
+              <LastSixBallsStrip balls={lastSixBalls} />
             </div>
-
-            {/* VS / Score */}
-            <div className="text-center">
-              <div className="text-white font-black text-3xl mb-1">VS</div>
-              <p className="text-white/40 text-xs">{match?.venue || "Venue TBA"}</p>
-              <p className="text-white/30 text-xs mt-1">{match?.date || ""} {match?.startTime || ""}</p>
-            </div>
-
-            {/* Team B */}
-            <div className="flex items-center gap-4 justify-end">
-              <div className="text-right">
-                <p className="text-white font-black text-2xl">{team2}</p>
-                <p className="text-[#3BD4E7] text-sm font-mono font-bold">{score2.runsText}</p>
-                {overs2 && <p className="text-white/30 text-xs">{overs2} ov</p>}
-              </div>
-              <TeamLogo teamId={teamBLogo.teamId} short={teamBLogo.short} size={64} />
-            </div>
-          </div>
-
-          {/* Win Probability Bar */}
-          <div className="mt-6">
-            <div className="flex items-center justify-between text-xs mb-2">
-              <span className="font-bold" style={{ color: "#FF4D8D" }}>{team1} {team1Prob}%</span>
-              <span className="text-white/30">Win Probability</span>
-              <span className="font-bold" style={{ color: "#3BD4E7" }}>{team2} {team2Prob}%</span>
-            </div>
-            <div className="h-2 rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.08)" }}>
-              <motion.div
-                initial={{ width: "50%" }}
-                animate={{ width: `${team1Prob}%` }}
-                transition={{ duration: 1.2, ease: "easeOut" }}
-                className="h-full rounded-full"
-                style={{ background: "linear-gradient(90deg, #FF4D8D, #7C4DFF)" }}
-              />
-            </div>
-          </div>
-
-          {/* CRR + Match Status */}
-          {match?.status && (
-            <div className="mt-4 flex items-center gap-3">
-              <span className="px-3 py-1 rounded-lg text-xs font-semibold" style={{ background: "rgba(59,212,231,0.15)", border: "1px solid rgba(59,212,231,0.3)", color: "#3BD4E7" }}>
-                {match?.status}
-              </span>
-              {match?.result && (
-                <span className="text-white/50 text-xs">{match?.result}</span>
+          )}
+          {currentBatters.length > 0 || currentBowler ? (
+            <CurrentPlayersCard batters={currentBatters} bowler={currentBowler} loading={loading} />
+          ) : (
+            <div className="space-y-6">
+              {!loading && (
+                <div className="rounded-2xl border border-dashed border-white/10 p-8 text-center">
+                  <p className="text-lg font-bold text-white">Match yet to begin</p>
+                  <p className="mt-1 text-sm text-white/40">Real-time scorecard will appear here once the match starts.</p>
+                </div>
+              )}
+              {(squad1.length > 0 || squad2.length > 0 || loading) && (
+                <ProbablePlayingXI team1={team1} team2={team2} squad1={squad1} squad2={squad2} loading={loading} />
               )}
             </div>
           )}
         </motion.div>
 
-        {/* ─── Lounge Header ─── */}
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="mb-8">
-          <h1 className="text-3xl font-black text-white mb-2">Match Lounges</h1>
-          <p className="text-white/40">Join a lounge to watch, chat, and talk with fellow fans. Max 10 members per room.</p>
-        </motion.div>
-
-        {/* ─── Public / Private Tabs + Create Room ─── */}
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }} className="space-y-6">
-
-          {/* Search by code */}
-          <GlassCard className="p-6">
-            <h3 className="text-white font-bold mb-4 flex items-center gap-2"><Hash size={18} style={{ color: "#3BD4E7" }} />Join Room by Code</h3>
-            <div className="flex gap-3">
-              <input
-                type="text"
-                value={searchCode}
-                onChange={(e) => { setSearchCode(e.target.value.toUpperCase()); setNotFound(false); setSearchResult(null); }}
-                onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-                placeholder="Enter room code (e.g. IPL001)"
-                className="flex-1 pl-4 pr-4 py-3 rounded-xl text-white placeholder-white/30 outline-none text-sm tracking-widest font-mono"
-                style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)" }}
-              />
-              <motion.button
-                whileHover={{ scale: 1.03 }}
-                whileTap={{ scale: 0.97 }}
-                onClick={handleSearch}
-                className="px-5 py-3 rounded-xl font-semibold text-white flex items-center gap-2"
-                style={{ background: "linear-gradient(135deg, #3BD4E7, #7C4DFF)", boxShadow: "0 0 20px rgba(59,212,231,0.3)" }}
-              >
-                <Search size={16} />
-                Search
-              </motion.button>
-            </div>
-
-            <AnimatePresence>
-              {searchResult && (
-                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="mt-4">
-                  <RoomCard room={searchResult} onJoin={joinRoom} />
-                </motion.div>
-              )}
-              {notFound && (
-                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mt-4 p-4 rounded-xl text-center" style={{ background: "rgba(255,77,141,0.08)", border: "1px solid rgba(255,77,141,0.2)" }}>
-                  <p className="text-[#FF4D8D] text-sm">No room found with code "{searchCode}"</p>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </GlassCard>
-
-          {/* Tabs */}
-          <div>
+        {/* Lounge Content */}
+        <div className="flex flex-col lg:flex-row gap-8 mt-12">
+          {/* Main Lounge Area */}
+          <div className="flex-1 space-y-6">
             <div className="flex items-center justify-between mb-4">
-              <div className="flex gap-1 p-1 rounded-xl" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.06)" }}>
-                <button
+              <div className="flex items-center gap-4">
+                <button 
                   onClick={() => setTab("public")}
-                  className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold transition-all"
-                  style={tab === "public" ? { background: "linear-gradient(135deg, #3BD4E7, #7C4DFF)", color: "white" } : { color: "rgba(255,255,255,0.4)" }}
+                  className={`px-6 py-2.5 rounded-xl text-sm font-black transition-all ${tab === "public" ? "bg-sky-500 text-white shadow-lg shadow-sky-500/20" : "bg-white/5 text-white/40 hover:bg-white/10"}`}
                 >
-                  <Globe size={14} /> Public Lounges
+                  Public Lounges
                 </button>
-                <button
+                <button 
                   onClick={() => setTab("private")}
-                  className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold transition-all"
-                  style={tab === "private" ? { background: "linear-gradient(135deg, #7C4DFF, #FF4D8D)", color: "white" } : { color: "rgba(255,255,255,0.4)" }}
+                  className={`px-6 py-2.5 rounded-xl text-sm font-black transition-all ${tab === "private" ? "bg-sky-500 text-white shadow-lg shadow-sky-500/20" : "bg-white/5 text-white/40 hover:bg-white/10"}`}
                 >
-                  <Lock size={14} /> Private Lounges
+                  Private Lounges
                 </button>
               </div>
+              {tab === "private" && (
+                <button 
+                  onClick={() => setShowCreateModal(true)}
+                  className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-white/5 text-white text-sm font-black hover:bg-white/10 border border-white/5 transition-all"
+                >
+                  <Plus size={16} />
+                  Create Lounge
+                </button>
+              )}
             </div>
 
-            <AnimatePresence mode="wait">
+            {tab === "private" && (
+              <div className="relative mb-6">
+                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" size={18} />
+                <input
+                  type="text"
+                  placeholder="Enter lounge code to search..."
+                  className="w-full bg-white/5 border border-white/10 rounded-2xl py-4 pl-12 pr-32 text-white placeholder:text-white/20 focus:outline-none focus:border-sky-500/50 transition-all"
+                  value={searchCode}
+                  onChange={(e) => setSearchCode(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && handleSearch()}
+                />
+                <button 
+                  onClick={handleSearch}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 bg-sky-500 text-white px-6 py-2 rounded-xl text-xs font-black hover:bg-sky-600 transition-all"
+                >
+                  Search
+                </button>
+              </div>
+            )}
+
+            <div className="grid gap-4">
               {tab === "public" ? (
-                <motion.div key="public" initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 10 }} className="space-y-3">
-                  {publicRooms.map((room) => (
-                    <RoomCard key={room.id} room={room} onJoin={joinRoom} />
-                  ))}
-                </motion.div>
-              ) : (
-                <motion.div key="private" initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -10 }} className="space-y-4">
-                  {/* Create or Enter Code Options */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {/* Create Lounge */}
-                    <GlassCard className="p-6" hover>
-                      <div className="text-center">
-                        <div
-                          className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4"
-                          style={{ background: "linear-gradient(135deg, rgba(124,77,255,0.2), rgba(255,77,141,0.2))", border: "1px solid rgba(124,77,255,0.3)" }}
-                        >
-                          <Plus size={28} className="text-[#a78bfa]" />
+                publicRooms.map((room) => (
+                  <GlassCard key={room.id} className="p-6 hover:bg-white/[0.04] transition-all cursor-pointer group" onClick={() => joinRoom(room)}>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-5">
+                        <div className="w-14 h-14 rounded-2xl bg-sky-500/10 flex items-center justify-center text-sky-500 group-hover:scale-110 transition-transform">
+                          <Globe size={24} />
                         </div>
-                        <h3 className="text-white font-bold text-lg mb-2">Create Lounge</h3>
-                        <p className="text-white/40 text-sm mb-5">Start a private room and share the code with friends</p>
-
-                        {!generatedCode ? (
-                          <>
-                            <input
-                              type="text"
-                              value={newRoomName}
-                              onChange={(e) => setNewRoomName(e.target.value)}
-                              placeholder="Room name (optional)"
-                              className="w-full px-4 py-3 rounded-xl text-white placeholder-white/30 outline-none text-sm mb-3"
-                              style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)" }}
-                            />
-                            <motion.button
-                              whileHover={{ scale: 1.03 }}
-                              whileTap={{ scale: 0.97 }}
-                              onClick={handleCreateRoom}
-                              className="w-full px-5 py-3 rounded-xl font-semibold text-white"
-                              style={{ background: "linear-gradient(135deg, #7C4DFF, #FF4D8D)", boxShadow: "0 0 20px rgba(124,77,255,0.3)" }}
-                            >
-                              Create Room
-                            </motion.button>
-                          </>
-                        ) : (
-                          <div className="space-y-3">
-                            <div className="p-4 rounded-xl" style={{ background: "rgba(0,230,118,0.08)", border: "1px solid rgba(0,230,118,0.2)" }}>
-                              <p className="text-[#00E676] text-xs mb-1">Room Created!</p>
-                              <p className="text-white font-mono text-2xl font-black tracking-widest">{generatedCode}</p>
-                            </div>
-                            <motion.button
-                              whileHover={{ scale: 1.03 }}
-                              whileTap={{ scale: 0.97 }}
-                              onClick={handleCopyCode}
-                              className="w-full flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl font-semibold text-sm"
-                              style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", color: codeCopied ? "#00E676" : "white" }}
-                            >
-                              {codeCopied ? <><Check size={14} /> Copied!</> : <><Copy size={14} /> Copy Code</>}
-                            </motion.button>
-                            <motion.button
-                              whileHover={{ scale: 1.03 }}
-                              whileTap={{ scale: 0.97 }}
-                              onClick={() => navigate(`/lounge/${matchId}/room/private-${generatedCode}`)}
-                              className="w-full px-5 py-3 rounded-xl font-semibold text-white"
-                              style={{ background: "linear-gradient(135deg, #3BD4E7, #7C4DFF)", boxShadow: "0 0 20px rgba(59,212,231,0.3)" }}
-                            >
-                              Enter Room
-                            </motion.button>
+                        <div>
+                          <h3 className="text-lg font-black text-white">{room.name}</h3>
+                          <div className="flex items-center gap-4 mt-1">
+                            <span className="text-xs text-white/40 font-bold uppercase tracking-widest flex items-center gap-1.5">
+                              <Users size={12} /> {room.members}/{room.maxMembers}
+                            </span>
+                            <span className="text-xs text-sky-400 font-black uppercase tracking-widest flex items-center gap-1.5">
+                              <Mic size={12} /> {room.speaking} Speaking
+                            </span>
                           </div>
-                        )}
-                      </div>
-                    </GlassCard>
-
-                    {/* Enter Code */}
-                    <GlassCard className="p-6" hover>
-                      <div className="text-center">
-                        <div
-                          className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4"
-                          style={{ background: "linear-gradient(135deg, rgba(59,212,231,0.2), rgba(124,77,255,0.2))", border: "1px solid rgba(59,212,231,0.3)" }}
-                        >
-                          <Hash size={28} className="text-[#3BD4E7]" />
                         </div>
-                        <h3 className="text-white font-bold text-lg mb-2">Enter Code</h3>
-                        <p className="text-white/40 text-sm mb-5">Got a code from a friend? Enter it to join their private lounge</p>
-                        <input
-                          type="text"
-                          value={searchCode}
-                          onChange={(e) => { setSearchCode(e.target.value.toUpperCase()); setNotFound(false); setSearchResult(null); }}
-                          placeholder="Paste room code here"
-                          className="w-full px-4 py-3 rounded-xl text-white placeholder-white/30 outline-none text-sm font-mono tracking-widest mb-3"
-                          style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)" }}
-                        />
-                        <motion.button
-                          whileHover={{ scale: 1.03 }}
-                          whileTap={{ scale: 0.97 }}
-                          onClick={handleSearch}
-                          className="w-full px-5 py-3 rounded-xl font-semibold text-white flex items-center justify-center gap-2"
-                          style={{ background: "linear-gradient(135deg, #3BD4E7, #7C4DFF)", boxShadow: "0 0 20px rgba(59,212,231,0.3)" }}
-                        >
-                          <LogIn size={16} /> Join Room
-                        </motion.button>
                       </div>
-                    </GlassCard>
-                  </div>
-
-                  {/* Existing private rooms */}
-                  {privateRooms.length > 0 && (
-                    <div className="mt-4">
-                      <h3 className="text-white/50 text-sm font-semibold mb-3">Your Private Rooms</h3>
-                      <div className="space-y-3">
-                        {privateRooms.map((room) => (
-                          <RoomCard key={room.id} room={room} onJoin={joinRoom} />
-                        ))}
+                      <button className="bg-white/5 text-white/60 p-3 rounded-xl hover:bg-sky-500 hover:text-white transition-all">
+                        <LogIn size={20} />
+                      </button>
+                    </div>
+                  </GlassCard>
+                ))
+              ) : searchResult ? (
+                <GlassCard className="p-6 border-sky-500/30 bg-sky-500/5" onClick={() => joinRoom(searchResult)}>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-5">
+                      <div className="w-14 h-14 rounded-2xl bg-sky-500 flex items-center justify-center text-white">
+                        <Lock size={24} />
+                      </div>
+                      <div>
+                        <h3 className="text-lg font-black text-white">{searchResult.name}</h3>
+                        <p className="text-xs text-white/40 mt-1 font-bold uppercase tracking-widest">Host: {searchResult.host}</p>
                       </div>
                     </div>
-                  )}
-                </motion.div>
+                    <div className="flex items-center gap-3">
+                      <span className="bg-sky-500/20 text-sky-400 px-3 py-1 rounded-lg text-[10px] font-black tracking-widest">FOUND</span>
+                      <button className="bg-sky-500 text-white p-3 rounded-xl">
+                        <LogIn size={20} />
+                      </button>
+                    </div>
+                  </div>
+                </GlassCard>
+              ) : notFound ? (
+                <div className="text-center py-20 bg-white/[0.02] rounded-[2rem] border border-dashed border-white/10">
+                  <div className="w-16 h-16 bg-white/5 rounded-full flex items-center justify-center mx-auto mb-4 text-white/20">
+                    <Search size={32} />
+                  </div>
+                  <h3 className="text-xl font-black text-white">Lounge Not Found</h3>
+                  <p className="text-white/40 mt-2">Check the code and try again</p>
+                </div>
+              ) : privateRooms.length > 0 ? (
+                privateRooms.map((room) => (
+                  <GlassCard key={room.id} className="p-6 hover:bg-white/[0.04] transition-all cursor-pointer group" onClick={() => joinRoom(room)}>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-5">
+                        <div className="w-14 h-14 rounded-2xl bg-purple-500/10 flex items-center justify-center text-purple-500 group-hover:scale-110 transition-transform">
+                          <Lock size={24} />
+                        </div>
+                        <div>
+                          <h3 className="text-lg font-black text-white">{room.name}</h3>
+                          <div className="flex items-center gap-4 mt-1">
+                            <span className="text-xs text-white/40 font-bold uppercase tracking-widest flex items-center gap-1.5">
+                              <Hash size={12} /> {room.code}
+                            </span>
+                            <span className="text-xs text-white/40 font-bold uppercase tracking-widest flex items-center gap-1.5">
+                              <Users size={12} /> {room.members} Active
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                      <button className="bg-white/5 text-white/60 p-3 rounded-xl hover:bg-sky-500 hover:text-white transition-all">
+                        <LogIn size={20} />
+                      </button>
+                    </div>
+                  </GlassCard>
+                ))
+              ) : (
+                <div className="text-center py-20 bg-white/[0.02] rounded-[2rem] border border-dashed border-white/10">
+                  <div className="w-16 h-16 bg-white/5 rounded-full flex items-center justify-center mx-auto mb-4 text-white/20">
+                    <Lock size={32} />
+                  </div>
+                  <h3 className="text-xl font-black text-white">No Private Lounges</h3>
+                  <p className="text-white/40 mt-2">Create one to invite your friends</p>
+                </div>
               )}
-            </AnimatePresence>
+            </div>
           </div>
-        </motion.div>
+
+          {/* Sidebar / Stats */}
+          <div className="w-full lg:w-80 space-y-6">
+            <GlassCard className="p-6">
+              <h3 className="text-sm font-black text-white uppercase tracking-widest mb-6 flex items-center gap-3">
+                <div className="w-1.5 h-4 bg-sky-500 rounded-full" />
+                Live Discussion
+              </h3>
+              <div className="space-y-4">
+                {[1, 2, 3].map((i) => (
+                  <div key={i} className="flex items-center gap-3 p-3 rounded-2xl bg-white/[0.03] border border-white/5">
+                    <div className="w-10 h-10 rounded-full bg-white/10 border border-white/10 flex items-center justify-center text-white/40 font-black text-xs">
+                      U{i}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-black text-white truncate">User {i}</p>
+                      <p className="text-[10px] text-white/40 font-bold uppercase tracking-widest">Listening...</p>
+                    </div>
+                    <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                  </div>
+                ))}
+              </div>
+            </GlassCard>
+          </div>
+        </div>
+
+        {/* Create Room Modal */}
+        <AnimatePresence>
+          {showCreateModal && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={() => setShowCreateModal(false)} />
+              <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="relative w-full max-w-md bg-[#0D1117] border border-white/10 rounded-[2.5rem] p-8 overflow-hidden shadow-2xl">
+                <div className="absolute -right-20 -top-20 w-64 h-64 bg-sky-500/10 rounded-full blur-[100px]" />
+                
+                <h2 className="text-2xl font-black text-white mb-2">Create Private Lounge</h2>
+                <p className="text-white/40 text-sm mb-8">Invite your friends for a private match experience</p>
+
+                <div className="space-y-6">
+                  <div>
+                    <label className="text-[10px] font-black text-white/30 uppercase tracking-[0.2em] mb-2 block">Lounge Name</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Weekend Warriors"
+                      className="w-full bg-white/5 border border-white/10 rounded-2xl py-4 px-5 text-white placeholder:text-white/20 focus:outline-none focus:border-sky-500/50 transition-all"
+                      value={newRoomName}
+                      onChange={(e) => setNewRoomName(e.target.value)}
+                    />
+                  </div>
+
+                  {generatedCode ? (
+                    <div className="p-6 bg-sky-500/5 border border-sky-500/20 rounded-2xl text-center">
+                      <p className="text-[10px] font-black text-sky-400 uppercase tracking-[0.2em] mb-2">Lounge Code</p>
+                      <div className="flex items-center justify-center gap-4">
+                        <span className="text-4xl font-black text-white tracking-tighter">{generatedCode}</span>
+                        <button onClick={handleCopyCode} className="p-3 bg-white/5 hover:bg-white/10 rounded-xl text-white transition-all">
+                          {codeCopied ? <Check size={20} className="text-green-500" /> : <Copy size={20} />}
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button 
+                      onClick={handleCreateRoom}
+                      className="w-full bg-sky-500 text-white py-5 rounded-2xl font-black text-lg hover:bg-sky-600 transition-all shadow-lg shadow-sky-500/20"
+                    >
+                      Generate Code
+                    </button>
+                  )}
+
+                  {generatedCode && (
+                    <button 
+                      onClick={() => setShowCreateModal(false)}
+                      className="w-full bg-white/5 text-white py-5 rounded-2xl font-black text-lg hover:bg-white/10 transition-all"
+                    >
+                      Done
+                    </button>
+                  )}
+                </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
+
       </div>
     </motion.div>
-  );
-}
-
-/* ─── Room Card ─── */
-function RoomCard({ room, onJoin }: { room: Room; onJoin: (r: Room) => void }) {
-  const isFull = room.members >= room.maxMembers;
-  return (
-    <GlassCard className="p-5" hover>
-      <div className="flex items-center justify-between">
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-1">
-            {room.type === "public" ? <Globe size={12} className="text-white/30" /> : <Lock size={12} className="text-white/30" />}
-            <span className="font-mono text-xs text-white/30">{room.code}</span>
-            <span className="text-white/20">·</span>
-            <span className="text-white/30 text-xs">{room.match}</span>
-          </div>
-          <h4 className="text-white font-bold truncate">{room.name}</h4>
-          <p className="text-white/40 text-xs mt-0.5">Hosted by {room.host}</p>
-        </div>
-
-        <div className="flex items-center gap-4 ml-4">
-          <div className="text-center">
-            <div className="flex items-center gap-1.5 text-sm font-bold" style={{ color: isFull ? "#FF4D8D" : "#00E676" }}>
-              <Users size={14} />
-              <span>{room.members}/{room.maxMembers}</span>
-            </div>
-            <div className="text-white/30 text-xs mt-0.5">
-              <motion.span animate={{ opacity: [0.5, 1, 0.5] }} transition={{ duration: 1.5, repeat: Infinity }} style={{ color: "#00E676" }}>
-                <Mic size={10} className="inline mr-1" />{room.speaking} speaking
-              </motion.span>
-            </div>
-          </div>
-
-          <motion.button
-            whileHover={!isFull ? { scale: 1.05 } : {}}
-            whileTap={!isFull ? { scale: 0.95 } : {}}
-            onClick={() => !isFull && onJoin(room)}
-            className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-semibold"
-            style={
-              isFull
-                ? { background: "rgba(255,255,255,0.04)", color: "rgba(255,255,255,0.2)", cursor: "not-allowed" }
-                : { background: "linear-gradient(135deg, #3BD4E7, #7C4DFF)", color: "white", boxShadow: "0 0 15px rgba(59,212,231,0.25)" }
-            }
-          >
-            <LogIn size={14} />
-            {isFull ? "Full" : "Join"}
-          </motion.button>
-        </div>
-      </div>
-    </GlassCard>
   );
 }

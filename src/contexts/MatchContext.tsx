@@ -299,7 +299,7 @@ export function useAdminMatchPolling() {
       if (!active) return;
       const now = Date.now();
       const isHidden = typeof document !== "undefined" && document.visibilityState === "hidden";
-      const minGapMs = isHidden ? 15_000 : 5_000;
+      const minGapMs = isHidden ? 5000 : 1000;
       if (now - lastTickAtRef.current < minGapMs) {
         return;
       }
@@ -354,7 +354,7 @@ export function useAdminMatchPolling() {
     };
 
     tick();
-    const handle = window.setInterval(tick, 5000);
+    const handle = window.setInterval(tick, 1000);
     return () => {
       active = false;
       controllers.forEach((c) => c.abort());

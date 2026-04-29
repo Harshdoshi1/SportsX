@@ -256,7 +256,7 @@ export function Analytics() {
                 </BarChart>
               </ResponsiveContainer>
               <div className="flex gap-4 mt-2">
-                {[["RCB", "#FF4D8D"], ["MI", "#3BD4E7"], ["CSK", "#FF9100"]].map(([t, c]) => (
+                {[["RCB", "#ff0000"], ["MI", "#1f48ff"], ["CSK", "#ffd900"]].map(([t, c]) => (
                   <div key={t} className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-full" style={{ background: c }} /><span className="text-white/40 text-xs">{t}</span></div>
                 ))}
               </div>

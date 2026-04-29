@@ -5,17 +5,29 @@ import { Navbar } from "../ui/Navbar";
 import { GlassCard } from "../ui/GlassCard";
 import { BackButton } from "../ui/BackButton";
 import { Breadcrumbs } from "../ui/Breadcrumbs";
-import { TeamLogo } from "../ui/TeamLogo";
 import {
   Send, Mic, MicOff, Users, Volume2, LogOut, Heart, Laugh, Flame,
-  ThumbsUp, Copy, Check, Radio,
+  ThumbsUp, Copy, Check,
 } from "lucide-react";
-import { getTeamLogoProps } from "../../services/cricketUi";
-import { IPL_PLAYER_IMAGES, IPL_STANDINGS } from "../../data/ipl2026";
-import { ImageWithFallback } from "../figma/ImageWithFallback";
 import { cricketApi } from "../../services/cricketApi";
-import { safeArray } from "../../services/cricketUi";
+import {
+  DASH,
+  getCurrentBatters,
+  getCurrentBowler,
+  getLastSixBalls,
+  getLiveSummaryStats,
+  getNeedSummary,
+  getRequiredRunRate,
+  parseRunsAndOvers,
+} from "../../services/cricketUi";
 import { useMatchStore } from "../../../contexts/MatchContext";
+import {
+  CurrentPlayersCard,
+  KeyStatsRow,
+  LastSixBallsStrip,
+  LiveNeedRow,
+  MatchHeaderCard,
+} from "../ui/cricket-match-ui";
 
 /* ─── Types ─── */
 interface Message {
@@ -36,26 +48,6 @@ interface VoiceUser {
   isMuted: boolean;
 }
 
-interface LoungePlayer {
-  id?: string | number;
-  name: string;
-  role?: string;
-  image?: string | null;
-  runs?: number | null;
-  wickets?: number | null;
-}
-
-/* ─── Mock Data ─── */
-const mockMessages: Message[] = [
-  { id: 1, user: "CricFan18", message: "WHAT A SHOT! Absolutely smashed that for six! 🔥🔥🔥", time: "4:34 PM" },
-  { id: 2, user: "MumbaiMagi", message: "Bumrah gonna sort this out in the death overs 💪", time: "4:35 PM" },
-  { id: 3, user: "CricketGuru", message: "Win probability just shifted! This is getting intense! 📊", time: "4:35 PM" },
-  { id: 4, user: "SportzFan99", message: "That powerplay was absolutely destructive 💥", time: "4:36 PM" },
-  { id: 5, user: "You", message: "Absolutely loving this match! Let's go! 🏆", time: "4:36 PM", isOwn: true },
-  { id: 6, user: "DataNerd", message: "Strike rate of 185 in the last 5 overs... insane! 🤯", time: "4:37 PM" },
-  { id: 7, user: "ViralCric", message: "This is why IPL is the best league in the world 🌍", time: "4:38 PM" },
-];
-
 const createVoiceUsers = (team1: string, team2: string): VoiceUser[] => [
   { id: 1, name: "CricFan18", emoji: "👑", isSpeaking: true, isMuted: false },
   { id: 2, name: "CricketGuru", emoji: "📊", isSpeaking: true, isMuted: false },
@@ -74,32 +66,6 @@ const parseMatchId = (matchId: string) => {
     return { team1: parts[0].toUpperCase(), team2: parts[1].toUpperCase() };
   }
   return { team1: "TEAM A", team2: "TEAM B" };
-};
-
-/* ─── Batsman/Bowler data from IPL Player Images ─── */
-const getPlayerImage = (name: string) => {
-  const slug = name.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
-  return IPL_PLAYER_IMAGES[slug] || null;
-};
-
-const parseRunsAndOvers = (value: unknown): { runsText: string; oversText: string } => {
-  const raw = String(value || "").trim();
-  if (!raw) return { runsText: "Yet to bat", oversText: "" };
-  const compact = raw.match(/^\s*(\d{1,3})\s*[-/]\s*(\d{2,}(?:\.\d+)?)\s*$/);
-  if (compact) {
-    const runs = String(compact[1] || "").trim();
-    const tail = String(compact[2] || "").trim();
-    if (tail.includes(".") && tail.length >= 3) {
-      const wkts = tail.slice(0, 1);
-      const overs = tail.slice(1);
-      return { runsText: `${runs}-${wkts}`, oversText: overs };
-    }
-  }
-  const match = raw.match(/^\s*([0-9]+\s*[-/]\s*[0-9]+|[0-9]+)\s*(?:\(([^)]+)\))?\s*$/);
-  if (match) {
-    return { runsText: String(match[1] || "-").trim(), oversText: String(match[2] || "").trim() };
-  }
-  return { runsText: raw, oversText: "" };
 };
 
 /* ─── Audio Wave Animation ─── */
@@ -160,32 +126,27 @@ export function LoungeRoom() {
   const [resolvedTeams, setResolvedTeams] = useState(parsedTeams);
   const [matchPayload, setMatchPayload] = useState<any>(null);
   const match = matchPayload?.match || null;
-  const scoreboard = matchPayload?.scoreboard || null;
   const team1 = resolvedTeams.team1;
   const team2 = resolvedTeams.team2;
-  const teamALogo = getTeamLogoProps(team1);
-  const teamBLogo = getTeamLogoProps(team2);
+  const scoreboard = matchPayload?.scoreboard || null;
+  const livePayload = { match, scoreboard };
 
   const score1 = parseRunsAndOvers(match?.team1Score);
   const score2 = parseRunsAndOvers(match?.team2Score);
-  const overs1 = score1.oversText || String(match?.team1Overs || "").trim();
-  const overs2 = score2.oversText || String(match?.team2Overs || "").trim();
+  const liveStats = scoreboard?.liveStats || {};
+  const currentBatters = getCurrentBatters(livePayload);
+  const currentBowler = getCurrentBowler(livePayload);
+  const summaryStats = getLiveSummaryStats(livePayload);
+  const needSummary = getNeedSummary(liveStats);
+  const lastSixBalls = getLastSixBalls(livePayload);
 
-  // Sample batsman/bowler for mini scorecard
-  const team1Standing = IPL_STANDINGS.find(s => s.short === team1);
-  const team2Standing = IPL_STANDINGS.find(s => s.short === team2);
-  const team1Prob = team1Standing ? Math.round((team1Standing.won / Math.max(team1Standing.played, 1)) * 100) : 50;
-
-  const [messages, setMessages] = useState<Message[]>(mockMessages);
+  const [messages, setMessages] = useState<Message[]>([]);
   const [message, setMessage] = useState("");
   const [isMicOn, setIsMicOn] = useState(false);
   const [reaction, setReaction] = useState<string | null>(null);
   const [showReactions, setShowReactions] = useState(false);
   const [codeCopied, setCodeCopied] = useState(false);
   const [voiceUsers, setVoiceUsers] = useState<VoiceUser[]>(createVoiceUsers(team1, team2));
-  const [teamAPlayers, setTeamAPlayers] = useState<LoungePlayer[]>([]);
-  const [teamBPlayers, setTeamBPlayers] = useState<LoungePlayer[]>([]);
-  const [scorecardLoading, setScorecardLoading] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const speakingCount = voiceUsers.filter((u) => u.isSpeaking).length;
@@ -248,44 +209,6 @@ export function LoungeRoom() {
     return () => clearInterval(interval);
   }, [isMicOn]);
 
-  useEffect(() => {
-    let active = true;
-
-    const loadLoungePlayers = async () => {
-      try {
-        setScorecardLoading(true);
-
-        const [teamARes, teamBRes] = await Promise.all([
-          cricketApi.getTeamPlayers(team1, { page: 1, limit: 60, teamName: team1 }),
-          cricketApi.getTeamPlayers(team2, { page: 1, limit: 60, teamName: team2 }),
-        ]);
-
-        if (!active) {
-          return;
-        }
-
-        setTeamAPlayers(safeArray<LoungePlayer>((teamARes as any)?.players));
-        setTeamBPlayers(safeArray<LoungePlayer>((teamBRes as any)?.players));
-      } catch {
-        if (!active) {
-          return;
-        }
-        setTeamAPlayers([]);
-        setTeamBPlayers([]);
-      } finally {
-        if (active) {
-          setScorecardLoading(false);
-        }
-      }
-    };
-
-    loadLoungePlayers();
-
-    return () => {
-      active = false;
-    };
-  }, [team1, team2]);
-
   const handleSend = () => {
     if (!message.trim()) return;
     setMessages((prev) => [
@@ -315,48 +238,6 @@ export function LoungeRoom() {
     setTimeout(() => setCodeCopied(false), 2000);
   };
 
-  const liveBatters = safeArray<any>(scoreboard?.batters).slice(0, 2);
-  const batsmanData = liveBatters.length
-    ? liveBatters.map((player) => ({
-        name: String(player?.name || ""),
-        runs: Number(player?.runs || 0),
-        balls: Number(player?.balls || 0),
-        image: getPlayerImage(String(player?.name || "")),
-      }))
-    : teamAPlayers
-        .slice()
-        .sort((a, b) => Number(b?.runs || 0) - Number(a?.runs || 0))
-        .slice(0, 2)
-        .map((player) => ({
-          name: String(player?.name || ""),
-          runs: Number(player?.runs || 0),
-          balls: 0,
-          image: player?.image || getPlayerImage(String(player?.name || "")),
-        }));
-
-  const liveBowler = safeArray<any>(scoreboard?.bowlers)[0] || null;
-  const bowlerData = liveBowler?.name
-    ? {
-        name: String(liveBowler?.name || "Not available"),
-        overs: String(liveBowler?.overs || "-"),
-        runs: Number(String(liveBowler?.figures || "").split("-")[1] || 0),
-        wickets: Number(String(liveBowler?.figures || "").split("-")[0] || 0),
-        image: getPlayerImage(String(liveBowler?.name || "")),
-      }
-    : (() => {
-        const bowlerBase = teamBPlayers
-          .slice()
-          .sort((a, b) => Number(b?.wickets || 0) - Number(a?.wickets || 0))[0];
-
-        return {
-          name: String(bowlerBase?.name || "Not available"),
-          overs: "-",
-          runs: Number(bowlerBase?.runs || 0),
-          wickets: Number(bowlerBase?.wickets || 0),
-          image: bowlerBase?.image || getPlayerImage(String(bowlerBase?.name || "")),
-        };
-      })();
-
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.5 }} className="min-h-screen">
       <Navbar />
@@ -371,110 +252,40 @@ export function LoungeRoom() {
           ]} />
         </div>
 
-        {/* ─── Mini Scorecard (like reference image 2) ─── */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
-          className="rounded-2xl p-4 md:p-6 mb-6"
-          style={{
-            background: "linear-gradient(135deg, rgba(13,10,30,0.95) 0%, rgba(8,18,35,0.95) 100%)",
-            border: "1px solid rgba(255,255,255,0.08)",
-          }}
-        >
-          {/* Score Header */}
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-3">
-              <TeamLogo teamId={teamALogo.teamId} short={teamALogo.short} size={36} />
-              <div>
-                <p className="text-white font-black text-lg">{team1}</p>
-                <p className="text-[#3BD4E7] text-sm font-mono font-bold">
-                  {score1.runsText}
-                  {overs1 && <span className="text-white/30 text-xs font-normal"> {overs1} ov</span>}
-                </p>
-              </div>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="mb-6 space-y-4">
+          <MatchHeaderCard
+            series={match?.series || "Live Match Lounge"}
+            status={match?.status || "Live"}
+            venue={match?.venue || DASH}
+            dateTime={[String(match?.date || "").trim(), String(match?.startTime || "").trim()].filter(Boolean).join(" · ") || DASH}
+            team1={team1}
+            team2={team2}
+            team1Score={{ runsText: score1.runsText, oversText: score1.oversText || String(match?.team1Overs || "").trim() }}
+            team2Score={{ runsText: score2.runsText, oversText: score2.oversText || String(match?.team2Overs || "").trim() }}
+            result={match?.result}
+            subtitle={match?.score || ""}
+          />
+          <KeyStatsRow
+            items={[
+              { label: "CRR", value: summaryStats.crr },
+              { label: "RRR", value: summaryStats.rrr },
+              { label: "Partnership", value: summaryStats.partnership },
+              { label: "Last Wicket", value: summaryStats.lastWicket },
+              { label: "Target", value: summaryStats.target },
+            ]}
+          />
+          <LiveNeedRow
+            neededRuns={needSummary.neededRuns}
+            ballsRemaining={needSummary.ballsRemaining}
+            requiredRate={getRequiredRunRate(liveStats)}
+            equation={needSummary.equation}
+          />
+          {lastSixBalls.length > 0 && (
+            <div className="rounded-2xl border border-white/7 bg-white/[0.03] px-4 py-3">
+              <LastSixBallsStrip balls={lastSixBalls} />
             </div>
-            <div className="flex items-center gap-2">
-              <motion.div
-                animate={{ opacity: [1, 0.3, 1] }}
-                transition={{ duration: 1, repeat: Infinity }}
-                className="flex items-center gap-1 px-2 py-1 rounded-md text-xs font-bold"
-                style={{ background: "rgba(255,77,141,0.15)", color: "#FF4D8D" }}
-              >
-                <Radio size={10} /> LIVE
-              </motion.div>
-              <span className="text-white/30 text-xs">CRR: {String(scoreboard?.liveStats?.currentRunRate || "-")}</span>
-            </div>
-            <div className="flex items-center gap-3">
-              <div className="text-right">
-                <p className="text-white font-black text-lg">{team2}</p>
-                <p className="text-white/40 text-sm">
-                  {score2.runsText === "Yet to bat" ? "Yet to bat" : score2.runsText}
-                  {overs2 && <span className="text-white/30 text-xs"> {overs2} ov</span>}
-                </p>
-              </div>
-              <TeamLogo teamId={teamBLogo.teamId} short={teamBLogo.short} size={36} />
-            </div>
-          </div>
-
-          {/* Batsmen + Bowler with player images */}
-          <div className="flex items-center justify-between gap-4 py-3 px-4 rounded-xl" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.05)" }}>
-            {/* Batsmen */}
-            <div className="flex items-center gap-4">
-              {scorecardLoading && (
-                <div className="text-white/40 text-xs">Loading players...</div>
-              )}
-              {!scorecardLoading && batsmanData.length === 0 && (
-                <div className="text-white/40 text-xs">Batting data not available</div>
-              )}
-              {!scorecardLoading && batsmanData.map((bat, i) => (
-                <div key={bat.name} className="flex items-center gap-2">
-                  <div className="w-10 h-10 rounded-full overflow-hidden" style={{ border: "2px solid rgba(59,212,231,0.3)", background: "rgba(255,255,255,0.06)" }}>
-                    {bat.image ? (
-                      <ImageWithFallback src={bat.image} alt={bat.name} fallbackMode="person" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center text-white/40 text-xs font-bold">?</div>
-                    )}
-                  </div>
-                  <div>
-                    <p className="text-white text-xs font-semibold">{bat.name.split(" ").pop()}</p>
-                    <p className="text-[#3BD4E7] text-xs font-mono font-bold">{bat.runs}<span className="text-white/30">({bat.balls})</span></p>
-                  </div>
-                  {i === 0 && <span className="text-white/20 text-xs mx-1">+</span>}
-                </div>
-              ))}
-            </div>
-
-            {/* Bowler */}
-            <div className="flex items-center gap-2">
-              <div className="w-10 h-10 rounded-full overflow-hidden" style={{ border: "2px solid rgba(255,77,141,0.3)", background: "rgba(255,255,255,0.06)" }}>
-                {bowlerData.image ? (
-                  <ImageWithFallback src={bowlerData.image} alt={bowlerData.name} fallbackMode="person" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                ) : (
-                  <div className="w-full h-full flex items-center justify-center text-white/40 text-xs font-bold">?</div>
-                )}
-              </div>
-              <div>
-                <p className="text-white text-xs font-semibold">{bowlerData.name.split(" ").pop()}</p>
-                <p className="text-[#FF4D8D] text-xs font-mono font-bold">{bowlerData.wickets}-{bowlerData.runs} <span className="text-white/30">({bowlerData.overs})</span></p>
-              </div>
-            </div>
-          </div>
-
-          {/* Win Probability Mini */}
-          <div className="mt-3 flex items-center gap-3">
-            <span className="text-xs font-bold" style={{ color: "#FF4D8D" }}>{team1} {team1Prob}%</span>
-            <div className="flex-1 h-1.5 rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.08)" }}>
-              <motion.div
-                initial={{ width: "50%" }}
-                animate={{ width: `${team1Prob}%` }}
-                transition={{ duration: 1 }}
-                className="h-full rounded-full"
-                style={{ background: "linear-gradient(90deg, #FF4D8D, #7C4DFF)" }}
-              />
-            </div>
-            <span className="text-xs font-bold" style={{ color: "#3BD4E7" }}>{team2} {100 - team1Prob}%</span>
-          </div>
+          )}
+          <CurrentPlayersCard batters={currentBatters} bowler={currentBowler} />
         </motion.div>
 
         {/* ─── Room Info Bar ─── */}

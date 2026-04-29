@@ -1,16 +1,26 @@
 import { useEffect, useMemo, useState, useCallback } from "react";
-import { motion, AnimatePresence } from "motion/react";
+import { motion } from "motion/react";
 import { Navbar } from "../ui/Navbar";
 import { GlassCard } from "../ui/GlassCard";
 import { useNavigate } from "react-router";
-import { TrendingUp, Users, Activity, Trophy, ChevronRight, Star, Flame, Clock, MapPin, Zap, Timer } from "lucide-react";
+import { TrendingUp, Users, Activity, Trophy, ChevronRight, Star, Flame, Clock, MapPin, Timer } from "lucide-react";
 import { ImageWithFallback } from "../figma/ImageWithFallback";
 import { TeamLogo } from "../ui/TeamLogo";
 import { cricketApi } from "../../services/cricketApi";
-import { getTeamLogoProps, isLiveStatus, isUpcomingStatus, safeArray, deriveTeamShort } from "../../services/cricketUi";
-import { IPL_STANDINGS } from "../../data/ipl2026";
-import { getIplTeamByShort, type IplTeamId } from "../../data/iplTeams";
+import {
+  DASH,
+  getCurrentRunRate,
+  getLastSixBalls,
+  getNeedSummary,
+  getRequiredRunRate,
+  getTeamLogoProps,
+  isLiveStatus,
+  isUpcomingStatus,
+  parseRunsAndOvers,
+  safeArray,
+} from "../../services/cricketUi";
 import { useMatchStore } from "../../../contexts/MatchContext";
+import { LastSixBallsStrip, MatchStatusBadge } from "../ui/cricket-match-ui";
 
 const CRICKET_ICON_IMAGE =
   "https://img.freepik.com/free-vector/red-ball-hitting-wicket-stumps-with-bat-black-abstract-splash-background-cricket-fever-concept_1302-5492.jpg?semt=ais_hybrid&w=740&q=80";
@@ -64,26 +74,10 @@ type UiMatch = {
   startTime: string;
   venue: string;
   matchNo: string;
-};
-
-const parseRunsAndOvers = (value: unknown): { runsText: string; oversText: string } => {
-  const raw = String(value || "").trim();
-  if (!raw) return { runsText: "", oversText: "" };
-  const compact = raw.match(/^\s*(\d{1,3})\s*[-/]\s*(\d{2,}(?:\.\d+)?)\s*$/);
-  if (compact) {
-    const runs = String(compact[1] || "").trim();
-    const tail = String(compact[2] || "").trim();
-    if (tail.includes(".") && tail.length >= 3) {
-      const wkts = tail.slice(0, 1);
-      const overs = tail.slice(1);
-      return { runsText: `${runs}-${wkts}`, oversText: overs };
-    }
-  }
-  const match = raw.match(/^\s*([0-9]+\s*[-/]\s*[0-9]+|[0-9]+)\s*(?:\(([^)]+)\))?\s*$/);
-  if (match) {
-    return { runsText: String(match[1] || "").trim(), oversText: String(match[2] || "").trim() };
-  }
-  return { runsText: raw, oversText: "" };
+  result?: string;
+  scoreboard?: any;
+  liveStats?: any;
+  fetchedAt?: string;
 };
 
 type TrendingNewsItem = {
@@ -138,29 +132,39 @@ const formatMatchStartTimeSafe = (explicitValue: unknown, fallbackIso: unknown) 
   })} IST`;
 };
 
-const toUiMatch = (match: any): UiMatch => ({
-  id: String(match?.id || `${match?.team1 || "team1"}-${match?.team2 || "team2"}-${match?.date || "date"}`),
-  league: match?.series || "Indian Premier League 2026",
-  tournamentId: String(match?.tournamentId || "ipl").toLowerCase(),
-  teamA: match?.team1 || match?.teamA || "Team A",
-  teamB: match?.team2 || match?.teamB || "Team B",
-  teamADisplay: match?.team1Name || match?.team1Display || match?.team1 || "Team A",
-  teamBDisplay: match?.team2Name || match?.team2Display || match?.team2 || "Team B",
-  score:
-    match?.score ||
-    (match?.team1Score || match?.team2Score
-      ? `${match?.team1Score || "-"} · ${match?.team2Score || "-"}`
-      : "Score unavailable"),
-  teamAScore: parseRunsAndOvers(match?.team1Score).runsText || undefined,
-  teamAOvers: (parseRunsAndOvers(match?.team1Score).oversText || String(match?.team1Overs || "").trim()) || undefined,
-  teamBScore: parseRunsAndOvers(match?.team2Score).runsText || undefined,
-  teamBOvers: (parseRunsAndOvers(match?.team2Score).oversText || String(match?.team2Overs || "").trim()) || undefined,
-  status: match?.status || "Status unavailable",
-  date: formatMatchDateSafe(match?.date || match?.starts_at || match?.startsAt),
-  startTime: formatMatchStartTimeSafe(match?.startTime, match?.starts_at || match?.startsAt),
-  venue: match?.venue || "Venue TBA",
-  matchNo: String(match?.matchNo || "").trim(),
-});
+const toUiMatch = (match: any): UiMatch => {
+  const teamAScore = parseRunsAndOvers(match?.team1Score);
+  const teamBScore = parseRunsAndOvers(match?.team2Score);
+  const scoreboard = match?.scoreboard || match?.raw?.scoreboard || null;
+
+  return {
+    id: String(match?.id || `${match?.team1 || "team1"}-${match?.team2 || "team2"}-${match?.date || "date"}`),
+    league: match?.series || "Indian Premier League 2026",
+    tournamentId: String(match?.tournamentId || "ipl").toLowerCase(),
+    teamA: match?.team1 || match?.teamA || "Team A",
+    teamB: match?.team2 || match?.teamB || "Team B",
+    teamADisplay: match?.team1Name || match?.team1Display || match?.team1 || "Team A",
+    teamBDisplay: match?.team2Name || match?.team2Display || match?.team2 || "Team B",
+    score:
+      match?.score ||
+      (match?.team1Score || match?.team2Score
+        ? `${match?.team1Score || DASH} · ${match?.team2Score || DASH}`
+        : "Score unavailable"),
+    teamAScore: teamAScore.runsText || undefined,
+    teamAOvers: (teamAScore.oversText || String(match?.team1Overs || "").trim()) || undefined,
+    teamBScore: teamBScore.runsText || undefined,
+    teamBOvers: (teamBScore.oversText || String(match?.team2Overs || "").trim()) || undefined,
+    status: match?.status || "Status unavailable",
+    date: formatMatchDateSafe(match?.date || match?.starts_at || match?.startsAt),
+    startTime: formatMatchStartTimeSafe(match?.startTime, match?.starts_at || match?.startsAt),
+    venue: match?.venue || "Venue TBA",
+    matchNo: String(match?.matchNo || "").trim(),
+    result: match?.result ? String(match.result) : undefined,
+    scoreboard,
+    liveStats: scoreboard?.liveStats || match?.liveStats || null,
+    fetchedAt: String(match?.fetchedAt || match?.raw?.fetchedAt || "").trim() || undefined,
+  };
+};
 
 const guessTournamentIdFromCategory = (value: string) => {
   const normalized = String(value || "").toLowerCase();
@@ -308,16 +312,6 @@ function PremiumMatchCard({ match, index }: { match: UiMatch; index: number }) {
   const navigate = useNavigate();
   const teamA = getTeamLogoProps(match.teamA);
   const teamB = getTeamLogoProps(match.teamB);
-
-  // Win Probability from standings
-  const team1Standing = IPL_STANDINGS.find(s => s.short === match.teamA || s.short === deriveTeamShort(match.teamA));
-  const team2Standing = IPL_STANDINGS.find(s => s.short === match.teamB || s.short === deriveTeamShort(match.teamB));
-  const team1WinRate = team1Standing ? (team1Standing.won / Math.max(team1Standing.played, 1)) * 100 : 50;
-  const team2WinRate = team2Standing ? (team2Standing.won / Math.max(team2Standing.played, 1)) * 100 : 50;
-  const totalRate = team1WinRate + team2WinRate || 1;
-  const team1Prob = Math.round((team1WinRate / totalRate) * 100);
-  const team2Prob = 100 - team1Prob;
-
   const matchRouteId = match.id;
 
   return (
@@ -345,6 +339,10 @@ function PremiumMatchCard({ match, index }: { match: UiMatch; index: number }) {
             <CountdownTimer startTime={match.startTime} date={match.date} />
           </div>
 
+          <div className="mb-4">
+            <MatchStatusBadge status={match.status} />
+          </div>
+
           {/* Teams */}
           <div className="grid grid-cols-[1fr_auto_1fr] gap-4 items-center mb-5">
             {/* Team A */}
@@ -353,6 +351,8 @@ function PremiumMatchCard({ match, index }: { match: UiMatch; index: number }) {
               <div>
                 <p className="text-white font-black text-base md:text-lg">{match.teamA}</p>
                 <p className="text-white/35 text-xs truncate">{match.teamADisplay}</p>
+                <p className="mt-1 text-sm font-bold text-white">{match.teamAScore || DASH}</p>
+                <p className="text-[11px] uppercase tracking-[0.16em] text-white/40">Overs {match.teamAOvers || DASH}</p>
               </div>
             </div>
 
@@ -371,6 +371,8 @@ function PremiumMatchCard({ match, index }: { match: UiMatch; index: number }) {
               <div className="text-right">
                 <p className="text-white font-black text-base md:text-lg">{match.teamB}</p>
                 <p className="text-white/35 text-xs truncate">{match.teamBDisplay}</p>
+                <p className="mt-1 text-sm font-bold text-white">{match.teamBScore || DASH}</p>
+                <p className="text-[11px] uppercase tracking-[0.16em] text-white/40">Overs {match.teamBOvers || DASH}</p>
               </div>
               <TeamLogo teamId={teamB.teamId} short={teamB.short} size={48} />
             </div>
@@ -384,39 +386,36 @@ function PremiumMatchCard({ match, index }: { match: UiMatch; index: number }) {
             <span className="text-[#3BD4E7]">{match.date}{match.startTime ? `, ${match.startTime}` : ""}</span>
           </div>
 
-          {/* Win Probability */}
-          <div className="mb-5">
-            <div className="flex items-center justify-between text-xs mb-1.5">
-              <span className="font-bold" style={{ color: "#FF4D8D" }}>{match.teamA} {team1Prob}%</span>
-              <span className="text-white/25 text-[10px] uppercase tracking-wider">Win Probability</span>
-              <span className="font-bold" style={{ color: "#3BD4E7" }}>{match.teamB} {team2Prob}%</span>
-            </div>
-            <div className="h-1.5 rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.06)" }}>
-              <motion.div
-                initial={{ width: "50%" }}
-                animate={{ width: `${team1Prob}%` }}
-                transition={{ duration: 1.5, ease: "easeOut" }}
-                className="h-full rounded-full"
-                style={{ background: "linear-gradient(90deg, #FF4D8D, #7C4DFF)" }}
-              />
-            </div>
-          </div>
+          <p className="mb-5 min-h-10 text-sm font-semibold text-white/70">{match.result || match.status}</p>
 
-          {/* Join Lounge Button */}
-          <motion.button
-            whileHover={{ scale: 1.02, y: -1 }}
-            whileTap={{ scale: 0.98 }}
-            onClick={() => navigate(`/lounge/${matchRouteId}`)}
-            className="w-full flex items-center justify-center gap-2.5 px-5 py-3 rounded-xl font-bold text-sm text-white"
-            style={{
-              background: "linear-gradient(135deg, #7C4DFF, #FF4D8D)",
-              boxShadow: "0 4px 20px rgba(124,77,255,0.3), 0 0 40px rgba(255,77,141,0.15)",
-            }}
-          >
-            <Users size={16} />
-            Join Lounge
-            <ChevronRight size={14} />
-          </motion.button>
+          <div className="grid grid-cols-2 gap-3">
+            <motion.button
+              whileHover={{ scale: 1.02, y: -1 }}
+              whileTap={{ scale: 0.98 }}
+              onClick={() => navigate(`/match/${matchRouteId}`)}
+              className="w-full flex items-center justify-center gap-2.5 rounded-xl px-5 py-3 text-sm font-bold text-white"
+              style={{
+                background: "rgba(255,255,255,0.06)",
+                border: "1px solid rgba(255,255,255,0.1)",
+              }}
+            >
+              View Details
+            </motion.button>
+            <motion.button
+              whileHover={{ scale: 1.02, y: -1 }}
+              whileTap={{ scale: 0.98 }}
+              onClick={() => navigate(`/lounge/${matchRouteId}`)}
+              className="w-full flex items-center justify-center gap-2.5 rounded-xl px-5 py-3 text-sm font-bold text-white"
+              style={{
+                background: "linear-gradient(135deg, #7C4DFF, #FF4D8D)",
+                boxShadow: "0 4px 20px rgba(124,77,255,0.3), 0 0 40px rgba(255,77,141,0.15)",
+              }}
+            >
+              <Users size={16} />
+              Open Lounge
+              <ChevronRight size={14} />
+            </motion.button>
+          </div>
         </div>
       </GlassCard>
     </motion.div>
@@ -428,6 +427,18 @@ function PremiumLiveMatchCard({ match, index }: { match: UiMatch; index: number 
   const teamA = getTeamLogoProps(match.teamA);
   const teamB = getTeamLogoProps(match.teamB);
   const matchRouteId = match.id;
+  const liveStats = match.liveStats || {};
+  const crr = getCurrentRunRate(liveStats);
+  const rrr = getRequiredRunRate(liveStats);
+  const needSummary = getNeedSummary(liveStats);
+  const lastSixBalls = getLastSixBalls({ scoreboard: match.scoreboard || { liveStats } });
+  const liveLine =
+    (needSummary.neededRuns != null && needSummary.ballsRemaining != null
+      ? `Need ${needSummary.neededRuns} in ${needSummary.ballsRemaining}`
+      : needSummary.equation) ||
+    match.result ||
+    match.score ||
+    match.status;
 
   return (
     <motion.div
@@ -443,7 +454,7 @@ function PremiumLiveMatchCard({ match, index }: { match: UiMatch; index: number 
               <span className="text-white/70 text-xs font-semibold">{match.league}</span>
               {match.matchNo && <span className="text-white/30 text-xs ml-2">• {match.matchNo}</span>}
             </div>
-            <span className="text-xs font-bold" style={{ color: "#FF4D8D" }}>{String(match.status || "LIVE").toUpperCase()}</span>
+            <MatchStatusBadge status={match.status} />
           </div>
 
           <div className="grid grid-cols-[1fr_auto_1fr] gap-4 items-center mb-4">
@@ -485,23 +496,51 @@ function PremiumLiveMatchCard({ match, index }: { match: UiMatch; index: number 
             </div>
           </div>
 
-          <div className="flex items-center justify-between gap-3">
-            <div className="text-white/60 text-sm font-semibold truncate">{match.score}</div>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                navigate(`/lounge/${matchRouteId}`);
-              }}
-              className="px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2"
-              style={{
-                background: "linear-gradient(135deg, rgba(124,77,255,0.35), rgba(255,77,141,0.35))",
-                border: "1px solid rgba(124,77,255,0.55)",
-                color: "#efe8ff",
-              }}
-            >
-              <Users size={14} />
-              Join Lounge
-            </button>
+          <div className="space-y-4">
+            <div className="rounded-2xl border border-white/8 bg-white/[0.03] px-4 py-3">
+              <p className="text-sm font-semibold text-white">{liveLine}</p>
+              <div className="mt-3 flex flex-wrap items-center gap-4 text-xs font-semibold text-white/65">
+                <span>CRR {crr}</span>
+                {rrr !== DASH && <span>RRR {rrr}</span>}
+                <span>{match.venue}</span>
+              </div>
+              {lastSixBalls.length > 0 && (
+                <div className="mt-3">
+                  <LastSixBallsStrip balls={lastSixBalls} compact />
+                </div>
+              )}
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  navigate(`/match/${matchRouteId}`);
+                }}
+                className="rounded-xl px-4 py-2.5 text-xs font-bold text-white"
+                style={{
+                  background: "rgba(255,255,255,0.06)",
+                  border: "1px solid rgba(255,255,255,0.1)",
+                }}
+              >
+                View Details
+              </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  navigate(`/lounge/${matchRouteId}`);
+                }}
+                className="rounded-xl px-4 py-2.5 text-xs font-bold flex items-center justify-center gap-2"
+                style={{
+                  background: "linear-gradient(135deg, rgba(124,77,255,0.35), rgba(255,77,141,0.35))",
+                  border: "1px solid rgba(124,77,255,0.55)",
+                  color: "#efe8ff",
+                }}
+              >
+                <Users size={14} />
+                Open Lounge
+              </button>
+            </div>
           </div>
         </div>
       </GlassCard>
@@ -509,7 +548,7 @@ function PremiumLiveMatchCard({ match, index }: { match: UiMatch; index: number 
   );
 }
 
-export function Dashboard() {
+export function Dashboard({ adminMode = false }: { adminMode?: boolean }) {
   const navigate = useNavigate();
   const { adminMatches, liveSnapshotsByMatchId } = useMatchStore();
   const [liveMatches, setLiveMatches] = useState<UiMatch[]>([]);
@@ -551,6 +590,7 @@ export function Dashboard() {
         }
         const ui = toUiMatch({
           ...matchPayload,
+          scoreboard: snapshot?.scoreboard || matchPayload?.scoreboard,
           id: m.id,
           tournamentId: matchPayload?.tournamentId || guessTournamentIdFromCategory(m.category),
           series: matchPayload?.series || m.sectionLabel || m.category,
@@ -657,7 +697,7 @@ export function Dashboard() {
       pool.push(...iccLiveMatches.filter((match) => isLiveStatus(match.status)));
     }
 
-    return pool.sort((a, b) => {
+    return dedupeMatches(pool).sort((a, b) => {
       const aIccRank = a.tournamentId === "icc" ? 0 : 1;
       const bIccRank = b.tournamentId === "icc" ? 0 : 1;
       if (aIccRank !== bIccRank) {
@@ -721,7 +761,11 @@ export function Dashboard() {
                 Intelligence Hub
               </span>
             </h1>
-            <p className="text-white/50 text-lg max-w-lg">Live scores and match feeds are now powered by your backend web scraping pipeline.</p>
+            <p className="text-white/50 text-lg max-w-lg">
+              {adminMode
+                ? "Admin mode keeps your manually added live matches in the same real-time feed without changing routes or polling behavior."
+                : "Live scores and match feeds are now powered by your backend web scraping pipeline."}
+            </p>
             {error && <p className="text-[#ff8ca8] text-sm mt-3">{error}</p>}
           </div>
         </motion.div>
