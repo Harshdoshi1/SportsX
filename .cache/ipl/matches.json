@@ -1,21 +1,6 @@
 {
-  "updatedAt": "2026-04-29T13:46:44.651Z",
+  "updatedAt": "2026-04-30T07:41:50.982Z",
   "data": [
-    {
-      "id": "2481",
-      "matchNo": "Match 41",
-      "team1": "MI",
-      "team2": "SRH",
-      "team1Name": "Mumbai Indians",
-      "team2Name": "Sunrisers Hyderabad",
-      "team1Score": null,
-      "team2Score": null,
-      "date": "APR, WED 29",
-      "startTime": "7:30 pm IST",
-      "venue": "Wankhede Stadium, Mumbai",
-      "status": "Upcoming",
-      "result": "Mumbai Indians Won The Toss And Elected To Bat"
-    },
     {
       "id": "2482",
       "matchNo": "Match 42",
@@ -450,6 +435,21 @@
       "venue": "Eden Gardens, Kolkata",
       "status": "Upcoming",
       "result": null
+    },
+    {
+      "id": "2481",
+      "matchNo": "Match 41",
+      "team1": "MI",
+      "team2": "SRH",
+      "team1Name": "Mumbai Indians",
+      "team2Name": "Sunrisers Hyderabad",
+      "team1Score": "243/5 (20.0 OV)",
+      "team2Score": "249/4 (18.4 OV )",
+      "date": "APR, WED 29",
+      "startTime": "7:30 pm IST",
+      "venue": "Wankhede Stadium, Mumbai",
+      "status": "Completed",
+      "result": "Sunrisers Hyderabad Won by 6 Wickets"
     },
     {
       "id": "2480",

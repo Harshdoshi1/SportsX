@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-04-28T09:53:57.806Z",
+  "updatedAt": "2026-04-30T05:13:45.819Z",
   "data": [
     {
       "nameKey": "viratkohli",
@@ -1563,6 +1563,189 @@
       "opponentStats": [],
       "favouriteTarget": null,
       "lastScraped": "2026-04-28T09:53:57.383Z"
+    },
+    {
+      "nameKey": "vaibhavsooryavanshi",
+      "crexSlug": "vaibhav-sooryavanshi-DBT",
+      "team": "RR",
+      "role": null,
+      "innings": [
+        {
+          "runs": 78,
+          "balls": 26,
+          "sr": 300,
+          "fours": 8,
+          "sixes": 7,
+          "opponent": "RCB",
+          "date": "Unknown",
+          "matchSlug": "rcb-vs-rr-16th-match-indian-premier-league-2026-match-updates-10YE",
+          "dismissal": "c Kohli b Pandya",
+          "matchUrl": "https://crex.com/cricket-live-score/rcb-vs-rr-16th-match-indian-premier-league-2026-match-updates-10YE"
+        },
+        {
+          "runs": 52,
+          "balls": 17,
+          "sr": 305.88,
+          "fours": 4,
+          "sixes": 5,
+          "opponent": "CSK",
+          "date": "Unknown",
+          "matchSlug": "csk-vs-rr-3rd-match-indian-premier-league-2026-match-updates-10Y1",
+          "dismissal": "c Khan b Kamboj",
+          "matchUrl": "https://crex.com/cricket-live-score/csk-vs-rr-3rd-match-indian-premier-league-2026-match-updates-10Y1"
+        },
+        {
+          "runs": 43,
+          "balls": 16,
+          "sr": 268.75,
+          "fours": 0,
+          "sixes": 0,
+          "opponent": "SRH",
+          "matchSlug": null
+        },
+        {
+          "runs": 103,
+          "balls": 37,
+          "sr": 278.38,
+          "fours": 0,
+          "sixes": 0,
+          "opponent": "LSG",
+          "matchSlug": null
+        },
+        {
+          "runs": 8,
+          "balls": 11,
+          "sr": 72.73,
+          "fours": 0,
+          "sixes": 0,
+          "opponent": "KKR",
+          "matchSlug": null
+        },
+        {
+          "runs": 46,
+          "balls": 28,
+          "sr": 164.29,
+          "fours": 0,
+          "sixes": 0,
+          "opponent": "SRH",
+          "matchSlug": null
+        },
+        {
+          "runs": 0,
+          "balls": 1,
+          "sr": 0,
+          "fours": 0,
+          "sixes": 0,
+          "opponent": "RCB",
+          "matchSlug": null
+        },
+        {
+          "runs": 78,
+          "balls": 26,
+          "sr": 300,
+          "fours": 0,
+          "sixes": 0,
+          "opponent": "MI",
+          "matchSlug": null
+        },
+        {
+          "runs": 39,
+          "balls": 14,
+          "sr": 278.57,
+          "fours": 0,
+          "sixes": 0,
+          "opponent": "GT",
+          "matchSlug": null
+        },
+        {
+          "runs": 31,
+          "balls": 18,
+          "sr": 172.22,
+          "fours": 0,
+          "sixes": 0,
+          "opponent": "CSK",
+          "matchSlug": null
+        }
+      ],
+      "bowlingInnings": [],
+      "opponentStats": [
+        {
+          "opponent": "RCB",
+          "opponentName": "Royal Challengers Bengaluru",
+          "innings": 2,
+          "avgRuns": 39,
+          "avgSR": 288.89,
+          "totalFours": 8,
+          "totalSixes": 7,
+          "totalRuns": 78
+        },
+        {
+          "opponent": "CSK",
+          "opponentName": "Chennai Super Kings",
+          "innings": 2,
+          "avgRuns": 41.5,
+          "avgSR": 237.14,
+          "totalFours": 4,
+          "totalSixes": 5,
+          "totalRuns": 83
+        },
+        {
+          "opponent": "SRH",
+          "opponentName": "Sunrisers Hyderabad",
+          "innings": 2,
+          "avgRuns": 44.5,
+          "avgSR": 202.27,
+          "totalFours": 0,
+          "totalSixes": 0,
+          "totalRuns": 89
+        },
+        {
+          "opponent": "LSG",
+          "opponentName": "Lucknow Super Giants",
+          "innings": 1,
+          "avgRuns": 103,
+          "avgSR": 278.38,
+          "totalFours": 0,
+          "totalSixes": 0,
+          "totalRuns": 103
+        },
+        {
+          "opponent": "KKR",
+          "opponentName": "Kolkata Knight Riders",
+          "innings": 1,
+          "avgRuns": 8,
+          "avgSR": 72.73,
+          "totalFours": 0,
+          "totalSixes": 0,
+          "totalRuns": 8
+        },
+        {
+          "opponent": "MI",
+          "opponentName": "Mumbai Indians",
+          "innings": 1,
+          "avgRuns": 78,
+          "avgSR": 300,
+          "totalFours": 0,
+          "totalSixes": 0,
+          "totalRuns": 78
+        },
+        {
+          "opponent": "GT",
+          "opponentName": "Gujarat Titans",
+          "innings": 1,
+          "avgRuns": 39,
+          "avgSR": 278.57,
+          "totalFours": 0,
+          "totalSixes": 0,
+          "totalRuns": 39
+        }
+      ],
+      "favouriteTarget": {
+        "opponent": "LSG",
+        "opponentName": "Lucknow Super Giants",
+        "avgRuns": 103
+      },
+      "lastScraped": "2026-04-30T05:13:45.442Z"
     }
   ]
 }
