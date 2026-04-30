@@ -459,6 +459,66 @@ const parseCommentary = (text) => {
   return uniqueByKey(rows, (row) => `${row.over}:${row.text}`).slice(0, 25);
 };
 
+const tokenFromCommentaryText = (text) => {
+  const raw = String(text || "").toLowerCase();
+  if (!raw) {
+    return null;
+  }
+
+  if (/\bwide\b/.test(raw)) return "Wd";
+  if (/\bno\s*ball\b|\bnoball\b/.test(raw)) return "Nb";
+  if (/\bout\b|\bwicket\b|\bcaught\b|\blbw\b|\bbowled\b|\brun out\b|\bstumped\b/.test(raw)) return "W";
+  if (/\bsix\b|\b6\b/.test(raw)) return "6";
+  if (/\bfour\b|\b4\b/.test(raw)) return "4";
+
+  const runHit = raw.match(/\b([0-6])\s*runs?\b/);
+  if (runHit?.[1]) {
+    return runHit[1];
+  }
+
+  if (/\bno run\b|\bdot ball\b|\b0\b/.test(raw)) return "0";
+
+  const singleDigit = raw.match(/^\s*([0-6wW])\s*$/);
+  if (singleDigit?.[1]) {
+    return singleDigit[1].toUpperCase();
+  }
+
+  return null;
+};
+
+const deriveRecentBallTokens = (commentary, fallbackText = "") => {
+  const tokens = [];
+
+  for (const entry of [...(commentary || [])].reverse()) {
+    const token = tokenFromCommentaryText(entry?.text);
+    if (!token) {
+      continue;
+    }
+    tokens.push(token);
+    if (tokens.length >= 6) {
+      return tokens.slice(-6).reverse();
+    }
+  }
+
+  const compact = String(fallbackText || "")
+    .replace(/\s+/g, " ")
+    .match(/(?:Last\s*6\s*balls?|Current\s*over|Over)\s*:?\s*([0-6WwNbd,\-\s]+)/i)?.[1] || "";
+
+  const fallbackTokens = compact
+    .split(/[\s,\-]+/)
+    .map((item) => String(item || "").trim())
+    .filter(Boolean)
+    .map((item) => {
+      const lowered = item.toLowerCase();
+      if (lowered === "wd" || lowered === "w") return item.toUpperCase();
+      if (lowered === "nb") return "Nb";
+      return item;
+    })
+    .filter((item) => /^(?:[0-6]|wd|nb|w)$/i.test(item));
+
+  return fallbackTokens.slice(-6).map((item) => (String(item).toUpperCase() === "WD" ? "Wd" : String(item).toUpperCase() === "NB" ? "Nb" : String(item).toUpperCase()));
+};
+
 const parseStatus = (text) => {
   const raw = String(text || "").toLowerCase();
   if (!raw) return "Live";
@@ -591,17 +651,19 @@ const scrapeCrexMatch = async (source) => {
       structured?.liveStats?.partnership || pageText.match(/P'?ship\s*:\s*([^\n]+)/i)?.[1]?.trim() || null;
     const lastWicket =
       structured?.liveStats?.lastWicket || pageText.match(/Last\s*Wkt\s*:\s*([^\n]+)/i)?.[1]?.trim() || null;
-    const batters = scorecardPayload?.batters?.length
-      ? scorecardPayload.batters
-      : structured?.batters?.length
-        ? structured.batters
-        : parseBatters(pageText);
-    const bowlers = scorecardPayload?.bowlers?.length
-      ? scorecardPayload.bowlers
-      : structured?.bowlers?.length
-        ? structured.bowlers
-        : parseBowlers(pageText);
     const commentary = parseCommentary(pageText);
+    const recentBallTokens = deriveRecentBallTokens(commentary, structured?.liveStats?.lastSixBalls || lastSixText || "");
+
+    const batters = structured?.batters?.length
+      ? structured.batters
+      : scorecardPayload?.batters?.length
+        ? uniqueByKey(scorecardPayload.batters, (row) => `${String(row?.name || "").toLowerCase()}`)
+        : parseBatters(pageText);
+    const bowlers = structured?.bowlers?.length
+      ? structured.bowlers
+      : scorecardPayload?.bowlers?.length
+        ? uniqueByKey(scorecardPayload.bowlers, (row) => `${String(row?.name || "").toLowerCase()}`)
+        : parseBowlers(pageText);
 
     const innings =
       scorecardPayload?.innings?.length > 0
@@ -662,7 +724,11 @@ const scrapeCrexMatch = async (source) => {
           equation: equationFallback,
           neededRuns,
           ballsRemaining,
-          lastSixBalls: lastSixText,
+          lastSixBalls: recentBallTokens,
+          currentOverBalls: recentBallTokens,
+          currentOverSummary: recentBallTokens.join(" "),
+          recentBalls: recentBallTokens,
+          lastSixBallsText: lastSixText,
         },
       },
     };

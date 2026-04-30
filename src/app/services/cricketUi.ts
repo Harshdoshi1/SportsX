@@ -124,6 +124,20 @@ const toDisplayText = (value: unknown, fallback = DASH) => {
   return text || fallback;
 };
 
+const normalizeWicketCount = (value: unknown) => {
+  const text = String(value ?? "").trim();
+  if (!text) {
+    return "0";
+  }
+
+  const parsed = Number(text);
+  if (Number.isFinite(parsed)) {
+    return String(parsed);
+  }
+
+  return text.replace(/^0+/, "") || "0";
+};
+
 const splitCompactScore = (tail: string) => {
   const compact = String(tail || "").trim();
   const hit = compact.match(/^(\d+)\.(\d+)$/);
@@ -166,19 +180,36 @@ export const parseRunsAndOvers = (value: unknown): ScoreDisplay => {
     return { runsText: DASH, oversText: "" };
   }
 
-  const compact = raw.match(/^\s*(\d{1,3})\s*[-/]\s*([0-9]+\.[0-9]+)\s*$/);
-  if (compact) {
-    const runs = String(compact[1] || "").trim();
-    const split = splitCompactScore(String(compact[2] || ""));
-    if (split) {
-      return {
-        runsText: `${runs}-${split.wickets}`,
-        oversText: split.overs,
-      };
-    }
+  const standard = raw.match(/^\s*(\d{1,3})\s*[-/]\s*(\d{1,2})(?:\(([^)]+)\))?\s*$/);
+  if (standard) {
+    return {
+      runsText: `${String(standard[1] || "").trim()}-${normalizeWicketCount(standard[2])}`,
+      oversText: String(standard[3] || "").trim(),
+    };
   }
 
-  const match = raw.match(/^\s*([0-9]+\s*[-/]\s*[0-9]+|[0-9]+)\s*(?:\(([^)]+)\))?\s*$/);
+  const compact = raw.match(/^\s*(\d{1,3})\s*[-/]\s*(\d+(?:\.\d+)?)\s*$/);
+  if (compact) {
+    const runs = String(compact[1] || "").trim();
+    const scoreTail = String(compact[2] || "").trim();
+
+    if (/^\d+\.\d+$/.test(scoreTail)) {
+      const split = splitCompactScore(scoreTail);
+      if (split) {
+        return {
+          runsText: `${runs}-${normalizeWicketCount(split.wickets)}`,
+          oversText: split.overs,
+        };
+      }
+    }
+
+    return {
+      runsText: `${runs}-${normalizeWicketCount(scoreTail)}`,
+      oversText: "",
+    };
+  }
+
+  const match = raw.match(/^\s*([0-9]+\s*[-/]\s*[0-9]+(?:\.[0-9]+)?|[0-9]+)\s*(?:\(([^)]+)\))?\s*$/);
   if (match) {
     return {
       runsText: toDisplayText(match[1], DASH),
@@ -209,6 +240,23 @@ const toTokenArray = (value: unknown) => {
     .split(/[\s,|]+/)
     .map((item) => item.trim())
     .filter(Boolean);
+};
+
+const uniqueRowsByName = <T extends { name?: string }>(rows: T[]) => {
+  const seen = new Set<string>();
+  const unique: T[] = [];
+
+  for (let index = rows.length - 1; index >= 0; index -= 1) {
+    const row = rows[index];
+    const name = normalizeText(String(row?.name || ""));
+    if (!name || seen.has(name)) {
+      continue;
+    }
+    seen.add(name);
+    unique.push(row);
+  }
+
+  return unique.reverse();
 };
 
 const readBattingValue = (row: any, keys: string[], fallback = DASH) => {
@@ -440,7 +488,14 @@ export const formatLastSixFromCommentary = (entries: CommentaryEntry[]): string 
 
 export const getLastSixBalls = (payload: any): string[] => {
   const liveStats = payload?.scoreboard?.liveStats || payload?.liveStats || {};
-  const direct = toTokenArray(liveStats?.lastSixBalls || liveStats?.last6 || liveStats?.recentBalls);
+  const direct = toTokenArray(
+    liveStats?.currentOverBalls ||
+      liveStats?.currentOverSummary ||
+      liveStats?.lastSixBalls ||
+      liveStats?.last6 ||
+      liveStats?.recentBalls ||
+      liveStats?.lastSixBallsText,
+  );
   if (direct.length > 0) {
     return direct.slice(-6);
   }
@@ -523,25 +578,30 @@ export const getNeedSummary = (liveStats: any) => {
 
 export const getCurrentBatters = (payload: any): LiveBatter[] => {
   const scorecardInnings = getScorecardInnings(payload);
-  const inningsBatters = scorecardInnings.flatMap((inning) => inning.batting).filter((row) => row.name !== DASH);
+  const inningsBatters = uniqueRowsByName(
+    scorecardInnings.flatMap((inning) => inning.batting).filter((row) => row.name !== DASH),
+  );
   if (inningsBatters.length > 0) {
-    return inningsBatters.slice(0, 2);
+    return inningsBatters.slice(-2);
   }
 
-  return safeArray<any>(payload?.scoreboard?.batters)
-    .map(normalizeBatter)
-    .filter((row) => row.name !== DASH)
-    .slice(0, 2);
+  return uniqueRowsByName(
+    safeArray<any>(payload?.scoreboard?.batters)
+      .map(normalizeBatter)
+      .filter((row) => row.name !== DASH),
+  ).slice(-2);
 };
 
 export const getCurrentBowler = (payload: any): LiveBowler | null => {
   const scorecardInnings = getScorecardInnings(payload);
-  const inningsBowler = scorecardInnings.flatMap((inning) => inning.bowling).find((row) => row.name !== DASH);
+  const inningsBowler = uniqueRowsByName(
+    scorecardInnings.flatMap((inning) => inning.bowling).filter((row) => row.name !== DASH),
+  ).at(-1);
   if (inningsBowler) {
     return inningsBowler;
   }
 
-  const rootBowler = safeArray<any>(payload?.scoreboard?.bowlers).map(normalizeBowler)[0];
+  const rootBowler = uniqueRowsByName(safeArray<any>(payload?.scoreboard?.bowlers).map(normalizeBowler)).at(-1);
   return rootBowler || null;
 };
 
