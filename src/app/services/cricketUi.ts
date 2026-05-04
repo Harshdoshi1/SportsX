@@ -642,16 +642,24 @@ export const getCurrentBatters = (payload: any): LiveBatter[] => {
   const inningsRows = safeArray<any>(scoreboard?.scorecard?.innings || scoreboard?.innings);
   const activeInning = inningsRows.at(-1) || null;
 
-  // Try to find batters in various places
-  const batters = safeArray<any>(
-    liveStats?.currentBatters ||
-      liveStats?.activeBatsmen ||
-      liveStats?.activeBatters ||
-      liveStats?.batters ||
-      activeInning?.batting?.filter((b: any) => !String(b?.dismissal || "").trim() || /not out/i.test(String(b?.dismissal || "")))
+  // Only trust explicit live stats for current batters.
+  const liveBatters = safeArray<any>(
+    liveStats?.currentBatters || liveStats?.activeBatsmen || liveStats?.activeBatters
   );
 
-  return batters
+  if (liveBatters.length > 0) {
+    return liveBatters
+      .filter((b) => b && (b.name || b.player || b.batter))
+      .map((b, idx) => normalizeBatter(b, idx))
+      .slice(0, 2);
+  }
+
+  // Fallback to scorecard only when dismissal info confirms "not out".
+  const fallbackBatters = safeArray<any>(
+    activeInning?.batting?.filter((b: any) => /not out/i.test(String(b?.dismissal || "")))
+  );
+
+  return fallbackBatters
     .filter((b) => b && (b.name || b.player || b.batter))
     .map((b, idx) => normalizeBatter(b, idx))
     .slice(0, 2);
@@ -660,15 +668,8 @@ export const getCurrentBatters = (payload: any): LiveBatter[] => {
 export const getCurrentBowler = (payload: any): LiveBowler | null => {
   const scoreboard = payload?.scoreboard || payload || {};
   const liveStats = scoreboard?.liveStats || scoreboard || {};
-  const inningsRows = safeArray<any>(scoreboard?.scorecard?.innings || scoreboard?.innings);
-  const activeInning = inningsRows.at(-1) || null;
 
-  const bowler =
-    liveStats?.currentBowler ||
-    liveStats?.activeBowler ||
-    liveStats?.bowler ||
-    activeInning?.bowling?.[0] ||
-    activeInning?.bowling?.slice(-1)[0];
+  const bowler = liveStats?.currentBowler || liveStats?.activeBowler;
 
   if (!bowler || (!bowler.name && !bowler.player && !bowler.bowler)) return null;
   return normalizeBowler(bowler);
