@@ -3,7 +3,7 @@ import { motion } from "motion/react";
 import { Navbar } from "../ui/Navbar";
 import { GlassCard } from "../ui/GlassCard";
 import { useNavigate } from "react-router";
-import { TrendingUp, Users, Activity, Trophy, ChevronRight, Star, Flame, Clock, MapPin, Timer } from "lucide-react";
+import { TrendingUp, Users, Activity, Trophy, ChevronRight, Star, Flame, Clock, MapPin, Timer, Radio } from "lucide-react";
 import { ImageWithFallback } from "../figma/ImageWithFallback";
 import { TeamLogo } from "../ui/TeamLogo";
 import { cricketApi } from "../../services/cricketApi";
@@ -20,7 +20,10 @@ import {
   safeArray,
 } from "../../services/cricketUi";
 import { useMatchStore } from "../../../contexts/MatchContext";
+import { useAdmin } from "../../../contexts/AdminContext";
 import { LastSixBallsStrip, MatchStatusBadge } from "../ui/cricket-match-ui";
+import { AddUpcomingMatchModal } from "../modals/AddUpcomingMatchModal";
+import { AddLiveMatchModal } from "../modals/AddLiveMatchModal";
 
 const CRICKET_ICON_IMAGE =
   "https://img.freepik.com/free-vector/red-ball-hitting-wicket-stumps-with-bat-black-abstract-splash-background-cricket-fever-concept_1302-5492.jpg?semt=ais_hybrid&w=740&q=80";
@@ -78,6 +81,8 @@ type UiMatch = {
   scoreboard?: any;
   liveStats?: any;
   fetchedAt?: string;
+  adminMatchId?: string;
+  source?: string;
 };
 
 type TrendingNewsItem = {
@@ -429,7 +434,17 @@ function PremiumMatchCard({ match, index }: { match: UiMatch; index: number }) {
   );
 }
 
-function PremiumLiveMatchCard({ match, index }: { match: UiMatch; index: number }) {
+function PremiumLiveMatchCard({
+  match,
+  index,
+  canRemove,
+  onRemove,
+}: {
+  match: UiMatch;
+  index: number;
+  canRemove?: boolean;
+  onRemove?: (matchId: string) => void;
+}) {
   const navigate = useNavigate();
   const teamA = getTeamLogoProps(match.teamA);
   const teamB = getTeamLogoProps(match.teamB);
@@ -461,7 +476,25 @@ function PremiumLiveMatchCard({ match, index }: { match: UiMatch; index: number 
               <span className="text-white/70 text-xs font-semibold">{match.league}</span>
               {match.matchNo && <span className="text-white/30 text-xs ml-2">• {match.matchNo}</span>}
             </div>
-            <MatchStatusBadge status={match.status} />
+            <div className="flex items-center gap-2">
+              {canRemove && onRemove && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onRemove(match.adminMatchId || match.id);
+                  }}
+                  className="rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-[0.16em]"
+                  style={{
+                    background: "rgba(248,113,113,0.12)",
+                    border: "1px solid rgba(248,113,113,0.35)",
+                    color: "#fda4af",
+                  }}
+                >
+                  Remove
+                </button>
+              )}
+              <MatchStatusBadge status={match.status} />
+            </div>
           </div>
 
           <div className="grid grid-cols-[1fr_auto_1fr] gap-4 items-center mb-4">
@@ -557,7 +590,8 @@ function PremiumLiveMatchCard({ match, index }: { match: UiMatch; index: number 
 
 export function Dashboard({ adminMode = false }: { adminMode?: boolean }) {
   const navigate = useNavigate();
-  const { adminMatches, liveSnapshotsByMatchId } = useMatchStore();
+  const { adminMatches, liveSnapshotsByMatchId, removeAdminMatch } = useMatchStore();
+  const { isAdmin } = useAdmin();
   const [liveMatches, setLiveMatches] = useState<UiMatch[]>([]);
   const [iccLiveMatches, setIccLiveMatches] = useState<UiMatch[]>([]);
   const [upcomingMatches, setUpcomingMatches] = useState<UiMatch[]>([]);
@@ -566,6 +600,8 @@ export function Dashboard({ adminMode = false }: { adminMode?: boolean }) {
   const [trendingNews, setTrendingNews] = useState<TrendingNewsItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [showAddUpcomingModal, setShowAddUpcomingModal] = useState(false);
+  const [showAddLiveModal, setShowAddLiveModal] = useState(false);
  
   // Tournament favorites
   const [favTournaments, setFavTournaments] = useState<string[]>(() => {
@@ -602,7 +638,7 @@ export function Dashboard({ adminMode = false }: { adminMode?: boolean }) {
           tournamentId: matchPayload?.tournamentId || guessTournamentIdFromCategory(m.category),
           series: matchPayload?.series || m.sectionLabel || m.category,
         });
-        return ui;
+        return { ...ui, adminMatchId: m.id };
       })
       .filter(Boolean) as UiMatch[];
 
@@ -617,9 +653,11 @@ export function Dashboard({ adminMode = false }: { adminMode?: boolean }) {
         setLoading(true);
         setError(null);
 
-        const [iplScrapedRes, iplLiveRes, adminLiveRes, teamsRes] = await Promise.all([
+        const [iplScrapedRes, iplLiveRes, iplMatchesRes, upcomingRes, adminLiveRes, teamsRes] = await Promise.all([
           cricketApi.getIplScrapedMatches(),
           cricketApi.getIplLiveMatches(1, 20, false),
+          cricketApi.getIplMatches(1, 50),
+          cricketApi.getUpcomingMatches(1, 50),
           cricketApi.getAdminLiveMatches(false),
           cricketApi.getTeams({ page: 1, limit: 1 }),
         ]);
@@ -630,6 +668,12 @@ export function Dashboard({ adminMode = false }: { adminMode?: boolean }) {
 
         const iplScraped = safeArray<any>((iplScrapedRes as any).matches).map(toUiMatch);
         const iplFromLiveLinks = safeArray<any>((iplLiveRes as any).matches).map(toUiMatch);
+        const iplAll = safeArray<any>((iplMatchesRes as any).matches).map((match: any) =>
+          toUiMatch({ ...match, tournamentId: "ipl", status: match?.status || "Upcoming" }),
+        );
+        const upcomingAll = safeArray<any>((upcomingRes as any).matches).map((match: any) =>
+          toUiMatch({ ...match, status: match?.status || "Upcoming" }),
+        );
         const adminLiveMatches = safeArray<any>((adminLiveRes as any)?.data?.matches || (adminLiveRes as any)?.matches || []).map((match: any) => {
           const uiMatch = toUiMatch(match);
           return {
@@ -638,9 +682,10 @@ export function Dashboard({ adminMode = false }: { adminMode?: boolean }) {
             source: 'admin',
           };
         });
-        const ipl = dedupeMatches([...iplFromLiveLinks, ...iplScraped, ...adminLiveMatches]);
+        const ipl = dedupeMatches([...iplFromLiveLinks, ...iplScraped, ...iplAll, ...adminLiveMatches]);
         const live = ipl.filter((match) => isLiveStatus(match.status));
-        const upcoming = ipl.filter((match) => isUpcomingStatus(match.status));
+        const upcomingPool = dedupeMatches([...ipl, ...upcomingAll]);
+        const upcoming = upcomingPool.filter((match) => isUpcomingStatus(match.status) && match.tournamentId === "ipl");
         const totalTeams = Number((teamsRes as any)?.pagination?.total ?? 0);
 
         setLiveMatches(live);
@@ -725,6 +770,11 @@ export function Dashboard({ adminMode = false }: { adminMode?: boolean }) {
 
   const liveMatchCards = filteredLivePool.slice(0, 3);
   const upcomingMatchCards = upcomingMatches.slice(0, 6);
+  const showAdminActions = isAdmin || adminMode;
+
+  const handleRemoveAdminMatch = (matchId: string) => {
+    removeAdminMatch(matchId);
+  };
 
   return (
     <motion.div
@@ -908,7 +958,13 @@ export function Dashboard({ adminMode = false }: { adminMode?: boolean }) {
             )}
 
             {liveMatchCards.map((match, i) => (
-              <PremiumLiveMatchCard key={match.id} match={match} index={i} />
+              <PremiumLiveMatchCard
+                key={match.id}
+                match={match}
+                index={i}
+                canRemove={showAdminActions && Boolean(match.adminMatchId)}
+                onRemove={handleRemoveAdminMatch}
+              />
             ))}
           </div>
         </div>
@@ -969,6 +1025,56 @@ export function Dashboard({ adminMode = false }: { adminMode?: boolean }) {
           </GlassCard>
         </div>
       </div>
+
+      {showAdminActions && (
+        <>
+          <div className="fixed bottom-6 right-6 z-50 flex flex-col gap-3">
+            <motion.button
+              whileHover={{ scale: 1.05, rotate: 90 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={() => setShowAddLiveModal(true)}
+              className="w-14 h-14 md:w-16 md:h-16 rounded-full flex items-center justify-center shadow-2xl"
+              style={{
+                background: "linear-gradient(135deg, #FF4D8D, #7C4DFF)",
+                boxShadow: "0 0 40px rgba(255,77,141,0.5), 0 8px 32px rgba(124,77,255,0.4)",
+              }}
+              title="Add Live Match"
+            >
+              <Radio size={24} className="text-white" />
+            </motion.button>
+
+            <motion.button
+              whileHover={{ scale: 1.05, rotate: 90 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={() => setShowAddUpcomingModal(true)}
+              className="w-14 h-14 md:w-16 md:h-16 rounded-full flex items-center justify-center shadow-2xl"
+              style={{
+                background: "linear-gradient(135deg, #3BD4E7, #00E676)",
+                boxShadow: "0 0 40px rgba(59,212,231,0.5), 0 8px 32px rgba(0,230,118,0.4)",
+              }}
+              title="Add Upcoming Match"
+            >
+              <Clock size={24} className="text-white" />
+            </motion.button>
+          </div>
+
+          <AddUpcomingMatchModal
+            isOpen={showAddUpcomingModal}
+            onClose={() => setShowAddUpcomingModal(false)}
+            onSuccess={() => setShowAddUpcomingModal(false)}
+            defaultCategory="Cricket > IPL"
+            defaultSectionLabel="IPL 2026"
+          />
+
+          <AddLiveMatchModal
+            isOpen={showAddLiveModal}
+            onClose={() => setShowAddLiveModal(false)}
+            onSuccess={() => setShowAddLiveModal(false)}
+            defaultCategory="Cricket > IPL"
+            defaultSectionLabel="IPL 2026"
+          />
+        </>
+      )}
     </motion.div>
   );
 }

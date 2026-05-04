@@ -7,7 +7,16 @@ import { BackButton } from "../ui/BackButton";
 import { Breadcrumbs } from "../ui/Breadcrumbs";
 import { TeamLogo } from "../ui/TeamLogo";
 import { MessageCircle, Radio, Users, MapPin, Activity, Flame, BarChart3 } from "lucide-react";
-import { getTeamLogoProps } from "../../services/cricketUi";
+import {
+  DASH,
+  getCommentaryEntries,
+  getCurrentBatters,
+  getCurrentBowler,
+  getLastSixBalls,
+  getLiveSummaryStats,
+  getScorecardInnings,
+  getTeamLogoProps,
+} from "../../services/cricketUi";
 
 type TabKey = "Scorecard" | "Commentary" | "Analysis";
 
@@ -85,34 +94,38 @@ export function MatchDetailsNew() {
 
   const match = matchData?.match || {};
   const scoreboard = matchData?.scoreboard || {};
-  const batters = scoreboard?.batters || [];
-  const bowlers = scoreboard?.bowlers || [];
-  const commentary = scoreboard?.commentary || [];
-  const last6Balls = scoreboard?.last6Balls || [];
-  const liveStats = scoreboard?.liveStats || {};
-  const fullScorecard = scoreboard?.fullScorecard || { team1: {}, team2: {} };
+  const livePayload = useMemo(() => ({ match, scoreboard }), [match, scoreboard]);
+  const innings = useMemo(() => getScorecardInnings(livePayload), [livePayload]);
+  const commentary = useMemo(() => getCommentaryEntries(livePayload), [livePayload]);
+  const currentBatters = useMemo(() => getCurrentBatters(livePayload), [livePayload]);
+  const currentBowler = useMemo(() => getCurrentBowler(livePayload), [livePayload]);
+  const last6Balls = useMemo(() => getLastSixBalls(livePayload), [livePayload]);
+  const summaryStats = useMemo(() => getLiveSummaryStats(livePayload), [livePayload]);
 
   // Debug logging
   useEffect(() => {
     if (matchData) {
       console.log('🎯 Match Data:', {
-        batters: batters.length,
-        bowlers: bowlers.length,
+        batters: currentBatters.length,
+        bowler: Boolean(currentBowler),
         last6Balls: last6Balls,
         commentary: commentary.length,
       });
     }
-  }, [matchData]);
+  }, [matchData, currentBatters.length, currentBowler, commentary.length, last6Balls]);
 
   const teamALogo = getTeamLogoProps(match?.team1);
   const teamBLogo = getTeamLogoProps(match?.team2);
 
-  const striker = batters[0] || null;
-  const nonStriker = batters[1] || null;
-  const currentBowler = bowlers[0] || null;
+  const striker = currentBatters[0] || null;
+  const nonStriker = currentBatters[1] || null;
 
-  const strikerSR = striker && striker.balls > 0 ? ((striker.runs / striker.balls) * 100).toFixed(1) : "-";
-  const nonStrikerSR = nonStriker && nonStriker.balls > 0 ? ((nonStriker.runs / nonStriker.balls) * 100).toFixed(1) : "-";
+  const strikerBalls = Number(striker?.balls || 0);
+  const nonStrikerBalls = Number(nonStriker?.balls || 0);
+  const strikerRuns = Number(striker?.runs || 0);
+  const nonStrikerRuns = Number(nonStriker?.runs || 0);
+  const strikerSR = striker && strikerBalls > 0 ? ((strikerRuns / strikerBalls) * 100).toFixed(1) : DASH;
+  const nonStrikerSR = nonStriker && nonStrikerBalls > 0 ? ((nonStrikerRuns / nonStrikerBalls) * 100).toFixed(1) : DASH;
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.5 }} className="min-h-screen">
@@ -167,9 +180,9 @@ export function MatchDetailsNew() {
 
               <div className="text-center">
                 <p className="text-white text-5xl md:text-6xl font-black leading-none">VS</p>
-                <p className="text-white/45 text-xs mt-2">CRR: {liveStats?.currentRunRate || "-"}</p>
-                {liveStats?.requiredRunRate && (
-                  <p className="text-[#ffc86b] text-xs mt-1">RRR: {liveStats.requiredRunRate}</p>
+                <p className="text-white/45 text-xs mt-2">CRR: {summaryStats.crr || DASH}</p>
+                {summaryStats.rrr && summaryStats.rrr !== DASH && (
+                  <p className="text-[#ffc86b] text-xs mt-1">RRR: {summaryStats.rrr}</p>
                 )}
               </div>
 
@@ -266,21 +279,21 @@ export function MatchDetailsNew() {
                   <div className="rounded-xl p-3 mb-4" style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)" }}>
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
                       <div>
-                        <p className="text-white/40">CRR</p>
-                        <p className="text-[#7ce8ff] font-bold text-sm">{liveStats?.currentRunRate || "-"}</p>
-                      </div>
-                      <div>
-                        <p className="text-white/40">Req RR</p>
-                        <p className="text-white/85 font-bold text-sm">{liveStats?.requiredRunRate || "-"}</p>
-                      </div>
-                      <div>
-                        <p className="text-white/40">Partnership</p>
-                        <p className="text-white/85 font-bold text-sm">{liveStats?.partnership || "-"}</p>
-                      </div>
-                      <div>
-                        <p className="text-white/40">Last Wicket</p>
-                        <p className="text-white/85 font-bold text-sm truncate">{liveStats?.lastWicket || "-"}</p>
-                      </div>
+                          <p className="text-white/40">CRR</p>
+                          <p className="text-[#7ce8ff] font-bold text-sm">{summaryStats.crr || DASH}</p>
+                        </div>
+                        <div>
+                          <p className="text-white/40">Req RR</p>
+                          <p className="text-white/85 font-bold text-sm">{summaryStats.rrr || DASH}</p>
+                        </div>
+                        <div>
+                          <p className="text-white/40">Partnership</p>
+                          <p className="text-white/85 font-bold text-sm">{summaryStats.partnership || DASH}</p>
+                        </div>
+                        <div>
+                          <p className="text-white/40">Last Wicket</p>
+                          <p className="text-white/85 font-bold text-sm truncate">{summaryStats.lastWicket || DASH}</p>
+                        </div>
                     </div>
                   </div>
 
@@ -324,11 +337,17 @@ export function MatchDetailsNew() {
                     Full Scorecard
                   </h3>
 
-                  {fullScorecard.team1?.batters?.length > 0 && (
+                  {innings.length === 0 && (
+                    <div className="rounded-xl p-4 text-white/45 text-sm" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)" }}>
+                      Scorecard not available yet.
+                    </div>
+                  )}
+
+                  {innings[0]?.batting?.length > 0 && (
                     <div className="mb-4">
-                      <p className="text-white/60 text-xs mb-2">{match?.team1} Batting</p>
+                      <p className="text-white/60 text-xs mb-2">{innings[0].team} Batting</p>
                       <div className="space-y-1">
-                        {fullScorecard.team1.batters.slice(0, 6).map((batter: any, idx: number) => (
+                        {innings[0].batting.slice(0, 6).map((batter: any, idx: number) => (
                           <div key={idx} className="flex justify-between text-xs py-1" style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
                             <span className="text-white/80">{batter.name}</span>
                             <span className="text-[#7ce8ff] font-mono">{batter.runs}({batter.balls})</span>
@@ -338,11 +357,11 @@ export function MatchDetailsNew() {
                     </div>
                   )}
 
-                  {fullScorecard.team1?.bowlers?.length > 0 && (
+                  {innings[0]?.bowling?.length > 0 && (
                     <div>
-                      <p className="text-white/60 text-xs mb-2">{match?.team2} Bowling</p>
+                      <p className="text-white/60 text-xs mb-2">{innings[0].team} Bowling</p>
                       <div className="space-y-1">
-                        {fullScorecard.team1.bowlers.slice(0, 4).map((bowler: any, idx: number) => (
+                        {innings[0].bowling.slice(0, 4).map((bowler: any, idx: number) => (
                           <div key={idx} className="flex justify-between text-xs py-1" style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
                             <span className="text-white/80">{bowler.name}</span>
                             <span className="text-[#ffbf73] font-mono">{bowler.wickets}-{bowler.runs} ({bowler.overs})</span>

@@ -18,6 +18,16 @@ export function AddLiveMatchModal({ isOpen, onClose, onSuccess, defaultCategory,
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
+  const isCrexUrl = (value: string) => {
+    try {
+      const parsed = new URL(value);
+      const host = parsed.hostname.toLowerCase();
+      return host.includes("crex.com") || host.includes("crex.live");
+    } catch {
+      return false;
+    }
+  };
+
   const validateForm = () => {
     if (!url.trim()) {
       setError("URL is required");
@@ -28,6 +38,11 @@ export function AddLiveMatchModal({ isOpen, onClose, onSuccess, defaultCategory,
       new URL(url);
     } catch {
       setError("Invalid URL format");
+      return false;
+    }
+
+    if (!isCrexUrl(url)) {
+      setError("Only Crex live-score links are supported right now.");
       return false;
     }
 

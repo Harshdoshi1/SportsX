@@ -6,6 +6,7 @@ import { NotificationPanel } from "./NotificationPanel";
 import { cricketApi } from "../../services/cricketApi";
 import { deriveTeamShort, slugify } from "../../services/cricketUi";
 import { TeamLogo } from "./TeamLogo";
+import { useAdmin } from "../../../contexts/AdminContext";
 
 type SearchTeam = {
   id: string | number;
@@ -23,6 +24,7 @@ type SearchPlayer = {
 
 export function Navbar() {
   const navigate = useNavigate();
+  const { isAdmin } = useAdmin();
   const [showNotifications, setShowNotifications] = useState(false);
   const [searchValue, setSearchValue] = useState("");
   const [searchLoading, setSearchLoading] = useState(false);
@@ -177,7 +179,7 @@ export function Navbar() {
           <div className="flex items-center gap-4">
             {/* Logo */}
             <motion.button
-              onClick={() => navigate("/dashboard")}
+              onClick={() => navigate(isAdmin ? "/admin/dashboard" : "/dashboard")}
               whileHover={{ scale: 1.05 }}
               className="flex items-center gap-2 flex-shrink-0"
             >
