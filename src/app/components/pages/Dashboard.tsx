@@ -136,6 +136,13 @@ const toUiMatch = (match: any): UiMatch => {
   const teamAScore = parseRunsAndOvers(match?.team1Score);
   const teamBScore = parseRunsAndOvers(match?.team2Score);
   const scoreboard = match?.scoreboard || match?.raw?.scoreboard || null;
+  const mergeOvers = (parsedOvers: string, oversRaw: unknown) => {
+    const parsed = String(parsedOvers || "").trim();
+    const raw = String(oversRaw || "").trim();
+    if (parsed && parsed.includes(".")) return parsed;
+    if (parsed && raw && raw.includes(".")) return `${parsed}${raw}`;
+    return parsed || raw;
+  };
 
   return {
     id: String(match?.id || `${match?.team1 || "team1"}-${match?.team2 || "team2"}-${match?.date || "date"}`),
@@ -151,9 +158,9 @@ const toUiMatch = (match: any): UiMatch => {
         ? `${match?.team1Score || DASH} · ${match?.team2Score || DASH}`
         : "Score unavailable"),
     teamAScore: teamAScore.runsText || undefined,
-    teamAOvers: (teamAScore.oversText || String(match?.team1Overs || "").trim()) || undefined,
+    teamAOvers: mergeOvers(teamAScore.oversText, match?.team1Overs) || undefined,
     teamBScore: teamBScore.runsText || undefined,
-    teamBOvers: (teamBScore.oversText || String(match?.team2Overs || "").trim()) || undefined,
+    teamBOvers: mergeOvers(teamBScore.oversText, match?.team2Overs) || undefined,
     status: match?.status || "Status unavailable",
     date: formatMatchDateSafe(match?.date || match?.starts_at || match?.startsAt),
     startTime: formatMatchStartTimeSafe(match?.startTime, match?.starts_at || match?.startsAt),
@@ -610,9 +617,10 @@ export function Dashboard({ adminMode = false }: { adminMode?: boolean }) {
         setLoading(true);
         setError(null);
 
-        const [iplScrapedRes, iplLiveRes, teamsRes] = await Promise.all([
+        const [iplScrapedRes, iplLiveRes, adminLiveRes, teamsRes] = await Promise.all([
           cricketApi.getIplScrapedMatches(),
           cricketApi.getIplLiveMatches(1, 20, false),
+          cricketApi.getAdminLiveMatches(false),
           cricketApi.getTeams({ page: 1, limit: 1 }),
         ]);
 
@@ -622,7 +630,15 @@ export function Dashboard({ adminMode = false }: { adminMode?: boolean }) {
 
         const iplScraped = safeArray<any>((iplScrapedRes as any).matches).map(toUiMatch);
         const iplFromLiveLinks = safeArray<any>((iplLiveRes as any).matches).map(toUiMatch);
-        const ipl = dedupeMatches([...iplFromLiveLinks, ...iplScraped]);
+        const adminLiveMatches = safeArray<any>((adminLiveRes as any)?.data?.matches || (adminLiveRes as any)?.matches || []).map((match: any) => {
+          const uiMatch = toUiMatch(match);
+          return {
+            ...uiMatch,
+            tournamentId: guessTournamentIdFromCategory(match.series || match.section || match.sport || 'admin'),
+            source: 'admin',
+          };
+        });
+        const ipl = dedupeMatches([...iplFromLiveLinks, ...iplScraped, ...adminLiveMatches]);
         const live = ipl.filter((match) => isLiveStatus(match.status));
         const upcoming = ipl.filter((match) => isUpcomingStatus(match.status));
         const totalTeams = Number((teamsRes as any)?.pagination?.total ?? 0);

@@ -40,6 +40,15 @@ const toScorecardUrl = (sourceUrl) => {
   return `${base}/match-scorecard`;
 };
 
+const toScoreboardUrl = (sourceUrl) => {
+  const base = normalizeSourceUrl(sourceUrl);
+  if (!base) return "";
+  if (base.toLowerCase().includes("/match-scoreboard")) {
+    return base;
+  }
+  return `${base}/match-scoreboard`;
+};
+
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const stripHtml = (value) =>
@@ -48,6 +57,98 @@ const stripHtml = (value) =>
     .replace(/&nbsp;/gi, " ")
     .replace(/\s+/g, " ")
     .trim();
+
+const safeJsonParse = (value) => {
+  if (!value) return null;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return null;
+  }
+};
+
+const readNextData = async (page) => {
+  try {
+    const jsonText = await page.evaluate(() => {
+      const el = document.querySelector('#__NEXT_DATA__');
+      return el ? String(el.textContent || "") : "";
+    });
+    return safeJsonParse(jsonText);
+  } catch {
+    return null;
+  }
+};
+
+const walkJson = (root, visit) => {
+  const seen = new Set();
+  const stack = [root];
+  while (stack.length) {
+    const node = stack.pop();
+    if (!node || typeof node !== "object") continue;
+    if (seen.has(node)) continue;
+    seen.add(node);
+    visit(node);
+    if (Array.isArray(node)) {
+      for (const item of node) stack.push(item);
+    } else {
+      for (const key of Object.keys(node)) stack.push(node[key]);
+    }
+  }
+};
+
+const extractNextCommentary = (nextData) => {
+  const out = [];
+  walkJson(nextData, (node) => {
+    if (!node || typeof node !== "object" || Array.isArray(node)) return;
+    const over = node.over || node.ov || node.ball || node.ballNo;
+    const text = node.text || node.commentary || node.comm || node.desc;
+    if (over == null || text == null) return;
+    const overText = String(over).trim();
+    const textPart = String(text).replace(/\s+/g, " ").trim();
+    if (!overText || !textPart) return;
+    if (!/^\d{1,2}(?:\.\d)?$/.test(overText)) return;
+    out.push({ over: overText, text: textPart.slice(0, 220) });
+  });
+  return uniqueByKey(out, (row) => `${row.over}:${row.text}`).slice(0, 40);
+};
+
+const looksLikeBatterRow = (node) => {
+  const name = node?.name || node?.player || node?.batsman || node?.batter;
+  if (!name) return false;
+  const runs = node?.runs ?? node?.r;
+  const balls = node?.balls ?? node?.b;
+  return runs != null && balls != null;
+};
+
+const looksLikeBowlerRow = (node) => {
+  const name = node?.name || node?.player || node?.bowler;
+  if (!name) return false;
+  const overs = node?.overs ?? node?.o;
+  const wickets = node?.wickets ?? node?.w;
+  const runs = node?.runs ?? node?.r;
+  return overs != null && (wickets != null || runs != null);
+};
+
+const extractNextCurrentPlayers = (nextData) => {
+  const batters = [];
+  const bowlers = [];
+  walkJson(nextData, (node) => {
+    if (!node || typeof node !== "object" || Array.isArray(node)) return;
+    if (looksLikeBatterRow(node)) {
+      batters.push(node);
+    }
+    if (looksLikeBowlerRow(node)) {
+      bowlers.push(node);
+    }
+  });
+
+  const uniqBatters = uniqueByKey(batters, (row) => normalizeText(String(row?.name || row?.player || row?.batsman || row?.batter || "")));
+  const uniqBowlers = uniqueByKey(bowlers, (row) => normalizeText(String(row?.name || row?.player || row?.bowler || "")));
+  return {
+    batters: uniqBatters.slice(0, 2),
+    bowler: uniqBowlers[0] || null,
+  };
+};
 
 const decodeEmbedded = (value) =>
   String(value || "")
@@ -418,8 +519,38 @@ const scrapeScorecardPage = async (browser, sourceUrl) => {
   try {
     await page.goto(scorecardUrl, { waitUntil: "domcontentloaded", timeout: 45000 });
     await sleep(1200);
+    const nextData = await readNextData(page);
     const bodyText = await page.evaluate(() => String(document.body?.innerText || ""));
-    return parseScorecardPayload(bodyText);
+    return {
+      ...parseScorecardPayload(bodyText),
+      _nextData: nextData,
+    };
+  } catch {
+    return null;
+  } finally {
+    await page.close();
+  }
+};
+
+const scrapeScoreboardPage = async (browser, sourceUrl) => {
+  const scoreboardUrl = toScoreboardUrl(sourceUrl);
+  if (!scoreboardUrl) {
+    return null;
+  }
+
+  const page = await browser.newPage();
+  await configurePage(page);
+  try {
+    await page.goto(scoreboardUrl, { waitUntil: "domcontentloaded", timeout: 45000 });
+    await sleep(1200);
+    const nextData = await readNextData(page);
+    const bodyText = await page.evaluate(() => String(document.body?.innerText || ""));
+    const nextCommentary = nextData ? extractNextCommentary(nextData) : [];
+    return {
+      text: bodyText,
+      commentary: nextCommentary.length > 0 ? nextCommentary : parseCommentary(bodyText),
+      _nextData: nextData,
+    };
   } catch {
     return null;
   } finally {
@@ -463,6 +594,17 @@ const tokenFromCommentaryText = (text) => {
   const raw = String(text || "").toLowerCase();
   if (!raw) {
     return null;
+  }
+
+  const leadingToken = raw.match(/^\s*(wd\+\d+|nb\+\d+|wd|nb|w|[0-6])\b/);
+  if (leadingToken?.[1]) {
+    const token = leadingToken[1];
+    if (token.startsWith("wd+")) return `Wd+${token.split("+")[1]}`;
+    if (token.startsWith("nb+")) return `Nb+${token.split("+")[1]}`;
+    if (token === "wd") return "Wd";
+    if (token === "nb") return "Nb";
+    if (token === "w") return "W";
+    return token;
   }
 
   if (/\bwide\b/.test(raw)) return "Wd";
@@ -586,6 +728,7 @@ const scrapeCrexMatch = async (source) => {
     });
 
     const scorecardPayload = await scrapeScorecardPage(browser, source.sourceUrl);
+    const scoreboardPayload = await scrapeScoreboardPage(browser, source.sourceUrl);
 
     const lines = payload?.lines || [];
     const pageText = String(payload?.text || "");
@@ -596,8 +739,8 @@ const scrapeCrexMatch = async (source) => {
     const teams = parseTeamsFromHeading(headingLine) || fallbackTeams;
     const structured = parseStructuredLiveData(pageText);
 
-    const statusLine =
-      lines.find((line) => /live|innings break|stumps|won by|match tied|result|scheduled|starts in/i.test(line)) ||
+    let statusLine =
+      lines.find((line) => /live|innings break|stumps|won by|match tied|result|scheduled|starts in|yet to begin/i.test(line)) ||
       "Live";
 
     const venueLine =
@@ -615,6 +758,20 @@ const scrapeCrexMatch = async (source) => {
     const scoreLine = parsePrimaryScoreLine(lines, teams.team1, teams.team2);
     const team1Score = structured?.team1Score || scoreLine.team1Score || scoreFromTeams.team1Score || null;
     const team2Score = structured?.team2Score || scoreLine.team2Score || scoreFromTeams.team2Score || null;
+
+    // Some pages report "scheduled" / "yet to begin" even while a score is present.
+    // If we have any strong live signal, prefer Live.
+    const hasLiveSignal = Boolean(
+      team1Score ||
+        team2Score ||
+        structured?.batters?.length ||
+        structured?.bowlers?.length ||
+        scorecardPayload?.innings?.length ||
+        scoreboardPayload?.commentary?.length,
+    );
+    if (/yet to begin|scheduled|starts|upcoming/i.test(statusLine) && hasLiveSignal) {
+      statusLine = "Live";
+    }
     const genericScore =
       lines
         .map((line) => line.match(/\b([A-Z]{2,}(?:-[A-Z])?)\s+(\d{1,3}\s*[-/]\s*\d{1,2}(?:\.?\d+)?)/i))
@@ -641,8 +798,9 @@ const scrapeCrexMatch = async (source) => {
     const neededRuns = needHit ? Number(needHit[1]) : null;
     const ballsRemaining = needHit ? Number(needHit[2]) : null;
 
+    const scoreboardText = String(scoreboardPayload?.text || "");
     const lastSixText =
-      pickFirstMatch(pageText, [
+      pickFirstMatch(`${scoreboardText}\n${pageText}`, [
         /Last\s*6\s*balls\s*:?\s*([^\n]+)/i,
         /Last\s*Six\s*Balls\s*:?\s*([^\n]+)/i,
       ])?.[1]?.trim() || null;
@@ -651,19 +809,31 @@ const scrapeCrexMatch = async (source) => {
       structured?.liveStats?.partnership || pageText.match(/P'?ship\s*:\s*([^\n]+)/i)?.[1]?.trim() || null;
     const lastWicket =
       structured?.liveStats?.lastWicket || pageText.match(/Last\s*Wkt\s*:\s*([^\n]+)/i)?.[1]?.trim() || null;
-    const commentary = parseCommentary(pageText);
+    const commentary =
+      scoreboardPayload?.commentary?.length > 0
+        ? scoreboardPayload.commentary
+        : parseCommentary(pageText);
     const recentBallTokens = deriveRecentBallTokens(commentary, structured?.liveStats?.lastSixBalls || lastSixText || "");
+
+    const nextPlayers = scoreboardPayload?._nextData ? extractNextCurrentPlayers(scoreboardPayload._nextData) : null;
 
     const batters = structured?.batters?.length
       ? structured.batters
-      : scorecardPayload?.batters?.length
-        ? uniqueByKey(scorecardPayload.batters, (row) => `${String(row?.name || "").toLowerCase()}`)
-        : parseBatters(pageText);
+      : nextPlayers?.batters?.length
+        ? nextPlayers.batters
+        : scorecardPayload?.batters?.length
+          ? uniqueByKey(scorecardPayload.batters, (row) => `${String(row?.name || "").toLowerCase()}`)
+          : parseBatters(pageText);
     const bowlers = structured?.bowlers?.length
       ? structured.bowlers
-      : scorecardPayload?.bowlers?.length
-        ? uniqueByKey(scorecardPayload.bowlers, (row) => `${String(row?.name || "").toLowerCase()}`)
-        : parseBowlers(pageText);
+      : nextPlayers?.bowler
+        ? [nextPlayers.bowler]
+        : scorecardPayload?.bowlers?.length
+          ? uniqueByKey(scorecardPayload.bowlers, (row) => `${String(row?.name || "").toLowerCase()}`)
+          : parseBowlers(pageText);
+
+    const currentBatters = Array.isArray(batters) ? batters.slice(0, 2) : [];
+    const currentBowler = Array.isArray(bowlers) && bowlers.length > 0 ? bowlers[0] : null;
 
     const innings =
       scorecardPayload?.innings?.length > 0
@@ -710,6 +880,7 @@ const scrapeCrexMatch = async (source) => {
       tournamentId: source.tournamentId,
       fetchedAt: new Date().toISOString(),
       scoreboard: {
+        scorecard: scorecardPayload || null,
         innings,
         events: commentary,
         commentary,
@@ -729,6 +900,8 @@ const scrapeCrexMatch = async (source) => {
           currentOverSummary: recentBallTokens.join(" "),
           recentBalls: recentBallTokens,
           lastSixBallsText: lastSixText,
+          currentBatters,
+          currentBowler,
         },
       },
     };

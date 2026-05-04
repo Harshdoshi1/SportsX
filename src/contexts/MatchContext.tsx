@@ -323,24 +323,25 @@ export function useAdminMatchPolling() {
             controller.signal,
             { tournamentId: guessTournamentId(m.category), series: m.sectionLabel },
           );
+          const normalized: any = data?.match ? data : data?.data || data;
 
           consecutiveFailByIdRef.current[m.id] = 0;
           setConnectionLost(m.id, false);
           setLiveSnapshot(m.id, {
-            match: data?.match || null,
-            scoreboard: data?.scoreboard || null,
+            match: normalized?.match || null,
+            scoreboard: normalized?.scoreboard || null,
             fetchedAtIso: nowIso(),
-            stale: Boolean((data as any)?.meta?.stale),
+            stale: Boolean((normalized as any)?.meta?.stale),
           });
 
-          const ended = detectEnded(data);
+          const ended = detectEnded(normalized);
           if (ended.ended) {
             markMatchEnded(m.id, {
               type: "ended",
               finalResultText: ended.resultText || "Match ended",
               playerOfMatch: null,
-              finalTeam1Score: String(data?.match?.team1Score || "") || null,
-              finalTeam2Score: String(data?.match?.team2Score || "") || null,
+              finalTeam1Score: String(normalized?.match?.team1Score || "") || null,
+              finalTeam2Score: String(normalized?.match?.team2Score || "") || null,
             });
           }
         } catch {
@@ -385,13 +386,14 @@ export function useAdminMatchPolling() {
               controller.signal,
               { tournamentId: guessTournamentId(m.category), series: m.sectionLabel },
             );
-            if (looksLive(data)) {
+            const normalized: any = data?.match ? data : data?.data || data;
+            if (looksLive(normalized)) {
               promoteUpcomingToLive(m.id);
               setLiveSnapshot(m.id, {
-                match: data?.match || null,
-                scoreboard: data?.scoreboard || null,
+                match: normalized?.match || null,
+                scoreboard: normalized?.scoreboard || null,
                 fetchedAtIso: nowIso(),
-                stale: Boolean((data as any)?.meta?.stale),
+                stale: Boolean((normalized as any)?.meta?.stale),
               });
             }
           } catch {

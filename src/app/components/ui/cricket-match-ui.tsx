@@ -120,6 +120,8 @@ function TeamScoreBlock({
   const logo = getTeamLogoProps(team);
   const isRight = align === "right";
 
+  if (!team || team === DASH) return null;
+
   return (
     <div className={`flex items-center gap-6 ${isRight ? "flex-row-reverse text-right" : ""}`}>
       <div className="flex h-20 w-20 items-center justify-center rounded-2xl bg-white/[0.03] p-2 border border-white/5">
@@ -211,7 +213,11 @@ export const MatchHeaderCard = memo(function MatchHeaderCard({
 });
 
 export const KeyStatsRow = memo(function KeyStatsRow({ items }: { items: StatItem[] }) {
-  const visibleItems = items.filter((item) => item.value && item.value !== DASH);
+  const visibleItems = items.filter((item) => {
+    const val = String(item.value || "").trim();
+    return val && val !== DASH && val !== "0" && val !== "0.00";
+  });
+  
   if (visibleItems.length === 0) {
     return null;
   }
@@ -250,6 +256,9 @@ export const LiveNeedRow = memo(function LiveNeedRow({
   totalBalls?: string;
 }) {
   if (isFirstInnings) {
+    const hasProgress = (totalRuns && totalRuns !== DASH) || (totalBalls && totalBalls !== DASH && totalBalls !== "0");
+    if (!hasProgress) return null;
+
     return (
       <div
         className="flex min-h-16 flex-wrap items-center justify-between gap-4 rounded-2xl border px-6 py-4"
@@ -694,6 +703,11 @@ export const ScorecardInningsCard = memo(function ScorecardInningsCard({
 }: {
   inning: ScorecardInnings;
 }) {
+  const hasBatting = inning.batting.length > 0;
+  const hasBowling = inning.bowling.length > 0;
+
+  if (!hasBatting && !hasBowling) return null;
+
   return (
     <div className="relative overflow-hidden rounded-[2rem] border border-white/10 bg-white/[0.02]">
       <div className="absolute -right-20 -top-20 h-64 w-64 rounded-full bg-white/5 blur-3xl" />

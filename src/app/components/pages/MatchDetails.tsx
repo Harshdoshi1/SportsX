@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+  import { useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { useNavigate, useParams } from "react-router";
 import { MessageCircle, Users } from "lucide-react";
@@ -20,6 +20,7 @@ import {
   getNeedSummary,
   getRequiredRunRate,
   getScorecardInnings,
+  oversToBalls,
   parseRunsAndOvers,
   IPL_NAME_TO_SHORT,
   SHORT_TO_TEAM_ID,
@@ -71,6 +72,18 @@ const deriveTargetText = (team1ScoreRaw: unknown, inningsCount: number) => {
   }
 
   return `Target ${runBase + 1}`;
+};
+
+const mergeOversText = (parsedOvers: string, oversRaw: unknown) => {
+  const parsed = String(parsedOvers || "").trim();
+  const raw = String(oversRaw || "").trim();
+  if (parsed && parsed.includes(".")) {
+    return parsed;
+  }
+  if (parsed && raw && raw.includes(".")) {
+    return `${parsed}${raw}`;
+  }
+  return parsed || raw;
 };
 
 export function MatchDetails() {
@@ -128,9 +141,10 @@ export function MatchDetails() {
         const detail: any = isAdminLive
           ? await cricketApi.getMatchDetailsByUrl(String(adminMatch?.sourceUrl || ""), fresh)
           : await cricketApi.getMatchDetails(matchId, fresh);
+        const normalizedDetail: any = detail?.match ? detail : detail?.data || detail;
 
-        if (active && detail?.match) {
-          setMatchPayload({ match: detail.match, scoreboard: detail.scoreboard || null });
+        if (active && normalizedDetail?.match) {
+          setMatchPayload({ match: normalizedDetail.match, scoreboard: normalizedDetail.scoreboard || null });
           setLoading(false);
           return;
         }
@@ -221,6 +235,8 @@ export function MatchDetails() {
 
   const squad1 = getSquad(team1Name);
   const squad2 = getSquad(team2Name);
+  const hasLiveScorecard =
+    currentBatters.length > 0 || Boolean(currentBowler) || innings.length > 0 || commentary.length > 0;
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.5 }} className="min-h-screen">
@@ -244,8 +260,8 @@ export function MatchDetails() {
             dateTime={headerDateTime || DASH}
             team1={team1Name}
             team2={team2Name}
-            team1Score={{ runsText: team1Score.runsText, oversText: team1Score.oversText || String(match?.team1Overs || "").trim() }}
-            team2Score={{ runsText: team2Score.runsText, oversText: team2Score.oversText || String(match?.team2Overs || "").trim() }}
+            team1Score={{ runsText: team1Score.runsText, oversText: mergeOversText(team1Score.oversText, match?.team1Overs) }}
+            team2Score={{ runsText: team2Score.runsText, oversText: mergeOversText(team2Score.oversText, match?.team2Overs) }}
             result={match?.result}
             subtitle={error || match?.score || ""}
             loading={loading}
@@ -289,7 +305,7 @@ export function MatchDetails() {
                   equation={needSummary.equation}
                   isFirstInnings={!needSummary.neededRuns && !needSummary.ballsRemaining}
                   totalRuns={team1Score.runsText}
-                  totalBalls={String(Math.floor(Number(team1Score.oversText) * 6) + (Number(team1Score.oversText) % 1 * 10 || 0))}
+                  totalBalls={String(oversToBalls(team1Score.oversText))}
                 />
                 {lastSixBalls.length > 0 && (
                   <div className="rounded-2xl border border-white/7 bg-white/[0.03] px-4 py-3">
@@ -320,9 +336,11 @@ export function MatchDetails() {
           <AnimatePresence mode="wait">
             {activeTab === "Scorecard" && (
               <motion.div key="scorecard" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="space-y-5">
-                {currentBatters.length > 0 || currentBowler ? (
+                {hasLiveScorecard ? (
                   <>
-                    <CurrentPlayersCard batters={currentBatters} bowler={currentBowler} overBalls={currentOverBalls} loading={loading} />
+                    {(currentBatters.length > 0 || currentBowler) && (
+                      <CurrentPlayersCard batters={currentBatters} bowler={currentBowler} overBalls={currentOverBalls} loading={loading} />
+                    )}
                     {innings.length === 0 ? (
                       <GlassCard className="p-5">
                         <p className="text-sm text-white/45">No structured scorecard data is available for this match yet.</p>

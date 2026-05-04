@@ -68,6 +68,18 @@ const parseMatchId = (matchId: string) => {
   return { team1: "TEAM A", team2: "TEAM B" };
 };
 
+const mergeOversText = (parsedOvers: string, oversRaw: unknown) => {
+  const parsed = String(parsedOvers || "").trim();
+  const raw = String(oversRaw || "").trim();
+  if (parsed && parsed.includes(".")) {
+    return parsed;
+  }
+  if (parsed && raw && raw.includes(".")) {
+    return `${parsed}${raw}`;
+  }
+  return parsed || raw;
+};
+
 /* ─── Audio Wave Animation ─── */
 function AudioWaves({ active }: { active: boolean }) {
   if (!active) return null;
@@ -172,11 +184,12 @@ export function LoungeRoom() {
         const detail: any = isAdminLive
           ? await cricketApi.getMatchDetailsByUrl(String(adminMatch?.sourceUrl || ""), true)
           : await cricketApi.getMatchDetails(matchId || "", true);
-        const teamA = String(detail?.match?.team1 || parsedTeams.team1 || "TEAM A").toUpperCase();
-        const teamB = String(detail?.match?.team2 || parsedTeams.team2 || "TEAM B").toUpperCase();
+        const normalizedDetail: any = detail?.match ? detail : detail?.data || detail;
+        const teamA = String(normalizedDetail?.match?.team1 || parsedTeams.team1 || "TEAM A").toUpperCase();
+        const teamB = String(normalizedDetail?.match?.team2 || parsedTeams.team2 || "TEAM B").toUpperCase();
         if (active) {
           setResolvedTeams({ team1: teamA, team2: teamB });
-          setMatchPayload({ match: detail?.match || null, scoreboard: detail?.scoreboard || null });
+          setMatchPayload({ match: normalizedDetail?.match || null, scoreboard: normalizedDetail?.scoreboard || null });
         }
       } catch {
         if (active) {
@@ -260,8 +273,8 @@ export function LoungeRoom() {
             dateTime={[String(match?.date || "").trim(), String(match?.startTime || "").trim()].filter(Boolean).join(" · ") || DASH}
             team1={team1}
             team2={team2}
-            team1Score={{ runsText: score1.runsText, oversText: score1.oversText || String(match?.team1Overs || "").trim() }}
-            team2Score={{ runsText: score2.runsText, oversText: score2.oversText || String(match?.team2Overs || "").trim() }}
+            team1Score={{ runsText: score1.runsText, oversText: mergeOversText(score1.oversText, match?.team1Overs) }}
+            team2Score={{ runsText: score2.runsText, oversText: mergeOversText(score2.oversText, match?.team2Overs) }}
             result={match?.result}
             subtitle={match?.score || ""}
           />

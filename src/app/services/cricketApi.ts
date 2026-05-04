@@ -234,11 +234,13 @@ export const cricketApi = {
     options?: { tournamentId?: string; series?: string },
   ) => {
     const raw = String(sourceUrl || "").trim();
-    const normalized = raw && /\/match-scorecard\b/i.test(raw)
-      ? raw
-      : raw
-        ? `${raw.replace(/\/+$/g, "")}/match-scorecard`
-        : raw;
+    if (!raw) return Promise.reject(new Error("Empty source URL"));
+
+    // Ensure we are fetching the most comprehensive data by using /match-scorecard
+    let normalized = raw;
+    if (!/\/match-scorecard\b/i.test(raw)) {
+      normalized = `${raw.replace(/\/+$/g, "")}/match-scorecard`;
+    }
 
     const params = new URLSearchParams();
     params.set("url", normalized);
@@ -293,4 +295,7 @@ export const cricketApi = {
 
   getPlayerList: () =>
     request(`/players/list`),
+
+  getAdminLiveMatches: (fresh = false) =>
+    request(`/admin/matches/live`, { bypassCache: fresh }),
 };

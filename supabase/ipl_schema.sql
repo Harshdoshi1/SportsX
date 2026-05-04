@@ -46,6 +46,9 @@ create table if not exists public.admin_tracked_matches (
   source_url text not null unique,
   mode text not null default 'live', -- live|upcoming
   tournament_id text not null default 'admin',
+  sport text not null default 'cricket',
+  category text,
+  section_label text,
   series text,
   team1 text,
   team2 text,
@@ -61,6 +64,36 @@ create table if not exists public.admin_tracked_matches (
 
 create index if not exists idx_admin_tracked_active_updated on public.admin_tracked_matches (is_active, updated_at desc);
 create index if not exists idx_admin_tracked_tournament on public.admin_tracked_matches (tournament_id, is_active);
+
+do $$
+begin
+  if not exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'admin_tracked_matches'
+      and column_name = 'sport'
+  ) then
+    alter table public.admin_tracked_matches add column sport text not null default 'cricket';
+  end if;
+
+  if not exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'admin_tracked_matches'
+      and column_name = 'category'
+  ) then
+    alter table public.admin_tracked_matches add column category text;
+  end if;
+
+  if not exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'admin_tracked_matches'
+      and column_name = 'section_label'
+  ) then
+    alter table public.admin_tracked_matches add column section_label text;
+  end if;
+end $$;
 
 -- -----------------------------------------------------------------------------
 -- Helpers

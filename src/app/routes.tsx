@@ -7,6 +7,8 @@ import { AdminDashboard } from "./components/pages/AdminDashboard";
 import { SportPage } from "./components/pages/SportPage";
 import { League } from "./components/pages/League";
 import { MatchDetails } from "./components/pages/MatchDetails";
+import { MatchDetailsNew } from "./components/pages/MatchDetailsNew";
+import { MatchDetailsRouter } from "./components/pages/MatchDetailsRouter";
 import { Analytics } from "./components/pages/Analytics";
 import { LiveRoom } from "./components/pages/LiveRoom";
 import { Profile } from "./components/pages/Profile";
@@ -51,7 +53,7 @@ export const router = createBrowserRouter([
       { path: "team/:teamId", Component: TeamAnalysis },
       { path: "player/:playerId", Component: PlayerAnalysis },
       // Other pages
-      { path: "match/:matchId", Component: MatchDetails },
+      { path: "match/:matchId", Component: MatchDetailsRouter },
       { path: "analytics", Component: Analytics },
       { path: "live-room/:matchId", Component: LiveRoom },
       // Lounge system

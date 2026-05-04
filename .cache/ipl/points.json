@@ -1,86 +1,86 @@
 {
-  "updatedAt": "2026-04-30T10:22:39.412Z",
+  "updatedAt": "2026-05-04T06:30:53.484Z",
   "data": [
     {
       "team": "PBKS",
-      "played": 8,
+      "played": 9,
       "win": 6,
-      "loss": 1,
+      "loss": 2,
       "nr": 1,
       "points": 13,
-      "nrr": "+1.043"
+      "nrr": "+0.855"
     },
     {
       "team": "RCB",
-      "played": 8,
+      "played": 9,
       "win": 6,
-      "loss": 2,
+      "loss": 3,
       "nr": 0,
       "points": 12,
-      "nrr": "+1.919"
+      "nrr": "+1.420"
     },
     {
       "team": "SRH",
-      "played": 9,
+      "played": 10,
       "win": 6,
-      "loss": 3,
+      "loss": 4,
       "nr": 0,
       "points": 12,
-      "nrr": "+0.832"
+      "nrr": "+0.644"
     },
     {
       "team": "RR",
-      "played": 9,
+      "played": 10,
       "win": 6,
-      "loss": 3,
+      "loss": 4,
       "nr": 0,
       "points": 12,
-      "nrr": "+0.617"
+      "nrr": "+0.510"
     },
     {
       "team": "GT",
-      "played": 8,
-      "win": 4,
+      "played": 10,
+      "win": 6,
       "loss": 4,
       "nr": 0,
-      "points": 8,
-      "nrr": "-0.475"
+      "points": 12,
+      "nrr": "-0.147"
     },
     {
       "team": "CSK",
-      "played": 8,
-      "win": 3,
+      "played": 9,
+      "win": 4,
       "loss": 5,
       "nr": 0,
-      "points": 6,
-      "nrr": "-0.121"
+      "points": 8,
+      "nrr": "+0.005"
     },
     {
       "team": "DC",
-      "played": 8,
-      "win": 3,
+      "played": 9,
+      "win": 4,
       "loss": 5,
       "nr": 0,
-      "points": 6,
-      "nrr": "-1.060"
+      "points": 8,
+      "nrr": "-0.895"
     },
     {
       "team": "KKR",
-      "played": 8,
-      "win": 2,
+      "played": 9,
+      "win": 3,
       "loss": 5,
       "nr": 1,
-      "points": 5,
-      "nrr": "-0.751"
+      "points": 7,
+      "nrr": "-0.539"
     },
     {
       "team": "MI",
-      "played": 8,
+      "played": 9,
       "win": 2,
-      "loss": 6,
+      "loss": 7,
       "nr": 0,
       "points": 4,
-      "nrr": "-0.784"
+      "nrr": "-0.803"
     },
     {
       "team": "LSG",

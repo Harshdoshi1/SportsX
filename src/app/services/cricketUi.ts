@@ -15,7 +15,6 @@ export const IPL_NAME_TO_SHORT: Record<string, string> = {
   "mumbai indians": "MI",
   "chennai super kings": "CSK",
   "royal challengers bengaluru": "RCB",
-  "royal challengers bangalore": "RCB",
   "kolkata knight riders": "KKR",
   "delhi capitals": "DC",
   "sunrisers hyderabad": "SRH",
@@ -23,16 +22,6 @@ export const IPL_NAME_TO_SHORT: Record<string, string> = {
   "rajasthan royals": "RR",
   "gujarat titans": "GT",
   "lucknow super giants": "LSG",
-  "mi": "MI",
-  "csk": "CSK",
-  "rcb": "RCB",
-  "kkr": "KKR",
-  "dc": "DC",
-  "srh": "SRH",
-  "pbks": "PBKS",
-  "rr": "RR",
-  "gt": "GT",
-  "lsg": "LSG",
   "mumbai": "MI",
   "chennai": "CSK",
   "bangalore": "RCB",
@@ -83,6 +72,7 @@ export type ScoreDisplay = {
 export type CommentaryEntry = {
   over: string;
   text: string;
+  commentary?: string;
 };
 
 export type LiveBatter = {
@@ -148,30 +138,28 @@ const splitCompactScore = (tail: string) => {
   const whole = hit[1];
   const decimal = hit[2];
 
-  for (const wicketDigits of [2, 1]) {
-    if (whole.length <= wicketDigits) {
-      continue;
-    }
-    const wickets = whole.slice(0, wicketDigits);
-    const oversWhole = whole.slice(wicketDigits);
-    const wicketsNum = Number(wickets);
-    const decimalNum = Number(decimal);
-    if (!Number.isFinite(wicketsNum) || wicketsNum < 0 || wicketsNum > 10) {
-      continue;
-    }
-    if (!Number.isFinite(decimalNum) || decimalNum < 0 || decimalNum > 9) {
-      continue;
-    }
-    if (!oversWhole) {
-      continue;
-    }
-    return {
-      wickets,
-      overs: `${Number(oversWhole)}.${decimal}`,
-    };
+  const decimalNum = Number(decimal);
+  if (!Number.isFinite(decimalNum) || decimalNum < 0 || decimalNum > 9) {
+    return null;
   }
 
-  return null;
+  // Crex sometimes glues wickets and overs into the score tail.
+  // Requirement: after '-', only 1 digit is wicket and remaining digits are overs,
+  // except the valid all-out case of 10 wickets.
+  const isAllOutPrefix = whole.startsWith("10") && whole.length > 2;
+  const wickets = isAllOutPrefix ? "10" : whole.slice(0, 1);
+  const oversWhole = isAllOutPrefix ? whole.slice(2) : whole.slice(1);
+  const wicketsNum = Number(wickets);
+  if (!Number.isFinite(wicketsNum) || wicketsNum < 0 || wicketsNum > 10) {
+    return null;
+  }
+  if (!oversWhole) {
+    return null;
+  }
+  return {
+    wickets,
+    overs: `${Number(oversWhole)}.${decimal}`,
+  };
 };
 
 export const parseRunsAndOvers = (value: unknown): ScoreDisplay => {
@@ -180,40 +168,58 @@ export const parseRunsAndOvers = (value: unknown): ScoreDisplay => {
     return { runsText: DASH, oversText: "" };
   }
 
-  const standard = raw.match(/^\s*(\d{1,3})\s*[-/]\s*(\d{1,2})(?:\(([^)]+)\))?\s*$/);
-  if (standard) {
-    return {
-      runsText: `${String(standard[1] || "").trim()}-${normalizeWicketCount(standard[2])}`,
-      oversText: String(standard[3] || "").trim(),
-    };
-  }
+  const normalizeSplitWickets = (wicketsRaw: string, oversRaw: string) => {
+    const wicketsText = String(wicketsRaw || "").trim();
+    const oversText = String(oversRaw || "").trim();
 
-  const compact = raw.match(/^\s*(\d{1,3})\s*[-/]\s*(\d+(?:\.\d+)?)\s*$/);
-  if (compact) {
-    const runs = String(compact[1] || "").trim();
-    const scoreTail = String(compact[2] || "").trim();
-
-    if (/^\d+\.\d+$/.test(scoreTail)) {
-      const split = splitCompactScore(scoreTail);
-      if (split) {
-        return {
-          runsText: `${runs}-${normalizeWicketCount(split.wickets)}`,
-          oversText: split.overs,
-        };
-      }
+    // If wickets and overs digits are glued (e.g. `32` with overs `.1` coming separately),
+    // treat the first digit as wicket and carry remaining digits into overs.
+    // Keep `10` wickets as-is.
+    if (wicketsText.length > 1 && wicketsText !== "10" && oversText) {
+      return {
+        wickets: wicketsText[0],
+        overs: `${wicketsText.slice(1)}${oversText}`,
+      };
     }
 
+    return { wickets: wicketsText, overs: oversText };
+  };
+
+  // Handle format: "19-4 (4.2)" or "19-4 4.2"
+  const withOvers = raw.match(/^\s*(\d{1,3})\s*[-/]\s*(\d{1,2})\s*\(?(\d+\.\d+|\d+)\)?\s*$/);
+  if (withOvers) {
+    const normalized = normalizeSplitWickets(withOvers[2], withOvers[3]);
     return {
-      runsText: `${runs}-${normalizeWicketCount(scoreTail)}`,
-      oversText: "",
+      runsText: `${withOvers[1]}-${normalizeWicketCount(normalized.wickets)}`,
+      oversText: normalized.overs,
     };
   }
 
-  const match = raw.match(/^\s*([0-9]+\s*[-/]\s*[0-9]+(?:\.[0-9]+)?|[0-9]+)\s*(?:\(([^)]+)\))?\s*$/);
-  if (match) {
+  // Handle format: "19-4.2" (where 4.2 is wickets and overs)
+  const compact = raw.match(/^\s*(\d{1,3})\s*[-/]\s*(\d+\.\d+)\s*$/);
+  if (compact) {
+    const runs = compact[1];
+    const tail = compact[2];
+    const split = splitCompactScore(tail);
+    if (split) {
+      return {
+        runsText: `${runs}-${normalizeWicketCount(split.wickets)}`,
+        oversText: split.overs,
+      };
+    }
+  }
+
+  // Fallback to standard "19-4"
+  const standard = raw.match(/^\s*(\d{1,3})\s*[-/]\s*(\d{1,2})\s*$/);
+  if (standard) {
+    const wicketsRaw = String(standard[2] || "").trim();
+    const wicketsNum = Number(wicketsRaw);
+    const hasMergedOvers = wicketsRaw.length > 1 && wicketsRaw !== "10" && Number.isFinite(wicketsNum) && wicketsNum >= 0;
+    const wicketsText = hasMergedOvers ? wicketsRaw[0] : wicketsRaw;
+    const oversCarry = hasMergedOvers ? wicketsRaw.slice(1) : "";
     return {
-      runsText: toDisplayText(match[1], DASH),
-      oversText: String(match[2] || "").trim(),
+      runsText: `${standard[1]}-${normalizeWicketCount(wicketsText)}`,
+      oversText: oversCarry,
     };
   }
 
@@ -318,7 +324,7 @@ const normalizeBatter = (row: any, index: number): LiveBatter => ({
   fours: readBattingValue(row, ["fours", "4s", "four", "foursHit"], DASH),
   sixes: readBattingValue(row, ["sixes", "6s", "six", "sixesHit"], DASH),
   strikeRate: readBattingValue(row, ["strikeRate", "sr", "strike_rate"], DASH),
-  isOnStrike: Boolean(row?.isOnStrike || row?.strike || index === 0),
+  isOnStrike: Boolean(row?.isOnStrike || row?.strike || (index === 0 && row?.name)),
   imageUrl: getPlayerImageUrl(row?.name || row?.player || row?.batter || row?.batsman),
 });
 
@@ -385,17 +391,16 @@ const buildFallbackInnings = (payload: any): ScorecardInnings[] => {
 };
 
 export const getScorecardInnings = (payload: any): ScorecardInnings[] => {
-  const directScorecardInnings = safeArray<any>(payload?.scorecard?.innings);
-  const nestedScorecardInnings = safeArray<any>(payload?.scoreboard?.scorecard?.innings);
-  const scorecardInnings =
-    directScorecardInnings.length > 0 ? directScorecardInnings : nestedScorecardInnings;
-
-  if (scorecardInnings.length === 0) {
+  const scoreboard = payload?.scoreboard || payload || {};
+  const directInnings = safeArray<any>(scoreboard?.scorecard?.innings || scoreboard?.innings || payload?.scorecard?.innings);
+  
+  if (directInnings.length === 0) {
     return buildFallbackInnings(payload);
   }
 
-  return scorecardInnings.slice(0, 8).map((inning, index) => {
-    const parsed = parseRunsAndOvers(inning?.score || `${inning?.runs ?? ""}-${inning?.wickets ?? ""}`);
+  return directInnings.map((inning, index) => {
+    const scoreVal = inning?.score || `${inning?.runs ?? ""}-${inning?.wickets ?? ""}`;
+    const parsed = parseRunsAndOvers(scoreVal);
     const title = toDisplayText(inning?.title || inning?.team || `Innings ${index + 1}`);
     const batting = safeArray<any>(inning?.batting || inning?.batters).map(normalizeBatter).slice(0, 22);
     const bowling = safeArray<any>(inning?.bowling || inning?.bowlers).map(normalizeBowler).slice(0, 22);
@@ -419,6 +424,8 @@ export const getCommentaryEntries = (payload: any): CommentaryEntry[] => {
     payload?.scoreboard?.commentary ||
       payload?.scoreboard?.events ||
       payload?.scoreboard?.liveCommentary ||
+      payload?.scoreboard?.scorecard?.commentary ||
+      payload?.liveStats?.commentary ||
       payload?.commentary,
   );
 
@@ -428,80 +435,115 @@ export const getCommentaryEntries = (payload: any): CommentaryEntry[] => {
       text: String(entry?.text || entry?.commentary || entry?.event || "").trim(),
     }))
     .filter((entry) => entry.text)
-    .slice(0, 40);
+    .slice(0, 120);
 };
 
 export const formatLastSixFromCommentary = (entries: CommentaryEntry[]): string => {
   const latest = [...entries].reverse();
   const balls: string[] = [];
 
+  const extractTokensFromText = (textRaw: string) => {
+    const text = String(textRaw || "").toLowerCase();
+    if (!text) return [] as string[];
+
+    // If text contains a clear 'last' or 'recent' series e.g. "last 6: 0 0 0 0 4 w"
+    const seriesMatch = text.match(/(?:last|recent)\s*[:\-]?\s*([0-9wwdnbs,\s+.]+)/i);
+    if (seriesMatch?.[1]) {
+      const rawSeries = seriesMatch[1];
+      return rawSeries
+        .replace(/\+/g, "+")
+        .split(/[\s,|]+/)
+        .map((t) => normalizeBallToken(t))
+        .filter(Boolean);
+    }
+
+    // Shortcut: map common dot/no-run phrases to a single '0'
+    if (/no run|dot ball/.test(text)) {
+      return ["0"];
+    }
+
+    // Look for comma/space separated tokens inside parentheses or after colon
+    const tokens = text
+      .replace(/[()]/g, " ")
+      .split(/[\s,|]+/)
+      .map((t) => t.trim())
+      .filter(Boolean)
+      .map((t) => {
+        if (/^\d+$/.test(t) && Number(t) <= 6) return t; // numeric run
+        if (/^\d+\+\d+$/.test(t)) return t; // e.g., wd+2
+        if (/^wd|wide/.test(t)) return "Wd";
+        if (/^nb|no-?ball/.test(t)) return "Nb";
+        if (/^w$|^out$|^wicket$|^caught$|^bowled$|^stumped$/.test(t)) return "W";
+        if (/^four$/.test(t)) return "4";
+        if (/^six$/.test(t)) return "6";
+        // catch patterns like '1 run' or '2 runs'
+        const runHit = t.match(/^(?:([0-6])\s*run)s?$/) || t.match(/^([0-6])$/);
+        if (runHit?.[1]) return runHit[1];
+        return "";
+      })
+      .filter(Boolean);
+
+    return tokens;
+  };
+
   for (const entry of latest) {
-    if (balls.length >= 12) { // Look further back to ensure we get enough balls
+    if (balls.length >= 6) {
       break;
     }
 
-    const text = String(entry.text || "").toLowerCase();
-    if (!text) {
-      continue;
-    }
-
-    // Match patterns like "1 run", "4 runs", "OUT", "no run", "wide", etc.
-    if (/wide/.test(text)) {
-      balls.push("Wd");
-      continue;
-    }
-    if (/no\s*ball|noball/.test(text)) {
-      balls.push("Nb");
-      continue;
-    }
-    if (/out|wicket|caught|lbw|bowled|run out|stumped/.test(text)) {
-      balls.push("W");
-      continue;
-    }
-    if (/six/.test(text) || /\b6\b/.test(text)) {
-      balls.push("6");
-      continue;
-    }
-    if (/four/.test(text) || /\b4\b/.test(text)) {
-      balls.push("4");
-      continue;
-    }
-    const runHit = text.match(/\b([0-6])\s*runs?\b/);
-    if (runHit?.[1]) {
-      balls.push(runHit[1]);
-      continue;
-    }
-    if (/no run|dot ball|\b0\b/.test(text)) {
-      balls.push("0");
-      continue;
-    }
-
-    // Fallback for simple numeric results in commentary
-    const singleDigit = text.match(/^\s*([0-6wW])\s*$/);
-    if (singleDigit?.[1]) {
-      balls.push(singleDigit[1].toUpperCase());
+    const tokens = extractTokensFromText(entry.text || entry?.commentary || "");
+    if (tokens.length > 0) {
+      // tokens are newest-first inside this entry; keep order as occurred
+      for (const t of tokens) {
+        if (balls.length >= 12) break;
+        balls.push(t);
+      }
     }
   }
 
-  return balls.slice(0, 6).reverse().join(" ");
+  return balls.slice(0, 6).reverse().map(normalizeBallToken).filter(Boolean).join(" ");
 };
 
 export const getLastSixBalls = (payload: any): string[] => {
   const liveStats = payload?.scoreboard?.liveStats || payload?.liveStats || {};
   const direct = toTokenArray(
-    liveStats?.currentOverBalls ||
-      liveStats?.currentOverSummary ||
-      liveStats?.lastSixBalls ||
+    liveStats?.lastSixBalls ||
       liveStats?.last6 ||
       liveStats?.recentBalls ||
-      liveStats?.lastSixBallsText,
-  );
-  if (direct.length > 0) {
-    return direct.slice(-6);
+      liveStats?.recentBallTokens ||
+      liveStats?.lastSixBallsText ||
+      liveStats?.currentOverBalls ||
+      liveStats?.currentOverSummary,
+  ).map(normalizeBallToken).filter(Boolean);
+
+  // Try other common payload spots for deliveries
+  const deliveryCandidates = [
+    payload?.scoreboard?.deliveries,
+    payload?.deliveries,
+    payload?.scoreboard?.recentDeliveries,
+  ];
+  for (const cand of deliveryCandidates) {
+    if (Array.isArray(cand) && cand.length > 0) {
+      const tokens = toTokenArray(cand).map(normalizeBallToken).filter(Boolean);
+      if (tokens.length > 0) return tokens.slice(-6);
+    }
   }
 
   const derived = formatLastSixFromCommentary(getCommentaryEntries(payload));
-  return toTokenArray(derived).slice(-6);
+  const derivedTokens = toTokenArray(derived).map(normalizeBallToken).filter(Boolean).slice(-6);
+
+  if (direct.length === 0) {
+    return derivedTokens;
+  }
+
+  const directLast = direct.slice(-6);
+  const directAllDot = directLast.length > 0 && directLast.every((token) => token === "0");
+  const derivedHasAction = derivedTokens.some((token) => token !== "0");
+  if (directAllDot && derivedHasAction) {
+    return derivedTokens;
+  }
+
+  return directLast;
 };
 
 const normalizeBallToken = (value: unknown) => {
@@ -562,6 +604,24 @@ export const getCurrentRunRate = (liveStats: any) =>
 export const getRequiredRunRate = (liveStats: any) =>
   readLiveStat(liveStats, ["rrr", "requiredRunRate", "required_rr"]) || DASH;
 
+export const oversToBalls = (oversValue: unknown): number => {
+  const raw = String(oversValue ?? "").trim();
+  if (!raw || raw === DASH) return 0;
+
+  // Prefer string parsing to avoid floating point issues like 237.00000000000003
+  const hit = raw.match(/^(\d+)(?:\.(\d+))?$/);
+  if (!hit) {
+    const asNum = Number(raw);
+    return Number.isFinite(asNum) ? Math.round(asNum) : 0;
+  }
+
+  const whole = Number(hit[1]);
+  const part = String(hit[2] ?? "");
+  const ballsPart = part ? Number(part.slice(0, 1)) : 0;
+  if (!Number.isFinite(whole) || !Number.isFinite(ballsPart)) return 0;
+  return whole * 6 + ballsPart;
+};
+
 export const getNeedSummary = (liveStats: any) => {
   const equation = readLiveStat(liveStats, ["equation", "chaseEquation"]);
   const neededRunsRaw = Number(liveStats?.neededRuns);
@@ -577,32 +637,41 @@ export const getNeedSummary = (liveStats: any) => {
 };
 
 export const getCurrentBatters = (payload: any): LiveBatter[] => {
-  const scorecardInnings = getScorecardInnings(payload);
-  const inningsBatters = uniqueRowsByName(
-    scorecardInnings.flatMap((inning) => inning.batting).filter((row) => row.name !== DASH),
-  );
-  if (inningsBatters.length > 0) {
-    return inningsBatters.slice(-2);
-  }
+  const scoreboard = payload?.scoreboard || payload || {};
+  const liveStats = scoreboard?.liveStats || scoreboard || {};
+  const inningsRows = safeArray<any>(scoreboard?.scorecard?.innings || scoreboard?.innings);
+  const activeInning = inningsRows.at(-1) || null;
 
-  return uniqueRowsByName(
-    safeArray<any>(payload?.scoreboard?.batters)
-      .map(normalizeBatter)
-      .filter((row) => row.name !== DASH),
-  ).slice(-2);
+  // Try to find batters in various places
+  const batters = safeArray<any>(
+    liveStats?.currentBatters ||
+      liveStats?.activeBatsmen ||
+      liveStats?.activeBatters ||
+      liveStats?.batters ||
+      activeInning?.batting?.filter((b: any) => !String(b?.dismissal || "").trim() || /not out/i.test(String(b?.dismissal || "")))
+  );
+
+  return batters
+    .filter((b) => b && (b.name || b.player || b.batter))
+    .map((b, idx) => normalizeBatter(b, idx))
+    .slice(0, 2);
 };
 
 export const getCurrentBowler = (payload: any): LiveBowler | null => {
-  const scorecardInnings = getScorecardInnings(payload);
-  const inningsBowler = uniqueRowsByName(
-    scorecardInnings.flatMap((inning) => inning.bowling).filter((row) => row.name !== DASH),
-  ).at(-1);
-  if (inningsBowler) {
-    return inningsBowler;
-  }
+  const scoreboard = payload?.scoreboard || payload || {};
+  const liveStats = scoreboard?.liveStats || scoreboard || {};
+  const inningsRows = safeArray<any>(scoreboard?.scorecard?.innings || scoreboard?.innings);
+  const activeInning = inningsRows.at(-1) || null;
 
-  const rootBowler = uniqueRowsByName(safeArray<any>(payload?.scoreboard?.bowlers).map(normalizeBowler)).at(-1);
-  return rootBowler || null;
+  const bowler =
+    liveStats?.currentBowler ||
+    liveStats?.activeBowler ||
+    liveStats?.bowler ||
+    activeInning?.bowling?.[0] ||
+    activeInning?.bowling?.slice(-1)[0];
+
+  if (!bowler || (!bowler.name && !bowler.player && !bowler.bowler)) return null;
+  return normalizeBowler(bowler);
 };
 
 export const getLiveSummaryStats = (payload: any, targetText?: string) => {
@@ -613,11 +682,17 @@ export const getLiveSummaryStats = (payload: any, targetText?: string) => {
   const lastWicket = toDisplayText(liveStats?.lastWicket);
   const projected = toDisplayText(liveStats?.projectedScore);
   const target = toDisplayText(targetText || liveStats?.target);
+  
+  // Refine partnership display to remove "runs off 0 balls"
+  let displayPartnership = partnership;
+  if (partnership.includes("off 0 balls") || partnership.includes("0(0)")) {
+    displayPartnership = DASH;
+  }
 
   return {
     crr,
     rrr,
-    partnership,
+    partnership: displayPartnership,
     lastWicket,
     projected,
     target,

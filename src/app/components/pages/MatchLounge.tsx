@@ -17,6 +17,7 @@ import {
   getNeedSummary,
   getRequiredRunRate,
   getLastSixBalls,
+  oversToBalls,
   parseRunsAndOvers,
   IPL_NAME_TO_SHORT,
   SHORT_TO_TEAM_ID,
@@ -96,6 +97,18 @@ const parseMatchId = (matchId: string) => {
   }
 
   return { team1: "TEAM A", team2: "TEAM B" };
+};
+
+const mergeOversText = (parsedOvers: string, oversRaw: unknown) => {
+  const parsed = String(parsedOvers || "").trim();
+  const raw = String(oversRaw || "").trim();
+  if (parsed && parsed.includes(".")) {
+    return parsed;
+  }
+  if (parsed && raw && raw.includes(".")) {
+    return `${parsed}${raw}`;
+  }
+  return parsed || raw;
 };
 
 export function MatchLounge() {
@@ -195,16 +208,18 @@ export function MatchLounge() {
         const detail: any = isAdminLive
           ? await cricketApi.getMatchDetailsByUrl(String(adminMatch?.sourceUrl || ""), true)
           : await cricketApi.getMatchDetails(matchId, true);
+        const normalizedDetail: any = detail?.match ? detail : detail?.data || detail;
 
-        if (active && detail?.match) {
-          setMatchPayload({ match: detail.match, scoreboard: detail.scoreboard || null });
+        if (active && normalizedDetail?.match) {
+          setMatchPayload({ match: normalizedDetail.match, scoreboard: normalizedDetail.scoreboard || null });
           setLoading(false);
           return;
         }
 
         // If details are empty/not found, try to find in the general match list
-        const iplMatches = await cricketApi.getIplScrapedMatches();
-        const found = (iplMatches?.matches || []).find((m: any) => String(m.id) === String(matchId));
+        const iplMatches: any = await cricketApi.getIplScrapedMatches();
+        const list = iplMatches?.data || iplMatches?.matches || [];
+        const found = (Array.isArray(list) ? list : []).find((m: any) => String(m.id) === String(matchId));
         if (active && found) {
           setLocalMatchInfo({ team1: found.team1 || found.teamA, team2: found.team2 || found.teamB });
         }
@@ -302,11 +317,10 @@ export function MatchLounge() {
             dateTime={matchDateTime}
             team1={team1}
             team2={team2}
-            team1Score={{ runsText: score1.runsText, oversText: score1.oversText || String(match?.team1Overs || "").trim() }}
-            team2Score={{ runsText: score2.runsText, oversText: score2.oversText || String(match?.team2Overs || "").trim() }}
+            team1Score={{ runsText: score1.runsText, oversText: mergeOversText(score1.oversText, match?.team1Overs) }}
+            team2Score={{ runsText: score2.runsText, oversText: mergeOversText(score2.oversText, match?.team2Overs) }}
             result={match?.result}
             subtitle={match?.score || ""}
-            isLive={match?.status?.toLowerCase() === "live"}
             loading={loading}
             actions={
               isMatchAdmin && (
@@ -350,7 +364,7 @@ export function MatchLounge() {
             equation={needSummary.equation}
             isFirstInnings={!needSummary.neededRuns && !needSummary.ballsRemaining}
             totalRuns={score1.runsText}
-            totalBalls={String(Math.floor(Number(score1.oversText) * 6) + (Number(score1.oversText) % 1 * 10 || 0))}
+            totalBalls={String(oversToBalls(score1.oversText))}
           />
           {lastSixBalls.length > 0 && (
             <div className="rounded-2xl border border-white/7 bg-white/[0.03] px-4 py-3">
